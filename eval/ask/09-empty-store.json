@@ -1,0 +1,9 @@
+{
+  "id": "empty-store",
+  "empty_store": true,
+  "request": {
+    "project": "acme/api",
+    "question": "anything"
+  },
+  "must_be_empty": true
+}

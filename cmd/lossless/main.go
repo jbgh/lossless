@@ -1,0 +1,594 @@
+package main
+
+import (
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"context"
+
+	"lossless/internal/claim"
+	"lossless/internal/env"
+	"lossless/internal/harness"
+	"lossless/internal/mcpserver"
+	"lossless/internal/retrieve"
+	"lossless/internal/serve"
+	"lossless/internal/store"
+	"lossless/internal/watch"
+	"lossless/internal/write"
+)
+
+type stringsFlag []string
+
+func (s *stringsFlag) String() string { return fmt.Sprint([]string(*s)) }
+func (s *stringsFlag) Set(v string) error {
+	*s = append(*s, v)
+	return nil
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		usage()
+		os.Exit(2)
+	}
+	cmd := os.Args[1]
+	args := os.Args[2:]
+	switch cmd {
+	case "catch-up":
+		os.Exit(runCatchUp(args))
+	case "remember":
+		os.Exit(runRemember(args))
+	case "ask":
+		os.Exit(runAsk(args))
+	case "serve":
+		os.Exit(runServe(args))
+	case "hook-grok":
+		os.Exit(runHookGrok())
+	case "hook-claude":
+		os.Exit(runHookClaude())
+	case "hook-codex":
+		os.Exit(runHookCodex())
+	case "watch":
+		os.Exit(runWatch(args))
+	case "mcp":
+		os.Exit(runMCP(args))
+	case "install-mcp":
+		os.Exit(runInstallMCP(args))
+	case "install-hooks":
+		os.Exit(runInstallHooks(args))
+	case "ensure":
+		os.Exit(runEnsure(args))
+	case "hook-pi":
+		os.Exit(runHookPi())
+	case "hook-opencode":
+		os.Exit(runHookOpenCode())
+	case "help", "-h", "--help":
+		usage()
+	default:
+		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
+		usage()
+		os.Exit(2)
+	}
+}
+
+func usage() {
+	fmt.Fprint(os.Stderr, `lossless — work log for coding agents (keep the tape, check out five records)
+
+  lossless catch-up --jsonl FILE [--project KEY] [--workspace DIR] [--harness grok] [--session ID] [--home DIR]
+  lossless remember --type decision --text "..." [--project KEY] [--workspace DIR] [--home DIR]
+  lossless ask --project KEY [--question "..."] [--goal "..."] [--path FILE] [--workspace DIR]
+  lossless serve [--listen 127.0.0.1:7432] [--token TOKEN] [--watch]
+  lossless mcp                # stdio MCP client of the daemon (ask, remember, get_record)
+  lossless watch              # poll harness session files
+  lossless hook-grok          # stdin: Grok hook JSON; fail-open
+  lossless hook-claude        # stdin: Claude hook JSON; fail-open
+  lossless hook-codex         # stdin: Codex hook JSON; fail-open
+  lossless install-hooks      # Grok + Claude + Codex + Pi + OpenCode
+  lossless install-mcp        # Grok url + Claude stdio MCP
+  lossless ensure             # replay spool after sidecar was down
+  lossless hook-pi            # stdin: Pi extension JSON; fail-open
+  lossless hook-opencode      # stdin: OpenCode plugin JSON; fail-open
+
+Env: LOSSLESS_HOME (default ~/.lossless)
+     LOSSLESS_URL (default http://127.0.0.1:7432) — stdio mcp talks to the daemon
+     LOSSLESS_TOKEN (required if --listen is not loopback)
+Local serve binds 127.0.0.1. MCP is a façade over the same JSON as /v1/ask.
+`)
+}
+
+func homeFlag(fs *flag.FlagSet) *string {
+	return fs.String("home", env.Home(), "data dir")
+}
+
+func runCatchUp(args []string) int {
+	fs := flag.NewFlagSet("catch-up", flag.ContinueOnError)
+	home := homeFlag(fs)
+	jsonl := fs.String("jsonl", "", "harness session JSONL")
+	project := fs.String("project", "", "owner/repo")
+	ws := fs.String("workspace", "", "workspace root")
+	harnessName := fs.String("harness", "other", "grok|claude|pi|opencode|codex")
+	session := fs.String("session", "", "session id")
+	source := fs.String("source", "compact", "turn|compact|session_end|import")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	st, err := store.Open(*home)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer st.Close()
+	res, err := write.CatchUp(st, write.CatchUpRequest{
+		JSONL: *jsonl, Project: *project, WorkspaceRoot: *ws,
+		Harness: *harnessName, SessionID: *session, Source: *source,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(res)
+	return 0
+}
+
+func runRemember(args []string) int {
+	fs := flag.NewFlagSet("remember", flag.ContinueOnError)
+	home := homeFlag(fs)
+	typ := fs.String("type", "", "failed|decision|constraint|state|thread")
+	text := fs.String("text", "", "durable claim")
+	project := fs.String("project", "", "owner/repo")
+	ws := fs.String("workspace", "", "workspace root")
+	path := fs.String("path", "", "repo-relative path")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	st, err := store.Open(*home)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer st.Close()
+	var paths []string
+	if *path != "" {
+		paths = []string{*path}
+	}
+	res, err := write.Remember(st, claim.Record{
+		Type: *typ, Text: *text, ProjectKey: *project, WorkspaceRoot: *ws, Paths: paths, Harness: "other",
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(res)
+	return 0
+}
+
+func runAsk(args []string) int {
+	fs := flag.NewFlagSet("ask", flag.ContinueOnError)
+	home := homeFlag(fs)
+	project := fs.String("project", "", "owner/repo")
+	ws := fs.String("workspace", "", "workspace root")
+	question := fs.String("question", "", "natural-language question")
+	goal := fs.String("goal", "", "what the agent is about to do")
+	limit := fs.Int("limit-tokens", retrieve.DefaultLimit, "packed token budget")
+	var paths stringsFlag
+	fs.Var(&paths, "path", "repo-relative path (repeatable)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	st, err := store.Open(*home)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer st.Close()
+	out, err := retrieve.Ask(st, retrieve.Request{
+		Question: *question, Project: *project, WorkspaceRoot: *ws,
+		Goal: *goal, Paths: paths, LimitTokens: *limit,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(out)
+	return 0
+}
+
+func runServe(args []string) int {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	home := homeFlag(fs)
+	listen := fs.String("listen", serve.DefaultAddr, "bind address")
+	token := fs.String("token", env.Token(), "bearer token (required if not loopback)")
+	doWatch := fs.Bool("watch", true, "poll harness session files while serving")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	st, err := store.Open(*home)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer st.Close()
+	fmt.Fprintf(os.Stderr, "lossless serve %s (home %s) watch=%v\n", *listen, *home, *doWatch)
+	if err := serve.Listen(serve.Options{Addr: *listen, Token: *token, Watch: *doWatch}, st); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
+}
+
+func runWatch(args []string) int {
+	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
+	home := homeFlag(fs)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	st, err := store.Open(*home)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer st.Close()
+	fmt.Fprintf(os.Stderr, "lossless watch (home %s)\n", *home)
+	if err := watch.Run(context.Background(), st, watch.Defaults()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
+}
+
+func runMCP(args []string) int {
+	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
+	url := fs.String("url", env.URL(), "daemon base URL")
+	token := fs.String("token", env.Token(), "bearer token")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *url == "" {
+		*url = "http://127.0.0.1:7432"
+	}
+	s := mcpserver.New(mcpserver.HTTP{BaseURL: *url, Token: *token})
+	if err := s.ServeStdio(os.Stdin, os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
+}
+
+func runInstallMCP(args []string) int {
+	fs := flag.NewFlagSet("install-mcp", flag.ContinueOnError)
+	url := fs.String("url", "http://127.0.0.1:7432/mcp", "HTTP MCP endpoint for Grok")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	exe, _ = filepath.EvalSymlinks(exe)
+	home := os.Getenv("HOME")
+	g, err := harness.WriteGrokMCP(home, *url)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	c, err := harness.WriteClaudeMCP(home, exe)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Println("wrote", g)
+	fmt.Println("wrote", c)
+	fmt.Println("start the daemon: lossless serve")
+	return 0
+}
+
+func runHookGrok() int {
+	// Fail-open: any error exits 0 so compact is never blocked.
+	defer func() { _ = recover() }()
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil || len(raw) == 0 {
+		return 0
+	}
+	var ev struct {
+		SessionID     string `json:"sessionId"`
+		CWD           string `json:"cwd"`
+		WorkspaceRoot string `json:"workspaceRoot"`
+		HookEventName string `json:"hookEventName"`
+	}
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		return 0
+	}
+	ws := ev.WorkspaceRoot
+	if ws == "" {
+		ws = ev.CWD
+	}
+	if ws == "" {
+		ws, _ = os.Getwd()
+	}
+	loc := harness.LocateGrok(ws, ev.SessionID)
+	if _, err := os.Stat(loc.JSONL); err != nil {
+		return 0
+	}
+	source := "compact"
+	if ev.HookEventName == "session_end" || ev.HookEventName == "SessionEnd" {
+		source = "session_end"
+	} else if ev.HookEventName == "stop" || ev.HookEventName == "Stop" {
+		source = "turn"
+	}
+	write.SubmitCatchUp(write.CatchUpRequest{
+		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: "grok",
+		SessionID: ev.SessionID, Source: source,
+	})
+	return 0
+}
+
+func runHookClaude() int {
+	defer func() { _ = recover() }()
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil || len(raw) == 0 {
+		return 0
+	}
+	var ev struct {
+		SessionID      string `json:"session_id"`
+		SessionIDCamel string `json:"sessionId"`
+		Transcript     string `json:"transcript_path"`
+		CWD            string `json:"cwd"`
+		HookEvent      string `json:"hook_event_name"`
+		HookEventCamel string `json:"hookEventName"`
+	}
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		return 0
+	}
+	sid := ev.SessionID
+	if sid == "" {
+		sid = ev.SessionIDCamel
+	}
+	name := ev.HookEvent
+	if name == "" {
+		name = ev.HookEventCamel
+	}
+	ws := ev.CWD
+	if ws == "" {
+		ws, _ = os.Getwd()
+	}
+	loc := harness.LocateClaude(ev.Transcript, sid, ws)
+	if loc.JSONL == "" {
+		return 0
+	}
+	if _, err := os.Stat(loc.JSONL); err != nil {
+		return 0
+	}
+	source := "compact"
+	if strings.EqualFold(name, "session_end") {
+		source = "session_end"
+	} else if strings.EqualFold(name, "stop") {
+		source = "turn"
+	}
+	write.SubmitCatchUp(write.CatchUpRequest{
+		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: "claude",
+		SessionID: loc.SessionID, Source: source,
+	})
+	return 0
+}
+
+func runHookCodex() int {
+	defer func() { _ = recover() }()
+	defer func() { fmt.Println(`{"continue":true}`) }()
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil || len(raw) == 0 {
+		return 0
+	}
+	var ev struct {
+		SessionID      string `json:"session_id"`
+		SessionIDCamel string `json:"sessionId"`
+		Transcript     string `json:"transcript_path"`
+		CWD            string `json:"cwd"`
+		HookEvent      string `json:"hook_event_name"`
+		HookEventCamel string `json:"hookEventName"`
+	}
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		return 0
+	}
+	sid := ev.SessionID
+	if sid == "" {
+		sid = ev.SessionIDCamel
+	}
+	name := ev.HookEvent
+	if name == "" {
+		name = ev.HookEventCamel
+	}
+	ws := ev.CWD
+	if ws == "" {
+		ws, _ = os.Getwd()
+	}
+	loc := harness.LocateCodex(ev.Transcript, sid, ws)
+	if loc.JSONL == "" {
+		return 0
+	}
+	if _, err := os.Stat(loc.JSONL); err != nil {
+		return 0
+	}
+	if ws == "" {
+		_, ws = harness.PeekCodexMeta(loc.JSONL)
+	}
+	source := "turn"
+	if strings.EqualFold(name, "session_end") {
+		source = "session_end"
+	} else if strings.EqualFold(name, "precompact") || strings.EqualFold(name, "pre_compact") {
+		source = "compact"
+	}
+	write.SubmitCatchUp(write.CatchUpRequest{
+		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: "codex",
+		SessionID: loc.SessionID, Source: source,
+	})
+	return 0
+}
+
+func runInstallHooks(args []string) int {
+	fs := flag.NewFlagSet("install-hooks", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	exe, _ = filepath.EvalSymlinks(exe)
+	home := os.Getenv("HOME")
+	var wrote []string
+	if dest, err := harness.WriteGrokHooks(home, exe); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	} else {
+		wrote = append(wrote, dest)
+	}
+	if dest, err := harness.WriteClaudeHooks(home, exe); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	} else {
+		wrote = append(wrote, dest)
+	}
+	if dest, err := harness.WriteCodexHooks(home, exe); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	} else {
+		wrote = append(wrote, dest)
+	}
+	if dest, err := harness.WriteCodexFeatures(home); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	} else {
+		wrote = append(wrote, dest)
+	}
+	if dest, err := harness.WritePiExtension(home, exe); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	} else {
+		wrote = append(wrote, dest)
+	}
+	if dest, err := harness.WriteOpenCodePlugin(home); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	} else {
+		wrote = append(wrote, dest)
+	}
+	for _, d := range wrote {
+		fmt.Println("wrote", d)
+	}
+	return 0
+}
+
+func runEnsure(args []string) int {
+	fs := flag.NewFlagSet("ensure", flag.ContinueOnError)
+	home := homeFlag(fs)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	st, err := store.Open(*home)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer st.Close()
+	res, err := write.Ensure(st, *home)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(res)
+	return 0
+}
+
+func runHookPi() int {
+	defer func() { _ = recover() }()
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil || len(raw) == 0 {
+		return 0
+	}
+	var ev struct {
+		SessionID  string `json:"session_id"`
+		Transcript string `json:"transcript_path"`
+		CWD        string `json:"cwd"`
+		HookEvent  string `json:"hook_event_name"`
+	}
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		return 0
+	}
+	ws := ev.CWD
+	if ws == "" {
+		ws, _ = os.Getwd()
+	}
+	loc := harness.LocatePi(ev.Transcript, ev.SessionID, ws)
+	if loc.JSONL == "" {
+		return 0
+	}
+	if _, err := os.Stat(loc.JSONL); err != nil {
+		return 0
+	}
+	source := "turn"
+	if strings.EqualFold(ev.HookEvent, "session_end") || strings.EqualFold(ev.HookEvent, "session_shutdown") {
+		source = "session_end"
+	} else if strings.EqualFold(ev.HookEvent, "compact") || strings.EqualFold(ev.HookEvent, "precompact") {
+		source = "compact"
+	}
+	write.SubmitCatchUp(write.CatchUpRequest{
+		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: "pi",
+		SessionID: loc.SessionID, Source: source,
+	})
+	return 0
+}
+
+func runHookOpenCode() int {
+	defer func() { _ = recover() }()
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil || len(raw) == 0 {
+		return 0
+	}
+	var ev struct {
+		SessionID string `json:"session_id"`
+		CWD       string `json:"cwd"`
+		Directory string `json:"directory"`
+		HookEvent string `json:"hook_event_name"`
+		Source    string `json:"source"`
+	}
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		return 0
+	}
+	ws := ev.CWD
+	if ws == "" {
+		ws = ev.Directory
+	}
+	source := ev.Source
+	if source == "" {
+		source = "turn"
+		if strings.EqualFold(ev.HookEvent, "session_end") || strings.EqualFold(ev.HookEvent, "session.deleted") {
+			source = "session_end"
+		} else if strings.Contains(strings.ToLower(ev.HookEvent), "compact") {
+			source = "compact"
+		}
+	}
+	write.SubmitCatchUp(write.CatchUpRequest{
+		WorkspaceRoot: ws, Harness: "opencode",
+		SessionID: ev.SessionID, Source: source,
+	})
+	return 0
+}
+
+func jsonQuote(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}

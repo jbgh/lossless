@@ -1,0 +1,12 @@
+{
+  "id": "rate-limit-failed",
+  "request": {
+    "project": "acme/api",
+    "question": "what do we know about rate limiting on auth?",
+    "goal": "add rate limiting",
+    "paths": ["src/middleware/auth.ts"]
+  },
+  "must_include_types": ["failed"],
+  "must_include_substrings": ["Redis"],
+  "must_warn": "failed"
+}

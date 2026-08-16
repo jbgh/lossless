@@ -1,0 +1,9 @@
+{
+  "id": "limit-tokens",
+  "request": {
+    "project": "acme/api",
+    "question": "auth rate limiting jose",
+    "limit_tokens": 80
+  },
+  "min_hits": 1
+}

@@ -1,0 +1,9 @@
+{
+  "id": "cold-ask",
+  "request": {
+    "project": "acme/api"
+  },
+  "must_include_types": ["failed"],
+  "must_not_warn": true,
+  "top_types": ["failed", "decision"]
+}

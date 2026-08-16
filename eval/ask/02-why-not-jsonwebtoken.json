@@ -1,0 +1,10 @@
+{
+  "id": "why-not-jsonwebtoken",
+  "request": {
+    "project": "acme/api",
+    "question": "why not jsonwebtoken"
+  },
+  "must_include_types": ["decision"],
+  "must_include_substrings": ["jose"],
+  "must_warn": "implementation"
+}

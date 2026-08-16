@@ -1,0 +1,124 @@
+# Harness adapters (write)
+
+Yes: start with writes, and yes: treat Grok, Claude Code, Pi, OpenCode, and Codex as **adapters**, not as five products.
+
+The wrong version of that idea is five memory systems. The right version is one catch-up core (`docs/write.md`) and a thin adapter per harness that answers only three questions:
+
+1. **Where** is the session file?
+2. **When** do we catch up? (map native events → `turn` | `compact` | `session_end`)
+3. **What** does a line look like? (normalize to `{role, text, error, offset}`)
+
+If a harness cannot answer (1), the adapter may POST already-normalized messages. It still must not rank, store, or redact differently.
+
+---
+
+## Shared contract
+
+```
+adapter.on(native_event):
+  loc = locate_session(event)          # path + session_id + cwd
+  catch_up(
+    harness_path = loc.path,           # or messages[] if no file
+    project_key  = from(loc.cwd),
+    session_id   = loc.session_id,
+    workspace    = loc.cwd,
+    harness      = "grok" | "claude" | "pi" | "opencode" | "codex",
+    source       = turn | compact | session_end
+  )
+```
+
+Installers differ. Catch-up does not.
+
+Universal fallback, every harness: a **directory watch** on that harness's session root. If hooks miss (Codex has no PreCompact; a hook crashed), the watcher still copies new bytes. Hooks are the timely path. The watcher is how we still remember everything.
+
+---
+
+## Capability matrix
+
+| | Grok | Claude Code | Pi | OpenCode | Codex |
+|--|------|-------------|----|----------|-------|
+| Session file we can tail | `~/.grok/sessions/<enc-cwd>/<id>/chat_history.jsonl` | `~/.claude/projects/<slug>/<id>.jsonl` (`transcript_path` on hooks) | `~/.pi/agent/sessions/--<cwd / as ->--/<ts>_<uuid>.jsonl` | none — SQLite `opencode.db` (`session`/`message`/`part`) | CLI: `~/.codex/sessions/**/rollout-*.jsonl`. Desktop app (this machine: Codex.app 26.810, CLI 0.148.0-alpha.9): `state_5.sqlite` `threads.rollout_path`; `sessions/` may be empty |
+| As they go | `Stop` (`end_turn`) | `Stop` | extension `turn_end` / session events | plugin `session.idle` | plugin **Stop** |
+| Before compact | **`PreCompact`** | **`PreCompact`** | compaction is a JSONL entry; no separate hook required if we tail | `experimental.session.compacting` / `session.compacted` | **none** (open issue). Watcher + Stop only |
+| Session end | `SessionEnd` | `SessionEnd` | `session_end` | `session.deleted` / idle | Stop + process exit |
+| Hook shape | JSON stdin, camelCase (Claude files also load) | JSON stdin, snake_case | in-process TS extension | in-process TS plugin | Codex plugin hooks (Stop) |
+| Cleanup risk | sessions kept | **`cleanupPeriodDays` default 30** | kept under `~/.pi` | kept under XDG share | kept under `~/.codex` |
+| Adapter risk | Low. We already know this. | Low. Best `transcript_path`. | Medium. Tree JSONL, not linear. Tail the file; do not walk the tree in v1. | Medium-high. May need to serialize from the plugin API if storage is not JSONL. | Medium. No compact hook. Watcher is load-bearing. |
+
+Install order: **Grok → Claude → Codex → Pi → OpenCode**. That is popularity plus "do we have a file we can copy before the window dies."
+
+---
+
+## Per harness
+
+### Grok
+
+- Locate: `GROK_HOME` or `~/.grok` + URL-encoded cwd + `sessionId` + **`chat_history.jsonl`**. Do not ingest `updates.jsonl` (ACP UI stream, ~2.5× larger). Measured: this repo session was 1.4 MB history vs 3.5 MB updates; an 8-compact session was 17.6 MB history with **zero** compact summaries in the file. Compact shrinks the window, not the log.
+- Fire: `Stop` (filter `reason == end_turn`), `PreCompact`, `SessionEnd`.
+- Normalize: `{role, content|text}` and Claude-shaped `message.role`.
+- Install: `~/.grok/hooks/lossless.json`.
+
+### Claude Code
+
+- Locate: hook field `transcript_path`. Do not guess if it is present.
+- Fire: `Stop`, `PreCompact`, `SessionEnd`.
+- Normalize: `message.role` / `message.content` (string or parts).
+- Install: `~/.claude/settings.json` hooks (user scope) so it is not per-repo.
+- Why this is second: same hook names as Grok, best path field, and the 30-day delete makes owned raw mandatory.
+
+### Codex
+
+- Locate: hook `transcript_path` when present. Else `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`. Desktop app (local install: `/Applications/Codex.app`, CLI `0.148.0-alpha.9`) stores threads in `~/.codex/state_5.sqlite` (`threads.rollout_path`); `sessions/` can be empty on a fresh desktop install. Peek `session_meta` / `SessionMeta` for cwd.
+- Fire: **Stop**, **SessionEnd**, and **PreCompact** (Codex hooks now include PreCompact / PostCompact; confirmed in current hook docs). Watcher is still load-bearing when `sessions/` or `rollout_path` exists.
+- Normalize: rollout `event_msg` / `response_item` payload types.
+- Install: `~/.codex/hooks.json` (Stop / PreCompact / SessionEnd) plus `[features] hooks = true` if no `[features]` block exists. Hooks are on by default.
+
+### Pi
+
+- Locate: `~/.pi/agent/sessions/--<cwd with / as ->--/<timestamp>_<uuid>.jsonl` (earendil-works/pi `session-format.md`). Header line is `type:session` with `cwd`. Extensions: `ctx.sessionManager.getSessionFile()` / `getSessionId()`.
+- Fire: extension `turn_end` / `agent_settled` (as they go), `session_before_compact` (before compact), `session_shutdown` (end). Compaction is also a JSONL `type:compaction` entry; tailing is enough if the hook misses.
+- Normalize: `type:message` + `message.role` (`user` / `assistant` / `toolResult` / `bashExecution`). Skip `session`, `compaction`, `custom`, `branch_summary`, tree metadata. Do not walk the tree; ingest new lines.
+- Install: `~/.pi/agent/extensions/lossless.ts` (spawns `hook-pi`, fail-open).
+
+### OpenCode
+
+- Locate: **no tail-able JSONL**. Live install (1.4.3) is `~/.local/share/opencode/opencode.db` (Drizzle): `session.directory`, `message.data` (role), `part.data` (text / tool / reasoning). `storage/` is not a session log.
+- Fire: plugin `session.idle`, `experimental.session.compacting`, `session.compacted`, `session.deleted`.
+- Normalize: dump message+parts to `{role, content}` and catch-up. HTTP `POST /v1/catch-up` with `harness=opencode` + `session_id` reads the DB; `messages[]` is the no-file fallback.
+- Install: `~/.config/opencode/plugins/lossless.ts` (auto-loaded).
+
+OpenCode is last because the on-disk format is SQLite, not a file we can tail. The core still does not change.
+
+---
+
+## What is *not* a harness adapter
+
+- Retrieval / `ask` — one API, all models.
+- Redaction, raw layout, partitions, zstd — core write path.
+- `project_key` — core, from `cwd`.
+- "How Grok remembers vs how Claude remembers" — there is no such split.
+
+A new harness is: locate + event map + line parser + installer. If it takes more than that, the core is leaking.
+
+---
+
+## v1 slice for writes
+
+Do not implement five adapters before catch-up is real.
+
+1. **Core catch-up** with owned `raw/`, cursors, redact, spool (write eval W1–W10).
+2. **Grok** hooks + watcher on `~/.grok/sessions`.
+3. **Claude** hooks (`transcript_path`).
+4. **Watcher-only Codex** (then add Stop).
+5. **Pi** extension.
+6. **OpenCode** plugin.
+
+Grok first because we can dogfood in this TUI the same day the core lands.
+
+---
+
+## Watcher (all five)
+
+Poll or fs-events on each known session root. On file grow: `catch_up`. Debounce 200ms. Ignore files we already sealed (cursor at EOF and mtime stale).
+
+This is how "everything is remembered" survives missing compact hooks and crashed hook processes. Hooks make it timely. The watcher makes it complete.

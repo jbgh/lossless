@@ -1,0 +1,11 @@
+{
+  "id": "billing-not-redis",
+  "request": {
+    "project": "acme/api",
+    "question": "export invoices",
+    "goal": "export invoices",
+    "paths": ["src/billing/export.ts"]
+  },
+  "must_include_substrings": ["billing"],
+  "first_must_not_contain": "Redis"
+}

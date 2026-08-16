@@ -1,0 +1,9 @@
+{
+  "id": "rate-limit-no-path",
+  "request": {
+    "project": "acme/api",
+    "question": "add rate limiting",
+    "goal": "add rate limiting"
+  },
+  "must_include_substrings": ["Redis"]
+}

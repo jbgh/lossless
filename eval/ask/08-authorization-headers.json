@@ -1,0 +1,9 @@
+{
+  "id": "authorization-headers",
+  "request": {
+    "project": "acme/api",
+    "question": "Authorization headers"
+  },
+  "must_include_types": ["constraint"],
+  "must_include_substrings": ["Authorization"]
+}

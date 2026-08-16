@@ -1,0 +1,8 @@
+{
+  "id": "path-only-cold",
+  "request": {
+    "project": "acme/api",
+    "paths": ["src/middleware/auth.ts"]
+  },
+  "must_not_include_substrings": ["billing invoices"]
+}
