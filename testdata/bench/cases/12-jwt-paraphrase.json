@@ -1,0 +1,27 @@
+{
+  "id": "jwt-paraphrase",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "seed": [
+    {
+      "type": "decision",
+      "text": "Picked jose over jsonwebtoken on the Edge runtime.",
+      "paths": ["src/middleware/auth.ts"],
+      "created_at": "2026-07-20T11:00:00Z"
+    }
+  ],
+  "write": {
+    "must_extract_substrings": ["jose"]
+  },
+  "asks": [
+    {
+      "name": "jwt-library-choice",
+      "request": {
+        "question": "JWT library choice",
+        "goal": "pick a JWT library"
+      },
+      "must_include_substrings": ["jose"],
+      "must_include_types": ["decision"]
+    }
+  ]
+}

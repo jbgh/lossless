@@ -71,6 +71,7 @@ func (e Engine) Ask(req Request) (Response, error) {
 		seenHash[rec.ClaimHash] = len(cand)
 		cand = append(cand, e.features(rec, q, ftsBM25))
 	}
+	cand = dropOlderConflicts(cand)
 	normBM25(cand)
 	for i := range cand {
 		cand[i].score = cand[i].preStale(q.Head)
@@ -364,6 +365,40 @@ func coverSim(a, b scored, head bool) float64 {
 		return 1
 	}
 	return jaccard(claim.Tokens(a.rec.Text), claim.Tokens(b.rec.Text))
+}
+
+func dropOlderConflicts(cand []scored) []scored {
+	drop := map[string]bool{}
+	for i := range cand {
+		a := cand[i]
+		if a.rec.Type != "decision" && a.rec.Type != "constraint" {
+			continue
+		}
+		for j := i + 1; j < len(cand); j++ {
+			b := cand[j]
+			if a.rec.Type != b.rec.Type || !sharePathCluster(a, b) {
+				continue
+			}
+			if jaccard(claim.Tokens(a.rec.Text), claim.Tokens(b.rec.Text)) < ConflictJac {
+				continue
+			}
+			if a.rec.CreatedAt >= b.rec.CreatedAt {
+				drop[b.rec.ID] = true
+			} else {
+				drop[a.rec.ID] = true
+			}
+		}
+	}
+	if len(drop) == 0 {
+		return cand
+	}
+	var out []scored
+	for _, c := range cand {
+		if !drop[c.rec.ID] {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 func typeCount(out []scored, typ string) int {

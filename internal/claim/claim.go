@@ -126,6 +126,23 @@ var (
 	extRE     = regexp.MustCompile(`\.[A-Za-z][A-Za-z0-9]*$`)
 )
 
+// ExpandIdent returns the token plus coding-identifier aliases.
+// jsonwebtoken ↔ jwt is the same package, not an English synonym list.
+func ExpandIdent(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	out := []string{s}
+	switch strings.ToLower(s) {
+	case "jsonwebtoken":
+		out = append(out, "jwt")
+	case "jwt":
+		out = append(out, "jsonwebtoken")
+	}
+	return out
+}
+
 // ExtractSymbols pulls identifiers from claim text and path stems.
 func ExtractSymbols(text string, paths []string) []string {
 	seen := map[string]bool{}
@@ -139,7 +156,9 @@ func ExtractSymbols(text string, paths []string) []string {
 		out = append(out, s)
 	}
 	for _, m := range identFind.FindAllString(text, -1) {
-		add(m)
+		for _, a := range ExpandIdent(m) {
+			add(a)
+		}
 	}
 	for _, p := range paths {
 		add(baseName(p))

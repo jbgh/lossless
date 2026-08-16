@@ -1,0 +1,24 @@
+{
+  "id": "long-session-early-fail",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "sessions": [
+    {"harness": "grok", "session_id": "grok-long-tail", "file": "sessions/grok-long-tail.jsonl"}
+  ],
+  "write": {
+    "must_extract_types": ["failed"],
+    "must_extract_substrings": ["Redis"]
+  },
+  "asks": [
+    {
+      "name": "auth-after-long-css",
+      "request": {
+        "goal": "add rate limiting",
+        "paths": ["src/middleware/auth.ts"]
+      },
+      "must_include_substrings": ["Redis"],
+      "must_include_types": ["failed"],
+      "must_warn": "failed"
+    }
+  ]
+}

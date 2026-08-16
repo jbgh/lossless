@@ -46,6 +46,30 @@ func TestExtractClassifiesAndDrops(t *testing.T) {
 	}
 }
 
+func TestExtractKeepsDurableFromEarlyInLongSession(t *testing.T) {
+	var msgs []Message
+	msgs = append(msgs, Message{
+		Role: "assistant", Offset: 1,
+		Text: "Redis token bucket failed in src/middleware/auth.ts staging.",
+	})
+	for i := 0; i < 50; i++ {
+		msgs = append(msgs, Message{
+			Role: "assistant", Offset: int64(i + 2),
+			Text: "Working on src/ui/Button.tsx hover pass " + strings.Repeat("x", i%3) + " now implementing next.",
+		})
+	}
+	got := Extract(msgs, ExtractOpts{ProjectKey: "acme/api", SessionID: "long"})
+	ok := false
+	for _, r := range got {
+		if r.Type == "failed" && strings.Contains(r.Text, "Redis") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("early failed dropped from long session: %+v", got)
+	}
+}
+
 func TestExtractCapsAtTwelve(t *testing.T) {
 	var msgs []Message
 	for i := 0; i < 20; i++ {
@@ -58,6 +82,33 @@ func TestExtractCapsAtTwelve(t *testing.T) {
 	got := Extract(msgs, ExtractOpts{ProjectKey: "p", SessionID: "s"})
 	if len(got) > 12 {
 		t.Fatalf("len=%d", len(got))
+	}
+}
+
+func TestExtractDoesNotMarkHypotheticalAsFailed(t *testing.T) {
+	got := Extract([]Message{{
+		Role: "assistant",
+		Text: "I was going to try jsonwebtoken unless we already rejected that.",
+		Offset: 1,
+	}}, ExtractOpts{ProjectKey: "acme/api"})
+	for _, r := range got {
+		if r.Type == "failed" {
+			t.Fatalf("hypothetical classified failed: %+v", r)
+		}
+	}
+	real := Extract([]Message{{
+		Role: "assistant",
+		Text: "We rejected Redis for rate limiting in src/middleware/auth.ts.",
+		Offset: 2,
+	}}, ExtractOpts{ProjectKey: "acme/api"})
+	ok := false
+	for _, r := range real {
+		if r.Type == "failed" && strings.Contains(r.Text, "Redis") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("real rejection missed: %+v", real)
 	}
 }
 
@@ -157,5 +208,26 @@ func TestSplitSentences(t *testing.T) {
 	}
 	if len(splitSentences("no terminator")) != 1 {
 		t.Fatal(splitSentences("no terminator"))
+	}
+}
+
+func TestSplitDoesNotBreakOnFileExtension(t *testing.T) {
+	text := "The limiter stays in-process in src/middleware/auth.ts instead of Redis."
+	got := splitSentences(text)
+	if len(got) != 1 {
+		t.Fatalf("split on .ts: %#v", got)
+	}
+	recs := Extract([]Message{{Role: "assistant", Text: text, Offset: 1}}, ExtractOpts{ProjectKey: "acme/api"})
+	for _, r := range recs {
+		if strings.HasPrefix(strings.TrimSpace(r.Text), "ts ") {
+			t.Fatalf("chopped claim: %q", r.Text)
+		}
+	}
+	joined := ""
+	for _, r := range recs {
+		joined += r.Text
+	}
+	if !strings.Contains(joined, "instead of Redis") || !strings.Contains(joined, "auth.ts") {
+		t.Fatalf("lost sentence: %+v", recs)
 	}
 }

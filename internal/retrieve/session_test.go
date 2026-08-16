@@ -9,6 +9,78 @@ import (
 	"lossless/internal/claim"
 )
 
+func TestAuthRateLimitNotBuriedByBillingRateLimit(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "BILLRL", Type: "failed",
+		Text:      "Stripe rate limit failed in src/billing/export.ts after 429s.",
+		Paths:     []string{"src/billing/export.ts"},
+		CreatedAt: "2026-08-15T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "AUTHRL", Type: "failed",
+		Text:      "Redis token bucket failed in src/middleware/auth.ts staging.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-07-01T00:00:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project: "acme/api", Goal: "add rate limiting",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !strings.Contains(textsOf(out), "Redis") {
+		t.Fatalf("auth failed missed: %+v", out)
+	}
+	if len(out.Context) > 0 && strings.Contains(out.Context[0].Text, "Stripe") {
+		t.Fatalf("billing rate-limit ranked above auth: %+v", out.Context)
+	}
+}
+
+func TestNewerDecisionBeatsOlderConflictOnSamePath(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "OLDREDIS", Type: "decision",
+		Text:      "We decided to use Redis as the token bucket store in src/middleware/auth.ts.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2025-11-01T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "NEWREDIS", Type: "decision",
+		Text:      "We decided not to use Redis for rate limits in src/middleware/auth.ts.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-08-01T00:00:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project: "acme/api", Goal: "add rate limiting",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !strings.Contains(textsOf(out), "not to use Redis") {
+		t.Fatalf("missing newer decision: %+v", out)
+	}
+	for _, h := range out.Context {
+		if h.ID == "OLDREDIS" {
+			t.Fatalf("older conflicting decision still packed: %+v", out.Context)
+		}
+	}
+}
+
+func TestJWTParaphraseFindsJoseWithoutPath(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "01JJOSE", Type: "decision",
+		Text:      "Picked jose over jsonwebtoken on the Edge runtime.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-07-20T11:00:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project:  "acme/api",
+		Question: "JWT library choice",
+		Goal:     "pick a JWT library",
+	})
+	if !strings.Contains(textsOf(out), "jose") {
+		t.Fatalf("paraphrase missed jose: %+v", out)
+	}
+}
+
 func TestOldJoseSurvivesRecentBillingFailed(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{

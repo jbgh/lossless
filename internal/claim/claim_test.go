@@ -83,10 +83,23 @@ func TestIsIdentifier(t *testing.T) {
 	}
 }
 
+func TestExpandIdent(t *testing.T) {
+	got := strings.Join(ExpandIdent("jsonwebtoken"), ",")
+	if !strings.Contains(got, "jwt") {
+		t.Fatal(got)
+	}
+	if !strings.Contains(strings.Join(ExpandIdent("JWT"), ","), "jsonwebtoken") {
+		t.Fatal(ExpandIdent("JWT"))
+	}
+	if ExpandIdent("") != nil {
+		t.Fatal("empty")
+	}
+}
+
 func TestExtractSymbols(t *testing.T) {
 	got := ExtractSymbols("Use jose, not jsonwebtoken.", []string{"src/middleware/auth.ts"})
 	joined := strings.Join(got, " ")
-	for _, need := range []string{"jose", "jsonwebtoken", "auth.ts", "auth"} {
+	for _, need := range []string{"jose", "jsonwebtoken", "jwt", "auth.ts", "auth"} {
 		if !strings.Contains(joined, need) {
 			t.Fatalf("missing %q in %v", need, got)
 		}

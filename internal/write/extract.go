@@ -13,7 +13,7 @@ import (
 
 var (
 	pathRE       = regexp.MustCompile(`(?:[\w.-]+/)+[\w.-]+\.[A-Za-z0-9]+`)
-	failedRE     = regexp.MustCompile(`(?i)\b(rejected|didn't work|did not work|revert|abort|failed|failure|error|didn't compile|does not work)\b`)
+	failedRE     = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|revert|abort|failed|failure|error|didn't compile|does not work)\b`)
 	constraintRE = regexp.MustCompile(`(?i)\b(always|never|don't|do not|must|we use|we don't)\b`)
 	stateRE      = regexp.MustCompile(`(?i)\b(working on|current plan|next(?: step)?|now implementing)\b`)
 	decisionRE   = regexp.MustCompile(`(?i)\b(decided|going with|we'll use|we will use|picked \w+ over|chose|instead of)\b`)
@@ -37,12 +37,19 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 		}
 	}
 	recent := tail(usable, 40, 32000)
+	inTail := map[int64]bool{}
+	for _, m := range recent {
+		inTail[m.Offset] = true
+	}
 	drafts := []claim.Record{}
-	for _, msg := range recent {
-		paths := redact.FilterPaths(uniq(append(pathRE.FindAllString(msg.Text, -1), nearby(msg, recent)...)))
+	for _, msg := range usable {
+		paths := redact.FilterPaths(uniq(append(pathRE.FindAllString(msg.Text, -1), nearby(msg, usable)...)))
 		for _, sent := range splitSentences(msg.Text) {
 			typ := classify(sent, msg)
 			if typ == "" {
+				continue
+			}
+			if (typ == "state" || typ == "thread") && !inTail[msg.Offset] {
 				continue
 			}
 			text := strings.TrimSpace(sent)
@@ -175,10 +182,11 @@ func nearby(msg Message, all []Message) []string {
 
 func splitSentences(text string) []string {
 	var out []string
-	cur := strings.Builder{}
-	for _, r := range text {
+	var cur strings.Builder
+	rs := []rune(text)
+	for i, r := range rs {
 		cur.WriteRune(r)
-		if r == '\n' || r == '.' || r == '!' || r == '?' {
+		if r == '\n' || r == '!' || r == '?' || (r == '.' && !fileExtDot(rs, i)) {
 			if s := strings.TrimSpace(cur.String()); s != "" {
 				out = append(out, s)
 			}
@@ -189,6 +197,33 @@ func splitSentences(text string) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+func fileExtDot(rs []rune, i int) bool {
+	if i == 0 || !alnum(rs[i-1]) {
+		return false
+	}
+	n := 0
+	j := i + 1
+	for j < len(rs) && alnum(rs[j]) && n < 8 {
+		j++
+		n++
+	}
+	if n == 0 {
+		return false
+	}
+	if j == len(rs) {
+		return true
+	}
+	switch rs[j] {
+	case ' ', '\t', ',', ';', ':', ')', ']', '\'', '"':
+		return true
+	}
+	return false
+}
+
+func alnum(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
 }
 
 func uniq(xs []string) []string {
