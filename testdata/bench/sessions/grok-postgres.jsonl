@@ -1,0 +1,4 @@
+{"type":"user","content":"Pick a database for src/db/client.ts."}
+{"type":"assistant","content":"MySQL failed in src/db/client.ts on json columns."}
+{"type":"assistant","content":"We decided to use postgres, not mysql, in src/db/client.ts."}
+{"type":"user","content":"Always run migrations through src/db/migrate.ts."}

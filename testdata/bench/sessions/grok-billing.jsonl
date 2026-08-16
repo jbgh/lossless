@@ -1,0 +1,5 @@
+{"type":"user","content":"Export invoices from src/billing/export.ts to CSV."}
+{"type":"assistant","content":"Working on src/billing/export.ts invoice CSV export."}
+{"type":"assistant","content":"Warehouse query failed in src/billing/export.ts because the cursor timed out."}
+{"type":"user","content":"Never stream raw card numbers in src/billing/export.ts."}
+{"type":"assistant","content":"We decided to page invoices in batches of 500 in src/billing/export.ts."}

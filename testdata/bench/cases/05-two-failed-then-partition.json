@@ -1,0 +1,25 @@
+{
+  "id": "two-failed-then-partition",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "sessions": [
+    {"harness": "grok", "session_id": "grok-two-fails", "file": "sessions/grok-two-fails.jsonl"}
+  ],
+  "write": {
+    "min_extracted": 3,
+    "must_extract_types": ["failed", "decision"],
+    "must_extract_substrings": ["Elasticsearch", "partition"]
+  },
+  "asks": [
+    {
+      "name": "search-again",
+      "request": {
+        "goal": "speed up search",
+        "paths": ["src/search/index.ts"]
+      },
+      "must_include_substrings": ["Elasticsearch"],
+      "must_include_types": ["failed"],
+      "must_warn": "failed"
+    }
+  ]
+}

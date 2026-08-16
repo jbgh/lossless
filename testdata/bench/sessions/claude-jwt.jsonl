@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"New session. Add rate limiting and pick a JWT library for src/middleware/auth.ts."}}
+{"type":"assistant","message":{"role":"assistant","content":"Working on src/middleware/auth.ts. I was going to try jsonwebtoken unless we already rejected that."}}

@@ -11,6 +11,7 @@ import (
 
 	"context"
 
+	"lossless/internal/bench"
 	"lossless/internal/claim"
 	"lossless/internal/env"
 	"lossless/internal/harness"
@@ -66,6 +67,8 @@ func main() {
 		os.Exit(runHookPi())
 	case "hook-opencode":
 		os.Exit(runHookOpenCode())
+	case "bench":
+		os.Exit(runBench(args))
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -78,6 +81,7 @@ func main() {
 func usage() {
 	fmt.Fprint(os.Stderr, `lossless — work log for coding agents (keep the tape, check out five records)
 
+  lossless bench [--root testdata/bench] [--home DIR]
   lossless catch-up --jsonl FILE [--project KEY] [--workspace DIR] [--harness grok] [--session ID] [--home DIR]
   lossless remember --type decision --text "..." [--project KEY] [--workspace DIR] [--home DIR]
   lossless ask --project KEY [--question "..."] [--goal "..."] [--path FILE] [--workspace DIR]
@@ -200,6 +204,34 @@ func runAsk(args []string) int {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(out)
+	return 0
+}
+
+func runBench(args []string) int {
+	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
+	home := homeFlag(fs)
+	root := fs.String("root", "testdata/bench", "benchmark case directory")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if err := os.MkdirAll(*home, 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	dir, err := os.MkdirTemp(*home, "bench-*")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	rep, err := bench.RunDir(*root, dir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Print(bench.FormatReport(rep))
+	if rep.CasePass != rep.CaseTotal || rep.AskPass != rep.AskTotal {
+		return 1
+	}
 	return 0
 }
 

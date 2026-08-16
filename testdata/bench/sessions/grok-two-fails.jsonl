@@ -1,0 +1,5 @@
+{"type":"user","content":"Speed up src/search/index.ts."}
+{"type":"assistant","content":"Elasticsearch scroll failed in src/search/index.ts after 10k hits."}
+{"type":"assistant","content":"We decided to try SQLite FTS in src/search/index.ts instead of Elasticsearch."}
+{"type":"assistant","content":"Loading the whole FTS table into RAM failed in src/search/index.ts."}
+{"type":"assistant","content":"We decided to partition FTS by month in src/search/index.ts."}

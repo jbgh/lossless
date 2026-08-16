@@ -1,0 +1,26 @@
+{
+  "id": "postgres-decision",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "sessions": [
+    {"harness": "grok", "session_id": "grok-postgres", "file": "sessions/grok-postgres.jsonl"}
+  ],
+  "write": {
+    "min_extracted": 2,
+    "must_extract_types": ["failed", "decision"],
+    "must_extract_substrings": ["postgres", "MySQL"]
+  },
+  "asks": [
+    {
+      "name": "which-db",
+      "request": {
+        "question": "which database did we pick",
+        "goal": "wire src/db/client.ts",
+        "paths": ["src/db/client.ts"]
+      },
+      "must_include_substrings": ["postgres"],
+      "must_include_types": ["decision"],
+      "must_warn": "cover"
+    }
+  ]
+}

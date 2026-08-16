@@ -1,0 +1,25 @@
+{
+  "id": "noise-does-not-win",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "sessions": [
+    {"harness": "grok", "session_id": "grok-css-noise", "file": "sessions/grok-css-noise.jsonl"},
+    {"harness": "grok", "session_id": "grok-auth", "file": "sessions/grok-auth.jsonl"}
+  ],
+  "write": {
+    "min_extracted": 3,
+    "must_extract_substrings": ["Redis", "Button"]
+  },
+  "asks": [
+    {
+      "name": "auth-not-css",
+      "request": {
+        "goal": "add rate limiting",
+        "paths": ["src/middleware/auth.ts"]
+      },
+      "must_include_substrings": ["Redis"],
+      "must_not_include_substrings": ["Button"],
+      "must_warn": "failed"
+    }
+  ]
+}

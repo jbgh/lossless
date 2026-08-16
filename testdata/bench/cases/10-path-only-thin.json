@@ -1,0 +1,20 @@
+{
+  "id": "path-only-thin",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "sessions": [
+    {"harness": "grok", "session_id": "grok-auth", "file": "sessions/grok-auth.jsonl"},
+    {"harness": "grok", "session_id": "grok-billing", "file": "sessions/grok-billing.jsonl"}
+  ],
+  "write": {
+    "min_extracted": 4
+  },
+  "asks": [
+    {
+      "name": "path-auth",
+      "request": {"paths": ["src/middleware/auth.ts"]},
+      "must_include_substrings": ["Redis"],
+      "must_not_include_substrings": ["invoice"]
+    }
+  ]
+}

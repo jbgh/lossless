@@ -1,0 +1,13 @@
+{
+  "id": "empty-store",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "write": {},
+  "asks": [
+    {
+      "name": "anything",
+      "request": {"question": "what do we know"},
+      "must_be_empty": true
+    }
+  ]
+}

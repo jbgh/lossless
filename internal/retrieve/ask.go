@@ -366,6 +366,29 @@ func coverSim(a, b scored, head bool) float64 {
 	return jaccard(claim.Tokens(a.rec.Text), claim.Tokens(b.rec.Text))
 }
 
+func typeCount(out []scored, typ string) int {
+	n := 0
+	for _, p := range out {
+		if p.rec.Type == typ {
+			n++
+		}
+	}
+	return n
+}
+
+func hasOtherType(remaining, packed []scored, typ string) bool {
+	seen := map[string]int{}
+	for _, p := range packed {
+		seen[p.rec.Type]++
+	}
+	for _, c := range remaining {
+		if c.rec.Type != typ && seen[c.rec.Type] < PackTypeCap {
+			return true
+		}
+	}
+	return false
+}
+
 func pack(cs []scored, limit int, head bool) []scored {
 	if len(cs) == 0 {
 		return nil
@@ -421,6 +444,9 @@ func pack(cs []scored, limit int, head bool) []scored {
 				continue
 			}
 			if diverseSkip(c, out, packedText) {
+				continue
+			}
+			if typeCount(out, c.rec.Type) >= PackTypeCap && hasOtherType(remaining, out, c.rec.Type) {
 				continue
 			}
 			sim := 0.0

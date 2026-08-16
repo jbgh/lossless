@@ -1,0 +1,33 @@
+{
+  "id": "auth-cross-model",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "sessions": [
+    {"harness": "grok", "session_id": "grok-auth", "file": "sessions/grok-auth.jsonl"},
+    {"harness": "claude", "session_id": "claude-jwt", "file": "sessions/claude-jwt.jsonl", "source": "turn"}
+  ],
+  "write": {
+    "min_extracted": 3,
+    "must_extract_types": ["failed", "decision"],
+    "must_extract_substrings": ["Redis", "jose"]
+  },
+  "asks": [
+    {
+      "name": "thin-new-model",
+      "request": {},
+      "must_include_substrings": ["Redis"],
+      "must_include_types": ["failed"]
+    },
+    {
+      "name": "claude-hot-jwt",
+      "request": {
+        "question": "add rate limiting and pick a JWT library",
+        "goal": "add rate limiting",
+        "paths": ["src/middleware/auth.ts"]
+      },
+      "must_include_substrings": ["Redis", "jose"],
+      "must_include_types": ["failed", "decision"],
+      "must_warn": "failed"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "id": "constraint-headers",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "sessions": [
+    {"harness": "grok", "session_id": "grok-auth", "file": "sessions/grok-auth.jsonl"}
+  ],
+  "write": {
+    "must_extract_types": ["constraint"],
+    "must_extract_substrings": ["Authorization"]
+  },
+  "asks": [
+    {
+      "name": "headers",
+      "request": {"question": "Authorization headers"},
+      "must_include_substrings": ["Authorization"],
+      "must_include_types": ["constraint"],
+      "must_warn": "constraint"
+    }
+  ]
+}

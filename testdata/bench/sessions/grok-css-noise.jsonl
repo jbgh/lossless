@@ -1,0 +1,3 @@
+{"type":"user","content":"Tweak the button color in src/ui/Button.tsx."}
+{"type":"assistant","content":"Working on src/ui/Button.tsx hover styles."}
+{"type":"assistant","content":"We decided to use the existing token for primary buttons in src/ui/Button.tsx."}

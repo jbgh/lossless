@@ -30,6 +30,7 @@ go build -o lossless ./cmd/lossless
 ./lossless catch-up --jsonl ~/.grok/sessions/.../chat_history.jsonl --workspace "$(pwd)" --harness grok
 ./lossless remember --type decision --text "Use jose, not jsonwebtoken, for Edge." --project acme/api
 ./lossless ask --project acme/api --question "why not jsonwebtoken" --goal "pick a jwt library"
+./lossless bench --root testdata/bench
 ./lossless serve            # REST + /mcp; watches session files
 ./lossless install-hooks    # Grok + Claude + Codex + Pi + OpenCode
 ./lossless install-mcp      # Grok HTTP MCP + Claude stdio MCP

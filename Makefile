@@ -1,4 +1,4 @@
-.PHONY: test cover cover-html vet
+.PHONY: test cover cover-html vet bench
 
 test:
 	go test ./...
@@ -15,3 +15,7 @@ cover:
 cover-html: cover
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "wrote coverage.html"
+
+bench:
+	go test ./eval/ -run 'TestSimBenchmarkSuite|TestStress' -count=1 -timeout 120s -v
+	go run ./cmd/lossless bench --root testdata/bench

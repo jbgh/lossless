@@ -1,0 +1,35 @@
+{
+  "id": "long-horizon-jose",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "seed": [
+    {
+      "type": "decision",
+      "text": "Use jose, not jsonwebtoken, for Edge.",
+      "paths": ["src/middleware/auth.ts"],
+      "created_at": "2025-12-01T00:00:00Z",
+      "harness": "grok"
+    },
+    {
+      "type": "failed",
+      "text": "Invoice export timed out against the warehouse API.",
+      "paths": ["src/billing/export.ts"],
+      "created_at": "2026-08-14T00:00:00Z",
+      "harness": "claude"
+    }
+  ],
+  "write": {
+    "must_extract_substrings": ["jose"]
+  },
+  "asks": [
+    {
+      "name": "jwt-months-later",
+      "request": {
+        "question": "why not a JWT library",
+        "paths": ["src/middleware/auth.ts"]
+      },
+      "must_include_substrings": ["jose"],
+      "must_include_types": ["decision"]
+    }
+  ]
+}

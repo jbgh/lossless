@@ -21,6 +21,7 @@ const (
 	ColdPathCap       = 40
 	ColdStateCap      = 10
 	PackCap           = 5
+	PackTypeCap       = 2
 	StaleStatCap      = 30
 	DefaultLimit      = 1200
 	HalfLifeDays          = 14
