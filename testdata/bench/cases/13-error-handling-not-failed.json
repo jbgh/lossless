@@ -1,0 +1,25 @@
+{
+  "id": "error-handling-not-failed",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "sessions": [
+    {"harness": "grok", "session_id": "grok-error-handling", "file": "sessions/grok-error-handling.jsonl"}
+  ],
+  "write": {
+    "must_extract_types": ["decision"],
+    "must_extract_substrings": ["error handling"],
+    "must_not_extract_substrings": ["assertion failed"]
+  },
+  "asks": [
+    {
+      "name": "harden-errors",
+      "request": {
+        "goal": "harden errors",
+        "paths": ["src/api/errors.ts"]
+      },
+      "must_include_substrings": ["error handling"],
+      "must_include_types": ["decision"],
+      "must_warn": "cover"
+    }
+  ]
+}

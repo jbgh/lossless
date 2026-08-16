@@ -1,0 +1,3 @@
+{"type":"user","content":"Harden src/api/errors.ts."}
+{"type":"assistant","content":"We decided to add error handling in src/api/errors.ts."}
+{"type":"tool_result","content":"FAIL src/api/errors.test.ts: assertion failed at line 12 stack stack stack"}

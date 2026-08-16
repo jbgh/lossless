@@ -94,6 +94,9 @@ func TestExpandIdent(t *testing.T) {
 	if ExpandIdent("") != nil {
 		t.Fatal("empty")
 	}
+	if FoldIdent("token_bucket") != "tokenbucket" || FoldIdent("tokenBucket") != "tokenbucket" {
+		t.Fatal(FoldIdent("token_bucket"), FoldIdent("tokenBucket"))
+	}
 }
 
 func TestExtractSymbols(t *testing.T) {

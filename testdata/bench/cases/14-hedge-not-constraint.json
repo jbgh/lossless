@@ -1,0 +1,21 @@
+{
+  "id": "hedge-not-constraint",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "sessions": [
+    {"harness": "grok", "session_id": "grok-hedge", "file": "sessions/grok-hedge.jsonl"}
+  ],
+  "write": {
+    "must_extract_substrings": []
+  },
+  "asks": [
+    {
+      "name": "mongo-question",
+      "request": {
+        "question": "should we use mongo",
+        "paths": ["src/db/client.ts"]
+      },
+      "must_not_include_substrings": ["don't think"]
+    }
+  ]
+}

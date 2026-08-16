@@ -85,6 +85,68 @@ func TestExtractCapsAtTwelve(t *testing.T) {
 	}
 }
 
+func TestExtractErrorHandlingIsNotFailed(t *testing.T) {
+	got := Extract([]Message{{
+		Role: "assistant", Offset: 1,
+		Text: "We decided to add error handling in src/api/errors.ts.",
+	}}, ExtractOpts{ProjectKey: "acme/api"})
+	for _, r := range got {
+		if r.Type == "failed" {
+			t.Fatalf("error handling classified failed: %+v", r)
+		}
+	}
+	ok := false
+	for _, r := range got {
+		if r.Type == "decision" && strings.Contains(r.Text, "error handling") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("wanted decision: %+v", got)
+	}
+}
+
+func TestExtractHedgingIsNotConstraint(t *testing.T) {
+	got := Extract([]Message{{
+		Role: "user", Offset: 1,
+		Text: "I don't think we should use Mongo in src/db/client.ts.",
+	}}, ExtractOpts{ProjectKey: "acme/api"})
+	for _, r := range got {
+		if r.Type == "constraint" {
+			t.Fatalf("hedge classified constraint: %+v", r)
+		}
+	}
+}
+
+func TestExtractSkipsToolDumps(t *testing.T) {
+	got := Extract([]Message{{
+		Role: "tool", Offset: 1,
+		Text: "FAIL src/pkg/foo.test.ts: assertion failed at line 12\n" + strings.Repeat("stack ", 20),
+	}}, ExtractOpts{ProjectKey: "acme/api"})
+	if len(got) != 0 {
+		t.Fatalf("tool dump became claims: %+v", got)
+	}
+	keep := Extract([]Message{{
+		Role: "assistant", Offset: 2,
+		Text: "The foo unit test failed in src/pkg/foo.test.ts.",
+	}}, ExtractOpts{ProjectKey: "acme/api"})
+	if len(keep) == 0 || keep[0].Type != "failed" {
+		t.Fatalf("assistant failure missed: %+v", keep)
+	}
+}
+
+func TestExtractQuestionIsNotDecisionOrConstraint(t *testing.T) {
+	got := Extract([]Message{{
+		Role: "user", Offset: 1,
+		Text: "Should we use postgres in src/db/client.ts?",
+	}}, ExtractOpts{ProjectKey: "acme/api"})
+	for _, r := range got {
+		if r.Type == "decision" || r.Type == "constraint" {
+			t.Fatalf("question classified %s: %+v", r.Type, r)
+		}
+	}
+}
+
 func TestExtractDoesNotMarkHypotheticalAsFailed(t *testing.T) {
 	got := Extract([]Message{{
 		Role: "assistant",

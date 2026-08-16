@@ -13,8 +13,10 @@ import (
 
 var (
 	pathRE       = regexp.MustCompile(`(?:[\w.-]+/)+[\w.-]+\.[A-Za-z0-9]+`)
-	failedRE     = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|revert|abort|failed|failure|error|didn't compile|does not work)\b`)
+	failedRE     = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|revert|abort|failed|failure|didn't compile|does not work|threw|exception)\b`)
 	constraintRE = regexp.MustCompile(`(?i)\b(always|never|don't|do not|must|we use|we don't)\b`)
+	hedgeRE      = regexp.MustCompile(`(?i)\b(i don't think|i do not think|not sure|maybe|probably|might|should we|could we|can we|do we)\b`)
+	questionRE   = regexp.MustCompile(`(?i)^\s*(should|could|can|may|do|did|is|are|will)\b`)
 	stateRE      = regexp.MustCompile(`(?i)\b(working on|current plan|next(?: step)?|now implementing)\b`)
 	decisionRE   = regexp.MustCompile(`(?i)\b(decided|going with|we'll use|we will use|picked \w+ over|chose|instead of)\b`)
 )
@@ -43,6 +45,9 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 	}
 	drafts := []claim.Record{}
 	for _, msg := range usable {
+		if msg.Role == "tool" {
+			continue
+		}
 		paths := redact.FilterPaths(uniq(append(pathRE.FindAllString(msg.Text, -1), nearby(msg, usable)...)))
 		for _, sent := range splitSentences(msg.Text) {
 			typ := classify(sent, msg)
@@ -85,19 +90,30 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 }
 
 func classify(sentence string, msg Message) string {
+	if isQuestion(sentence) {
+		return ""
+	}
 	if msg.Error || failedRE.MatchString(sentence) {
 		return "failed"
 	}
 	if decisionRE.MatchString(sentence) {
 		return "decision"
 	}
-	if constraintRE.MatchString(sentence) && msg.Role == "user" {
+	if constraintRE.MatchString(sentence) && msg.Role == "user" && !hedgeRE.MatchString(sentence) {
 		return "constraint"
 	}
 	if stateRE.MatchString(sentence) {
 		return "state"
 	}
 	return ""
+}
+
+func isQuestion(s string) bool {
+	s = strings.TrimSpace(s)
+	if strings.HasSuffix(s, "?") {
+		return true
+	}
+	return questionRE.MatchString(s)
 }
 
 func makeRec(typ, text string, paths []string, offset int64, opts ExtractOpts) claim.Record {
@@ -216,7 +232,7 @@ func fileExtDot(rs []rune, i int) bool {
 		return true
 	}
 	switch rs[j] {
-	case ' ', '\t', ',', ';', ':', ')', ']', '\'', '"':
+	case ' ', '\t', ',', ';', ':', ')', ']', '\'', '"', '.', '!', '?':
 		return true
 	}
 	return false

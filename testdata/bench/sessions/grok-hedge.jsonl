@@ -1,0 +1,2 @@
+{"type":"user","content":"I don't think we should use Mongo in src/db/client.ts."}
+{"type":"assistant","content":"Got it. I will look at src/db/client.ts and not treat that as a standing rule."}

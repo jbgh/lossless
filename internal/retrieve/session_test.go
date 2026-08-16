@@ -63,6 +63,25 @@ func TestNewerDecisionBeatsOlderConflictOnSamePath(t *testing.T) {
 	}
 }
 
+func TestTokenBucketSnakeAndCamelMatch(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "01JBUCKET", Type: "decision",
+		Text:      "Picked tokenBucket over a raw counter in src/middleware/auth.ts.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-07-20T11:00:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project:  "acme/api",
+		Question: "why token_bucket in auth",
+		Goal:     "implement token_bucket",
+		Paths:    []string{"src/middleware/auth.ts"},
+	})
+	if !strings.Contains(textsOf(out), "tokenBucket") {
+		t.Fatalf("camel/snake miss: %+v", out)
+	}
+}
+
 func TestJWTParaphraseFindsJoseWithoutPath(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{

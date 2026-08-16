@@ -126,6 +126,18 @@ var (
 	extRE     = regexp.MustCompile(`\.[A-Za-z][A-Za-z0-9]*$`)
 )
 
+// FoldIdent drops _ and - and lowercases so tokenBucket and token_bucket match.
+func FoldIdent(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r == '_' || r == '-' {
+			continue
+		}
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
+}
+
 // ExpandIdent returns the token plus coding-identifier aliases.
 // jsonwebtoken ↔ jwt is the same package, not an English synonym list.
 func ExpandIdent(s string) []string {
@@ -134,6 +146,9 @@ func ExpandIdent(s string) []string {
 		return nil
 	}
 	out := []string{s}
+	if f := FoldIdent(s); f != "" && !strings.EqualFold(f, s) {
+		out = append(out, f)
+	}
 	switch strings.ToLower(s) {
 	case "jsonwebtoken":
 		out = append(out, "jwt")

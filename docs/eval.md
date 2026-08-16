@@ -31,3 +31,5 @@ Algorithm notes the suite forced:
 - `jsonwebtoken` and `jwt` are the same identifier.
 - Newer decision on the same path wins over an older conflicting one.
 - Failed/decision/constraint from early in a long session still extract.
+- "error handling" is not a failure. Tool dumps are not claims.
+- Hedging ("I don't think") and questions ("Should we use") are not constraints.

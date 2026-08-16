@@ -77,6 +77,14 @@ func normalize(req Request) (query, error) {
 		}
 		seen[s] = true
 		symbols = append(symbols, s)
+		for _, extra := range claim.ExpandIdent(s) {
+			e := strings.ToLower(extra)
+			if e == "" || seen[e] {
+				continue
+			}
+			seen[e] = true
+			symbols = append(symbols, e)
+		}
 	}
 	for _, t := range append(append([]string{}, qtoks...), gtoks...) {
 		addSym(t)
