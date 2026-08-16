@@ -35,3 +35,4 @@ Algorithm notes the suite forced:
 - Failed/decision/constraint from early in a long session still extract.
 - "error handling" is not a failure. Tool dumps are not claims.
 - Hedging ("I don't think") and questions ("Should we use") are not constraints.
+- Tried Redis, "fixed" it, it failed again: do not pack the dead "use Redis again" decision.

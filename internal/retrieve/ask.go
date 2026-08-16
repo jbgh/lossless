@@ -72,6 +72,7 @@ func (e Engine) Ask(req Request) (Response, error) {
 		cand = append(cand, e.features(rec, q, ftsBM25))
 	}
 	cand = dropOlderConflicts(cand)
+	cand = dropInvalidatedByNewerFailed(cand)
 	normBM25(cand)
 	for i := range cand {
 		cand[i].score = cand[i].preStale(q.Head)
@@ -376,6 +377,37 @@ func coverSim(a, b scored, head bool) float64 {
 		return 1
 	}
 	return jaccard(claim.Tokens(a.rec.Text), claim.Tokens(b.rec.Text))
+}
+
+func dropInvalidatedByNewerFailed(cand []scored) []scored {
+	drop := map[string]bool{}
+	for _, f := range cand {
+		if f.rec.Type != "failed" {
+			continue
+		}
+		for _, d := range cand {
+			if d.rec.Type != "decision" && d.rec.Type != "constraint" {
+				continue
+			}
+			if !sharePathCluster(f, d) || f.rec.CreatedAt <= d.rec.CreatedAt {
+				continue
+			}
+			if jaccard(claim.Tokens(f.rec.Text), claim.Tokens(d.rec.Text)) < InvalidateJac {
+				continue
+			}
+			drop[d.rec.ID] = true
+		}
+	}
+	if len(drop) == 0 {
+		return cand
+	}
+	var out []scored
+	for _, c := range cand {
+		if !drop[c.rec.ID] {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 func dropOlderConflicts(cand []scored) []scored {

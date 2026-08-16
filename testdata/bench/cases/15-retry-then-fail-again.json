@@ -1,0 +1,26 @@
+{
+  "id": "retry-then-fail-again",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "sessions": [
+    {"harness": "grok", "session_id": "grok-redis-retry", "file": "sessions/grok-redis-retry.jsonl"}
+  ],
+  "write": {
+    "min_extracted": 3,
+    "must_extract_types": ["failed", "decision"],
+    "must_extract_substrings": ["failed again", "jose"]
+  },
+  "asks": [
+    {
+      "name": "do-not-retry-redis",
+      "request": {
+        "goal": "add rate limiting",
+        "paths": ["src/middleware/auth.ts"]
+      },
+      "must_include_substrings": ["failed again", "jose"],
+      "must_include_types": ["failed"],
+      "must_not_include_substrings": ["bigger pool"],
+      "must_warn": "failed"
+    }
+  ]
+}

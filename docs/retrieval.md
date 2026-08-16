@@ -174,6 +174,8 @@ No FTS. No vectors. No excerpts.
 
 By `id`. If two candidates share `claim_hash` (should not happen for active), keep the newest.
 
+Then drop older same-path decisions/constraints when token Jaccard ≥ 0.35. Then drop a decision/constraint if a **newer** same-path `failed` shares topic tokens (Jaccard ≥ 0.2). Tried it, shipped it, it failed again: the dead decision is not current. An unrelated jose decision on the same file is kept.
+
 ---
 
 ## 3. Features

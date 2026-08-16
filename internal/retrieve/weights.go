@@ -31,6 +31,7 @@ const (
 	DecisionHalfLifeDays  = 180
 	DiversityJac          = 0.8
 	ConflictJac           = 0.35
+	InvalidateJac         = 0.2
 	VectorGate            = 0.55
 	RichTokenMin          = 2
 	CompileTailMsgs       = 40

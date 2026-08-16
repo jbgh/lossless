@@ -35,6 +35,66 @@ func TestAuthRateLimitNotBuriedByBillingRateLimit(t *testing.T) {
 	}
 }
 
+func TestRetryThenFailAgainDropsDeadDecision(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "D1", Type: "decision",
+		Text:      "We decided to use Redis for rate limits in src/middleware/auth.ts.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-01-10T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "F1", Type: "failed",
+		Text:      "Redis token bucket failed in src/middleware/auth.ts staging.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-03-01T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "D2", Type: "decision",
+		Text:      "We decided to use Redis again with a bigger pool in src/middleware/auth.ts.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-05-01T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "F2", Type: "failed",
+		Text:      "Redis failed again in src/middleware/auth.ts, pool still exhausted.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-07-01T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "JOSE", Type: "decision",
+		Text:      "Picked jose over jsonwebtoken on the Edge runtime.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-02-01T00:00:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project: "acme/api", Goal: "add rate limiting",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !strings.Contains(textsOf(out), "failed again") && !strings.Contains(textsOf(out), "pool still") {
+		t.Fatalf("missing latest failure: %+v", out)
+	}
+	if !hasWarn(out, "failed") {
+		t.Fatalf("expected failed warning: %v", out.Warnings)
+	}
+	for _, h := range out.Context {
+		if h.ID == "D2" || strings.Contains(h.Text, "bigger pool") {
+			t.Fatalf("dead Redis retry still packed as current: %+v", out)
+		}
+		if h.ID == "D1" {
+			t.Fatalf("original Redis decision still packed: %+v", out)
+		}
+	}
+	for _, w := range out.Warnings {
+		if strings.Contains(w, "D2") {
+			t.Fatalf("shipped warning on a decision that later failed: %v", out.Warnings)
+		}
+	}
+	if !strings.Contains(textsOf(out), "jose") {
+		t.Fatalf("unrelated jose decision was dropped: %+v", out)
+	}
+}
+
 func TestNewerDecisionBeatsOlderConflictOnSamePath(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{

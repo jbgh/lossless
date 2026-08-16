@@ -1,0 +1,7 @@
+{"type":"user","content":"Add rate limiting to src/middleware/auth.ts."}
+{"type":"assistant","content":"We decided to use Redis for rate limits in src/middleware/auth.ts."}
+{"type":"assistant","content":"Redis token bucket failed in src/middleware/auth.ts staging."}
+{"type":"user","content":"Can we just give Redis a bigger pool?"}
+{"type":"assistant","content":"We decided to use Redis again with a bigger pool in src/middleware/auth.ts."}
+{"type":"assistant","content":"Redis failed again in src/middleware/auth.ts, pool still exhausted."}
+{"type":"assistant","content":"Picked jose over jsonwebtoken on the Edge runtime."}
