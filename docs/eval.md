@@ -20,7 +20,7 @@ Each case scores:
 - **Ask:** each request’s pack contains the needles, excludes decoys, and fires the right warning.
 - **Recall:** needles hit / needles required, averaged per case.
 
-Stress (`eval/stress_test.go`): 10k decoy claims + gold failed (p50/p95), 32 concurrent asks, 80-session catch-up.
+Stress (`eval/stress_test.go`): 10k decoy claims + gold failed (p50 < 500ms, p95 < 2s), 32 concurrent asks, 80-session catch-up.
 
 Year corpus (`eval/year_sim_test.go`): weekday chatter for 365 days (~630 claims) plus five golds from Aug 2025 through Aug 2026. Asks check that a year-old jose decision, a Nov Redis failure, a Feb constraint, a May postgres pick, and an Aug warehouse timeout still pack, and that auth work does not leak invoices. Also catch-up of 120 generated sessions (~60/s) and a cross-project isolation check.
 
@@ -36,3 +36,8 @@ Algorithm notes the suite forced:
 - "error handling" is not a failure. Tool dumps are not claims.
 - Hedging ("I don't think") and questions ("Should we use") are not constraints.
 - Tried Redis, "fixed" it, it failed again: do not pack the dead "use Redis again" decision.
+- Pathless JWT must not pack last week's warehouse timeout.
+- Pathless "add rate limiting" hops through the limiter decision's file to the Redis failed.
+- With an embedder, "add throttling" / "the cache idea we tried" finds the Redis failed that shares no tokens. Without one, that ask misses. Cosine still cannot beat a failed-on-path record.
+- Thin ask after a rich JWT ask on the same session still packs jose (action tape).
+- GET on a claim (dwell) then “what were we looking at” packs that claim.

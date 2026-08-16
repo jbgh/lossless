@@ -81,6 +81,8 @@ v1 excerpt policy: chunk ~800–1600 chars, 200-char overlap. Full tool bodies l
 ```
 ask request
   → normalize (project_key, tokens, paths, symbols)
+  → compile if thin (session tail)
+  → hydrate action tape (last packs, GETs, remembers)
   → candidate generation          # cheap, recall-oriented, cap N
   → feature extraction            # only on candidates
   → score = weighted sum          # named weights, below
@@ -89,7 +91,7 @@ ask request
   → AskResponse
 ```
 
-Target: **< 50ms** at 10k claims / 100k excerpts on a laptop, p50. **< 150ms** p95 at 100k claims.
+Ask is an MCP tool call, not a cache lookup. Target: **p50 < 500ms**, **p95 < 2s** at 10k claims on a laptop. Fail only on hang-class times (>5s). Write/hook paths stay fail-open and fast.
 
 Never scan the full project table. The spike's `listActive` is banned.
 
@@ -110,6 +112,8 @@ rich            path_keys nonempty OR (question_tokens + goal_tokens) >= 2
 ```
 
 If **rich**, use the Query as-is. Do not overwrite caller fields.
+
+After compile, **hydrate the action tape** for this `session_id` (or the newest session for the project): last pack ids, `get_record` / `remember` dwells, and extra lookup tokens. Caller paths on a rich ask are never overwritten. Packed hit paths are not copied onto the next ask.
 
 If **thin**, compile from the session tail and fill only empty fields:
 
@@ -147,14 +151,20 @@ Union, then cap:
 | A. FTS | `lookup_text` against claims FTS, `project_key`, active. Order by BM25. | 80 |
 | B. Path | posting list for each `path_keys` | 40 per path, 80 total |
 | C. Symbol | posting list for each `symbols` | 40 per symbol, 80 total |
-| D. Failed | active `failed` whose path or symbol overlaps, plus a few recent faileds as a safety net. **No date filter.** | 40 overlap + 8/4 recent |
+| D. Failed | active `failed` whose path or symbol overlaps | 40 |
 | E. Decision | active `decision` whose path or symbol overlaps | 40 |
 | E2. Constraint | active `constraint` whose path or symbol overlaps | 40 |
+| D2. Inferred path | pathless only: take path keys from A–E hits, pull failed/decision/constraint on those files | 6 paths, 24 per type |
+| D3. Recent failed | **only if A–E+D2 are empty** | 8 |
 | F. Vector | embed `lookup_text` once; kNN on claim vectors, same `project_key`, active. Cosine. | 80 |
 
-If A+B+C+F are empty, still keep D/E/E2. If the whole union is empty, return empty context. Empty is a valid answer.
+Query symbols skip English leftovers (`library`, `choice`, `add`). `jwt` stays. FTS still sees every lookup token.
 
-If the embedder is unavailable (first run, model not downloaded), skip F and continue. Lexical+structure still works. Missing vectors is degraded mode, not a hard failure.
+If A+B+C+F are empty, still keep D/E/E2. Recent faileds are a last-resort safety net, not a default. A year of warehouse timeouts must not ride along with a JWT ask. If the whole union is empty, return empty context. Empty is a valid answer.
+
+If the embedder is unavailable (first run, model not downloaded, `LOSSLESS_EMBED_CMD` unset), skip F and continue. Lexical+structure still works. Missing vectors is degraded mode, not a hard failure.
+
+Vectors are written at `WriteClaim` when `Store.Embedder` is set. `lossless embed-backfill` walks active claims and fills gaps after you attach a model. Model name is stored on each row; a different model ignores old vectors.
 
 ### HEAD coverage
 
@@ -190,11 +200,16 @@ Compute only on the candidate set. Every feature is in `[0, 1]` except `type_ran
 | `symbol` | Jaccard of query symbols vs record `symbols` | 0 if either side empty |
 | `bm25` | min-max normalize BM25 over **this candidate set** | 0 if record was not an FTS hit |
 | `vector` | cosine(query, claim) clipped to `[0,1]` | 0 if embedder off or record has no vector |
-| `failed_overlap` | 1 if `type=failed` AND (`path>0` OR `vector>=0.55` OR token overlap of goal∪question with text ≥ 1 token len>3) | Job 1; vector gate is how paraphrase still warns |
-| `shipped_overlap` | 1 if `type in {decision,state,constraint}` AND (`path>0` OR `symbol>0` OR same token overlap) | Job 2 |
+| `agree` | (isFTS + path>0 + symbol>0) / 3 | Structure agreement. A claim in two sources beats a one-word FTS hit. |
+| `failed_overlap` | 1 if `type=failed` AND **strong** overlap | Job 1. Forces pack + warning. |
+| `shipped_overlap` | 1 if `type in {decision,state,constraint}` AND **strong** overlap | Job 2. |
+| `failed_weak` / `shipped_weak` | 1 if the type matches and overlap is **weak** (exactly one content token) | Score bump only. Does not force pack or warn. |
 | `stale` | 1 if `workspace_root` set and any tagged file mtime > stored `path_mtime` | Ephemeral. Stat at most the current top 30 by pre-stale score. |
 
-Token overlap for `failed_overlap` / `shipped_overlap` uses `goal_tokens ∪ question_tokens` against `text` tokens. One hit is enough. This is a **boolean gate**, not a score.
+Overlap uses `goal_tokens ∪ question_tokens` against `text` tokens, plus `ExpandIdent` aliases (`jwt` ↔ `jsonwebtoken`). Function words (`the`, `library`, `choice`, `add`) do not count.
+
+**Strong:** `path>0` OR `symbol>0` OR ≥2 content tokens OR `vector>=0.55`.  
+**Weak:** exactly one content token and none of the above. One shared "rate" is not job 1.
 
 Do not persist `stale`. Prefix `[verify] ` on `text` at pack time if `stale=1`.
 
@@ -204,22 +219,36 @@ Do not persist `stale`. Prefix `[verify] ` on `text` at pack time if `stale=1`.
 
 ### Session-conditioned
 
+Overlap weights are sacred and do not change with the query:
+
 ```
-score =
-    4.0 * failed_overlap
-  + 2.5 * shipped_overlap
-  + 1.5 * (type_rank / 5)
-  + 1.2 * path
-  + 1.0 * symbol
-  + 0.9 * bm25
-  + 0.9 * vector
-  + 0.2 * recency
-  - 0.7 * stale
+4.0 * failed_overlap + 2.5 * shipped_overlap
 ```
+
+The rest is a **query-conditional mix** (`selectProfile`):
+
+| Profile | When | type | path | symbol | bm25 | vector | recency | agree |
+|---------|------|------|------|--------|------|--------|---------|-------|
+| path | `paths` nonempty | 1.5 | **1.8** | 0.8 | 0.4 | 0.4 | 0.2 | 0.4 |
+| ident | no path, has a code identifier (`jose`, `jwt`, `token_bucket`) | 1.5 | 0.8 | **1.6** | 0.5 | 0.9 | 0.2 | 0.4 |
+| prose | tokens only ("what do we know") | 1.2 | 0.6 | 0.6 | **1.3** | **1.3** | 0.2 | 0.4 |
+
+Plus named job heads (same numbers):
+
+```
+P_fail    = failed_overlap + 0.25 * failed_weak
+P_regress = shipped_overlap + 0.24 * shipped_weak
+P_answer  = profile mix (type, path, symbol, bm25, vector, agree, recency)
+score     = 4.0*P_fail + 2.5*P_regress + P_answer + 0.8*dwell - 0.9*served
+```
+
+`dwell` is a claim the agent `GET`/`remember`ed. `served` is last pack, cancelled by strong overlap so job 1/2 cannot lose to “we already showed you.”
+
+Weak never outranks sacred overlap.
 
 Job 1 outranks job 2 outranks "sounds like." Recency cannot beat an overlapping 10-month constraint. A failed-on-same-path record beats a higher cosine hit in another file.
 
-`bm25` and `vector` are **equal** features. We do not pick a winner between lexical and semantic; we union candidates and let structure decide. Optional RRF (`1/(60+rank_fts) + 1/(60+rank_knn)`) may replace the two 0.9 terms if mixing raw BM25 with cosine is messy in eval. Same weights file, measured, not taste.
+`bm25` and `vector` stay equal *inside* a profile. Optional RRF (`1/(60+rank_fts) + 1/(60+rank_knn)`) may replace those two terms when claim vectors exist. Same weights file, measured, not taste.
 
 ### HEAD coverage
 
@@ -233,7 +262,7 @@ score =
 
 No `bm25`. No overlap flags (the query is empty). Type and (if present) path decide. Recency breaks ties.
 
-Weights are named constants in one file (`weights.ts` / `weights.go`). Changing a weight is a one-line change plus a re-run of the eval. Do not bury them in `ask.ts`.
+Weights are named constants in `internal/retrieve/weights.go` and `profile.go`. A mix change that breaks a required fixture is a failed change.
 
 No learned ranker in v1.
 
@@ -324,7 +353,7 @@ Seed store: the acme/api records already in `test/ask.eval.test.ts`, plus extras
 | 17 | `limit_tokens=80` | ≥1 hit, tokens ≤ 80 | — |
 | 18 | GET record id of Redis failed | body + excerpt if ref present | — |
 | 19 | ingest Grok JSONL, ask as if Claude | same ids (portability) | — |
-| 20 | 10k decoy claims, 1 gold failed | gold in top 5, p50 < 50ms on the test machine | failed |
+| 20 | 10k decoy claims, 1 gold failed | gold in top 5, p50 < 500ms on the test machine | failed |
 
 Cases 1–5 already exist as unit tests against the spike. They remain the gate after the rewrite. Cases 6–20 are the engine gate.
 
@@ -343,7 +372,7 @@ A weight change that breaks any required case is a failed change.
 - Returning raw transcripts in `ask`.
 - Cross-project retrieval (`project_key` is a hard filter).
 
-If the embedder is missing, the engine still runs (A–E only). Eval case 15 may fail in that degraded mode; 1–14 must not.
+If the embedder is missing, the engine still runs (A–E only). JWT paraphrase still works via `jwt`↔`jsonwebtoken`. “Add throttling” / “the cache idea we tried” needs vectors. Cases 1–14 must not depend on the embedder.
 
 ---
 
@@ -354,6 +383,6 @@ If the embedder is missing, the engine still runs (A–E only). Eval case 15 may
 - Rebuild from export must restore posting lists, not only the claims table.
 - Weights and caps (`CANDIDATE_CAP`, FTS 80, pack 5, half-life 14) live in one module.
 - Claim vectors are written at derive time (same catch-up as claims). Rebuild: walk `export/**/*.md`, re-embed. Store `embed_model` in index meta; mismatch triggers rebuild.
-- Language: this spec is language-agnostic. The daemon is **Go**. Local embeddings via onnxruntime or a small sidecar, not a cloud API.
+- Language: this spec is language-agnostic. The daemon is **Go**. Local embeddings via `LOSSLESS_EMBED_CMD` (see `scripts/embed_minilm.py`) or a future in-process MiniLM. Not a cloud API. Not CGO. Missing model is degraded mode.
 
 ---

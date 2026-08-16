@@ -356,5 +356,14 @@ func Remember(st *store.Store, rec claim.Record) (CatchUpResult, error) {
 	if sup != "" {
 		out.Superseded = []string{sup}
 	}
+	_ = st.AppendActions([]store.Action{{
+		ProjectKey: rec.ProjectKey,
+		SessionID:  rec.SessionID,
+		Kind:       store.ActionRemember,
+		ClaimID:    rec.ID,
+		Paths:      rec.Paths,
+		Tokens:     claim.Tokens(rec.Text),
+		At:         time.Now().UTC().Format(time.RFC3339),
+	}})
 	return out, nil
 }

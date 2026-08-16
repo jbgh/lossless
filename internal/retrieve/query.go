@@ -14,6 +14,7 @@ type Request struct {
 	WorkspaceRoot string   `json:"workspace_root,omitempty"`
 	Goal          string   `json:"goal,omitempty"`
 	Paths         []string `json:"paths,omitempty"`
+	SessionID     string   `json:"session_id,omitempty"`
 	LimitTokens   int      `json:"limit_tokens,omitempty"`
 }
 
@@ -41,6 +42,10 @@ type query struct {
 	LookupTokens   []string
 	PathKeys       []string
 	Symbols        []string
+	SessionID      string
+	Served         map[string]bool
+	Dwell          map[string]bool
+	Warned         map[string]bool
 	Cold           bool
 	Head           bool
 	WorkspaceRoot  string
@@ -69,7 +74,7 @@ func normalize(req Request) (query, error) {
 	seen := map[string]bool{}
 	addSym := func(s string) {
 		s = strings.ToLower(strings.TrimSpace(s))
-		if s == "" || seen[s] {
+		if s == "" || seen[s] || identStop[s] {
 			return
 		}
 		if !identLower(s) && !strings.ContainsAny(s, "/.") {
@@ -101,6 +106,10 @@ func normalize(req Request) (query, error) {
 		LookupTokens:   lookup,
 		PathKeys:       paths,
 		Symbols:        symbols,
+		SessionID:      strings.TrimSpace(req.SessionID),
+		Served:         map[string]bool{},
+		Dwell:          map[string]bool{},
+		Warned:         map[string]bool{},
 		Cold:           len(qtoks) == 0 && len(gtoks) == 0,
 		WorkspaceRoot:  req.WorkspaceRoot,
 		LimitTokens:    limit,
@@ -197,18 +206,72 @@ func jaccard(a, b []string) float64 {
 }
 
 func tokenOverlap(queryTokens []string, text string) bool {
+	return contentOverlap(queryTokens, text) > 0
+}
+
+// contentOverlap counts distinct query content tokens that hit the claim
+// text (or an ExpandIdent alias). Function words do not count.
+func contentOverlap(queryTokens []string, text string) int {
 	hay := map[string]bool{}
+	addHay := func(t string) {
+		t = strings.ToLower(strings.TrimSpace(t))
+		if !isContentToken(t) {
+			return
+		}
+		hay[t] = true
+	}
 	for _, t := range claim.Tokens(text) {
-		if len([]rune(t)) > 3 {
-			hay[t] = true
+		addHay(t)
+		for _, e := range claim.ExpandIdent(t) {
+			addHay(e)
 		}
 	}
+	seen := map[string]bool{}
+	n := 0
 	for _, t := range queryTokens {
-		if len([]rune(t)) > 3 && hay[t] {
-			return true
+		t = strings.ToLower(strings.TrimSpace(t))
+		if !isContentToken(t) || seen[t] {
+			continue
+		}
+		hit := hay[t]
+		if !hit {
+			for _, e := range claim.ExpandIdent(t) {
+				if hay[strings.ToLower(e)] {
+					hit = true
+					break
+				}
+			}
+		}
+		if hit {
+			seen[t] = true
+			n++
 		}
 	}
-	return false
+	return n
+}
+
+func isContentToken(t string) bool {
+	if t == "" || overlapStop[t] {
+		return false
+	}
+	if len([]rune(t)) > 3 {
+		return true
+	}
+	// jwt, jose — short but they are the identifiers.
+	return identLower(t)
+}
+
+// Function words. Topic nouns (rate, jwt, redis) stay content.
+var overlapStop = map[string]bool{
+	"the": true, "and": true, "for": true, "not": true, "why": true, "how": true,
+	"what": true, "which": true, "this": true, "that": true, "with": true, "from": true,
+	"into": true, "then": true, "than": true, "use": true, "using": true, "add": true,
+	"pick": true, "know": true, "already": true, "about": true, "should": true,
+	"would": true, "could": true, "thing": true, "idea": true, "work": true,
+	"working": true, "want": true, "need": true, "make": true, "keep": true,
+	"over": true, "also": true, "just": true, "like": true, "have": true, "been": true,
+	"will": true, "does": true, "doing": true,
+	"library": true, "choice": true, "status": true, "please": true,
 }
 
 func estimateTokens(s string) int {

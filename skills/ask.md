@@ -2,7 +2,7 @@
 
 Before implementing or changing behavior, call lossless `ask` with the current goal and paths.
 
-Prefer the MCP tool `ask` when it is available (same fields). Otherwise:
+Prefer the MCP tool `ask` when it is available (same fields). Pass `session_id` when the harness has one so a thin follow-up ask can reuse the last pack and any `get_record` dwells. Otherwise:
 
 ```
 POST http://127.0.0.1:7432/v1/ask

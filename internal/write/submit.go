@@ -36,6 +36,7 @@ func SubmitCatchUp(req CatchUpRequest) {
 		_, _ = WriteSpool(home, spoolFrom(req))
 		return
 	}
+	store.AttachEmbedder(st, home)
 	defer st.Close()
 	if _, err := CatchUp(st, req); err != nil {
 		_, _ = WriteSpool(home, spoolFrom(req))

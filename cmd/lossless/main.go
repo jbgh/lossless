@@ -69,6 +69,8 @@ func main() {
 		os.Exit(runHookOpenCode())
 	case "bench":
 		os.Exit(runBench(args))
+	case "embed-backfill":
+		os.Exit(runEmbedBackfill(args))
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -84,7 +86,7 @@ func usage() {
   lossless bench [--root testdata/bench] [--home DIR]
   lossless catch-up --jsonl FILE [--project KEY] [--workspace DIR] [--harness grok] [--session ID] [--home DIR]
   lossless remember --type decision --text "..." [--project KEY] [--workspace DIR] [--home DIR]
-  lossless ask --project KEY [--question "..."] [--goal "..."] [--path FILE] [--workspace DIR]
+  lossless ask --project KEY [--question "..."] [--goal "..."] [--path FILE] [--session ID] [--workspace DIR]
   lossless serve [--listen 127.0.0.1:7432] [--token TOKEN] [--watch]
   lossless mcp                # stdio MCP client of the daemon (ask, remember, get_record)
   lossless watch              # poll harness session files
@@ -94,14 +96,33 @@ func usage() {
   lossless install-hooks      # Grok + Claude + Codex + Pi + OpenCode
   lossless install-mcp        # Grok url + Claude stdio MCP
   lossless ensure             # replay spool after sidecar was down
+  lossless embed-backfill     # embed active claims if an on-box model is configured
   lossless hook-pi            # stdin: Pi extension JSON; fail-open
   lossless hook-opencode      # stdin: OpenCode plugin JSON; fail-open
 
 Env: LOSSLESS_HOME (default ~/.lossless)
      LOSSLESS_URL (default http://127.0.0.1:7432) — stdio mcp talks to the daemon
      LOSSLESS_TOKEN (required if --listen is not loopback)
+     LOSSLESS_EMBED_CMD (optional local embedder: stdin JSON texts, stdout JSON vectors)
+     LOSSLESS_EMBED_MODEL (optional model dir; in-process MiniLM not required)
 Local serve binds 127.0.0.1. MCP is a façade over the same JSON as /v1/ask.
 `)
+}
+
+func openStore(home string) (*store.Store, error) {
+	st, err := store.Open(home)
+	if err != nil {
+		return nil, err
+	}
+	store.AttachEmbedder(st, home)
+	return st, nil
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "none"
+	}
+	return s
 }
 
 func homeFlag(fs *flag.FlagSet) *string {
@@ -120,7 +141,7 @@ func runCatchUp(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	st, err := store.Open(*home)
+	st, err := openStore(*home)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -151,7 +172,7 @@ func runRemember(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	st, err := store.Open(*home)
+	st, err := openStore(*home)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -182,12 +203,13 @@ func runAsk(args []string) int {
 	question := fs.String("question", "", "natural-language question")
 	goal := fs.String("goal", "", "what the agent is about to do")
 	limit := fs.Int("limit-tokens", retrieve.DefaultLimit, "packed token budget")
+	session := fs.String("session", "", "session id for the action tape")
 	var paths stringsFlag
 	fs.Var(&paths, "path", "repo-relative path (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	st, err := store.Open(*home)
+	st, err := openStore(*home)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -195,7 +217,7 @@ func runAsk(args []string) int {
 	defer st.Close()
 	out, err := retrieve.Ask(st, retrieve.Request{
 		Question: *question, Project: *project, WorkspaceRoot: *ws,
-		Goal: *goal, Paths: paths, LimitTokens: *limit,
+		Goal: *goal, Paths: paths, SessionID: *session, LimitTokens: *limit,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -244,13 +266,25 @@ func runServe(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	st, err := store.Open(*home)
+	st, err := openStore(*home)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	defer st.Close()
-	fmt.Fprintf(os.Stderr, "lossless serve %s (home %s) watch=%v\n", *listen, *home, *doWatch)
+	if st.Embedder != nil {
+		go func() {
+			n, err := st.BackfillVectors()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "embed backfill: %v\n", err)
+				return
+			}
+			if n > 0 {
+				fmt.Fprintf(os.Stderr, "embed backfill: %d claims (%s)\n", n, st.EmbedderName())
+			}
+		}()
+	}
+	fmt.Fprintf(os.Stderr, "lossless serve %s (home %s) watch=%v embedder=%s\n", *listen, *home, *doWatch, orNone(st.EmbedderName()))
 	if err := serve.Listen(serve.Options{Addr: *listen, Token: *token, Watch: *doWatch}, st); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -264,7 +298,7 @@ func runWatch(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	st, err := store.Open(*home)
+	st, err := openStore(*home)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -528,7 +562,7 @@ func runEnsure(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	st, err := store.Open(*home)
+	st, err := openStore(*home)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -542,6 +576,31 @@ func runEnsure(args []string) int {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(res)
+	return 0
+}
+
+func runEmbedBackfill(args []string) int {
+	fs := flag.NewFlagSet("embed-backfill", flag.ContinueOnError)
+	home := homeFlag(fs)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	st, err := openStore(*home)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer st.Close()
+	if st.Embedder == nil {
+		fmt.Fprintln(os.Stderr, "no embedder (set LOSSLESS_EMBED_CMD or install a model)")
+		return 1
+	}
+	n, err := st.BackfillVectors()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Printf("embedded %d claims with %s\n", n, st.EmbedderName())
 	return 0
 }
 

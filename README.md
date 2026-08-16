@@ -48,6 +48,6 @@ Data dir: `~/.lossless/` (`LOSSLESS_HOME` to override).
 
 Default config makes **zero outbound network calls**. SQLite is not the corpus.
 
-`ask` is hybrid retrieve (path/type/FTS first; claim vectors later). Vectors are optional — missing embedder is degraded mode, not a hard failure.
+`ask` is hybrid retrieve (path/type/FTS first; claim vectors when an on-box embedder is attached). Vectors are optional — missing embedder is degraded mode, not a hard failure. Cosine cannot beat a failed-on-path record.
 
 Reload Grok hooks after install: `/hooks` then `r`.

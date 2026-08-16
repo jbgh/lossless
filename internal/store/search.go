@@ -376,6 +376,7 @@ func (s *Store) reindex(rec claim.Record) error {
 		return err
 	}
 	if rec.Status != "active" {
+		_ = s.DeleteVector(rec.ID)
 		return nil
 	}
 	var body strings.Builder

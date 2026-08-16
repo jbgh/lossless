@@ -21,6 +21,7 @@ func toolDefs() []map[string]any {
 					"workspace_root": map[string]any{"type": "string", "description": "Absolute repo path. Used for [verify] mtimes and to derive project."},
 					"goal":           map[string]any{"type": "string", "description": "What the agent is about to do."},
 					"paths":          map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Repo-relative files in play."},
+					"session_id":     map[string]any{"type": "string", "description": "Optional session id so ask can hydrate the action tape."},
 					"limit_tokens":   map[string]any{"type": "integer", "description": "Packed token budget. Default 1200."},
 				},
 			},

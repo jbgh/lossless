@@ -67,7 +67,11 @@ func Handler(st *store.Store, token string) http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "records": st.CountActive()})
+		emb := st.EmbedderName()
+		if emb == "" {
+			emb = "none"
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "records": st.CountActive(), "embedder": emb})
 	})
 	mux.HandleFunc("/v1/ask", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -200,6 +204,7 @@ func Handler(st *store.Store, token string) http.Handler {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 			return
 		}
+		st.RecordDwell(r.URL.Query().Get("project"), r.URL.Query().Get("session"), id)
 		writeJSON(w, http.StatusOK, rec)
 	})
 	var h http.Handler = mux

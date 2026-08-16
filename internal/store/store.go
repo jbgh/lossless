@@ -10,14 +10,16 @@ import (
 	"time"
 
 	"lossless/internal/claim"
+	"lossless/internal/embed"
 	"lossless/internal/projectkey"
 
 	_ "modernc.org/sqlite"
 )
 
 type Store struct {
-	Root string
-	DB   *sql.DB
+	Root     string
+	DB       *sql.DB
+	Embedder embed.Embedder
 }
 
 func Open(root string) (*Store, error) {
@@ -107,6 +109,29 @@ CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(
 		return err
 	}
 	_, _ = s.DB.Exec(`ALTER TABLE records ADD COLUMN transcript_ref_json TEXT`)
+	if _, err := s.DB.Exec(`
+CREATE TABLE IF NOT EXISTS claim_vectors (
+  record_id TEXT PRIMARY KEY,
+  project_key TEXT NOT NULL,
+  model TEXT NOT NULL,
+  dim INTEGER NOT NULL,
+  vec BLOB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_vec_proj ON claim_vectors(project_key, model);
+CREATE TABLE IF NOT EXISTS actions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_key TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  claim_id TEXT,
+  paths_json TEXT NOT NULL,
+  tokens_json TEXT NOT NULL,
+  at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_actions_sess ON actions(project_key, session_id, at);
+`); err != nil {
+		return err
+	}
 	return s.backfillIndex()
 }
 
@@ -157,6 +182,7 @@ func (s *Store) WriteClaim(rec claim.Record) (superseded string, err error) {
 		if err := s.rewriteStatus(existing, "superseded"); err != nil {
 			return "", err
 		}
+		_ = s.DeleteVector(existing)
 		superseded = existing
 	}
 	if err := s.writeFile(rec); err != nil {
@@ -164,6 +190,11 @@ func (s *Store) WriteClaim(rec claim.Record) (superseded string, err error) {
 	}
 	if err := s.upsertRow(rec); err != nil {
 		return "", err
+	}
+	if rec.Status == "active" {
+		s.embedClaim(rec.ID, rec.ProjectKey, rec.Text, rec.Symbols)
+	} else {
+		_ = s.DeleteVector(rec.ID)
 	}
 	return superseded, nil
 }

@@ -1,0 +1,54 @@
+{
+  "id": "pathless-no-foreign-fail",
+  "project": "acme/api",
+  "now": "2026-08-16T15:00:00Z",
+  "seed": [
+    {
+      "type": "decision",
+      "text": "Picked jose over jsonwebtoken on the Edge runtime.",
+      "paths": ["src/middleware/auth.ts"],
+      "created_at": "2025-12-14T00:00:00Z"
+    },
+    {
+      "type": "decision",
+      "text": "Rate limiter lives in src/middleware/auth.ts as an in-process token bucket.",
+      "paths": ["src/middleware/auth.ts"],
+      "created_at": "2026-07-22T09:00:00Z"
+    },
+    {
+      "type": "failed",
+      "text": "Redis token bucket failed in src/middleware/auth.ts staging.",
+      "paths": ["src/middleware/auth.ts"],
+      "created_at": "2025-11-03T16:00:00Z"
+    },
+    {
+      "type": "failed",
+      "text": "Warehouse query failed in src/billing/export.ts because the cursor timed out.",
+      "paths": ["src/billing/export.ts"],
+      "created_at": "2026-08-10T09:00:00Z"
+    }
+  ],
+  "write": {
+    "must_extract_substrings": ["jose"]
+  },
+  "asks": [
+    {
+      "name": "jwt-pathless",
+      "request": {
+        "question": "JWT library choice",
+        "goal": "pick a JWT library"
+      },
+      "must_include_substrings": ["jose"],
+      "must_not_include_substrings": ["Warehouse"]
+    },
+    {
+      "name": "rate-limit-pathless-two-hop",
+      "request": {
+        "question": "add rate limiting",
+        "goal": "add rate limiting"
+      },
+      "must_include_substrings": ["Redis"],
+      "must_not_include_substrings": ["Warehouse"]
+    }
+  ]
+}

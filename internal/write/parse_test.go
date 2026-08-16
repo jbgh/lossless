@@ -135,6 +135,8 @@ func TestParseJSONLSkipsOwnAskIO(t *testing.T) {
 		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}`,
 		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"u1","name":"remember","input":{}},{"type":"text","text":"We decided to keep the limiter."}]}}`,
 		`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"u1","content":"{\"extracted\":1,\"ids\":[\"01\"]}"}]}}`,
+		`{"type":"assistant","content":"","tool_calls":[{"id":"g1","name":"get_record","arguments":"{\"id\":\"01JFAIL\"}"}]}`,
+		`{"type":"tool_result","tool_call_id":"g1","content":"{\"id\":\"01JFAIL\",\"type\":\"failed\",\"text\":\"Redis token bucket failed in staging.\"}"}`,
 		`{"type":"tool_result","tool_call_id":"orphan","content":"{\"copied\":12,\"extracted\":1,\"ids\":[\"01\"]}"}`,
 	}, "\n") + "\n"
 	msgs, _ := ParseJSONL(chunk, 0)
@@ -146,7 +148,7 @@ func TestParseJSONLSkipsOwnAskIO(t *testing.T) {
 		texts = append(texts, m.Text)
 	}
 	joined := strings.Join(texts, " | ")
-	if strings.Contains(joined, "prior attempt") || strings.Contains(joined, "extracted") {
+	if strings.Contains(joined, "prior attempt") || strings.Contains(joined, "extracted") || strings.Contains(joined, "01JFAIL") {
 		t.Fatalf("own packet leaked: %q", joined)
 	}
 	if !strings.Contains(joined, "jose") || !strings.Contains(joined, "limiter") {

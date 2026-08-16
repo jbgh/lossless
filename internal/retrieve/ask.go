@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"lossless/internal/claim"
+	"lossless/internal/embed"
 	"lossless/internal/store"
 )
 
@@ -21,9 +22,20 @@ var ErrBadRequest = errBadRequest
 
 type Engine struct {
 	Store         *store.Store
+	Embedder      embed.Embedder
 	Now           func() time.Time
 	Home          string
 	LocateSession func(project, workspace string) string
+}
+
+func (e Engine) embedder() embed.Embedder {
+	if e.Embedder != nil {
+		return e.Embedder
+	}
+	if e.Store != nil {
+		return e.Store.Embedder
+	}
+	return nil
 }
 
 func (e Engine) now() time.Time {
@@ -34,7 +46,11 @@ func (e Engine) now() time.Time {
 }
 
 func Ask(st *store.Store, req Request) (Response, error) {
-	return (Engine{Store: st}).Ask(req)
+	var emb embed.Embedder
+	if st != nil {
+		emb = st.Embedder
+	}
+	return (Engine{Store: st, Embedder: emb}).Ask(req)
 }
 
 func (e Engine) Ask(req Request) (Response, error) {
@@ -43,12 +59,16 @@ func (e Engine) Ask(req Request) (Response, error) {
 		return Response{}, err
 	}
 	q = e.maybeCompile(req, q)
+	seedPaths := append([]string{}, q.PathKeys...)
+	q = e.hydrateActions(req, q)
+	prof := selectProfile(q)
 	empty := Response{Context: []Hit{}, Warnings: []string{}, Project: q.ProjectKey}
-	ids, ftsBM25, err := e.candidates(q)
+	ids, ftsBM25, knn, err := e.candidates(q)
 	if err != nil {
 		return Response{}, err
 	}
 	if len(ids) == 0 {
+		e.recordAsk(req, q, seedPaths, empty)
 		return empty, nil
 	}
 	recs, err := e.Store.GetMany(ids)
@@ -64,29 +84,31 @@ func (e Engine) Ask(req Request) (Response, error) {
 		}
 		if prev, ok := seenHash[rec.ClaimHash]; ok {
 			if rec.CreatedAt >= cand[prev].rec.CreatedAt {
-				cand[prev] = e.features(rec, q, ftsBM25)
+				cand[prev] = e.features(rec, q, ftsBM25, knn)
 			}
 			continue
 		}
 		seenHash[rec.ClaimHash] = len(cand)
-		cand = append(cand, e.features(rec, q, ftsBM25))
+		cand = append(cand, e.features(rec, q, ftsBM25, knn))
 	}
 	cand = dropOlderConflicts(cand)
 	cand = dropInvalidatedByNewerFailed(cand)
 	normBM25(cand)
 	for i := range cand {
-		cand[i].score = cand[i].preStale(q.Head)
+		cand[i].score = cand[i].preStale(prof)
 	}
 	sortScored(cand)
 	e.markStale(cand, q.WorkspaceRoot)
 	for i := range cand {
-		cand[i].score = cand[i].preStale(q.Head) - WStale*cand[i].stale
+		cand[i].score = cand[i].preStale(prof) - WStale*cand[i].stale
 	}
 	sortScored(cand)
 	packed := pack(cand, q.LimitTokens, q.Head)
 	packed = evictFailed(packed, cand, q.LimitTokens)
 	hits, warnings, tokens := emit(packed)
-	return Response{Context: hits, Warnings: warnings, Tokens: tokens, Project: q.ProjectKey}, nil
+	out := Response{Context: hits, Warnings: warnings, Tokens: tokens, Project: q.ProjectKey}
+	e.recordAsk(req, q, seedPaths, out)
+	return out, nil
 }
 
 type scored struct {
@@ -97,30 +119,53 @@ type scored struct {
 	symbol         float64
 	bm25           float64
 	vector         float64
+	agree          float64
 	failedOverlap  float64
 	shippedOverlap float64
+	failedWeak     float64
+	shippedWeak    float64
+	served         float64
+	dwell          float64
 	stale          float64
 	score          float64
 	ftsRaw         float64
 	isFTS          bool
 }
 
-func (s scored) preStale(head bool) float64 {
-	if head {
-		return WColdType*(s.typeRank/5) + WColdPath*s.path + WColdRecency*s.recency
-	}
-	return WFailedOverlap*s.failedOverlap +
-		WShippedOverlap*s.shippedOverlap +
-		WHotType*(s.typeRank/5) +
-		WHotPath*s.path +
-		WHotSymbol*s.symbol +
-		WHotBM25*s.bm25 +
-		WHotVector*s.vector +
-		WHotRecency*s.recency
+func (s scored) pFail() float64 {
+	return s.failedOverlap + PFailWeak*s.failedWeak
 }
 
-func (e Engine) candidates(q query) ([]string, map[string]float64, error) {
+func (s scored) pRegress() float64 {
+	return s.shippedOverlap + PRegressWeak*s.shippedWeak
+}
+
+func (s scored) pAnswer(p Profile) float64 {
+	w := mixFor(p)
+	return w.typeW*(s.typeRank/5) +
+		w.path*s.path +
+		w.symbol*s.symbol +
+		w.bm25*s.bm25 +
+		w.vector*s.vector +
+		w.agree*s.agree +
+		w.recency*s.recency
+}
+
+func (s scored) preStale(p Profile) float64 {
+	if p == ProfileHead {
+		w := mixFor(p)
+		return w.typeW*(s.typeRank/5) + w.path*s.path + w.recency*s.recency
+	}
+	return WFailedOverlap*s.pFail() +
+		WShippedOverlap*s.pRegress() +
+		s.pAnswer(p) +
+		WDwell*s.dwell -
+		WServed*s.served
+}
+
+func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]float64, error) {
 	fts := map[string]float64{}
+	knn := map[string]float64{}
 	seen := map[string]bool{}
 	var ids []string
 	add := func(list []string) {
@@ -135,23 +180,23 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, error) {
 	if q.Head {
 		pri, err := e.Store.HeadPriorityIDs(q.ProjectKey, HeadFailedCap, HeadDecisionCap, HeadConstraintCap)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		add(pri)
 		if len(q.PathKeys) > 0 {
 			p, err := e.Store.IDsByPath(q.ProjectKey, q.PathKeys, PathPerCap, ColdPathCap)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			add(p)
 		} else if len(ids) < ColdPriorityCap {
 			st, err := e.Store.IDsByType(q.ProjectKey, "state", "", ColdStateCap)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			add(st)
 		}
-		return ids, fts, nil
+		return ids, fts, knn, nil
 	}
 
 	if match := ftsMatch(q.LookupTokens); match != "" {
@@ -170,47 +215,125 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, error) {
 	if len(q.PathKeys) > 0 {
 		p, err := e.Store.IDsByPath(q.ProjectKey, q.PathKeys, PathPerCap, PathTotalCap)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		add(p)
 	}
 	if len(q.Symbols) > 0 {
 		sy, err := e.Store.IDsBySymbol(q.ProjectKey, q.Symbols, SymbolPerCap, SymbolTotalCap)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		add(sy)
 	}
 	failedOv, err := e.Store.TypeIDsOverlapping(q.ProjectKey, "failed", q.PathKeys, q.Symbols, FailedCap)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	add(failedOv)
-	// Recent failures are a safety net only when no file is in play.
-	// A year of other-file failures must not ride along with an auth.ts ask.
-	recentN := 0
-	if len(q.PathKeys) == 0 {
-		recentN = FailedRecentCap
-	}
-	failedRecent, err := e.Store.IDsByType(q.ProjectKey, "failed", "", recentN)
-	if err != nil {
-		return nil, nil, err
-	}
-	add(failedRecent)
 	dec, err := e.Store.DecisionIDsOverlapping(q.ProjectKey, q.PathKeys, q.Symbols, DecisionCap)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	add(dec)
 	con, err := e.Store.ConstraintIDsOverlapping(q.ProjectKey, q.PathKeys, q.Symbols, ConstraintCap)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	add(con)
-	return ids, fts, nil
+	// Vector kNN: paraphrase that shares no token/path/symbol.
+	// Fail-open. Missing embedder or a failed encode is degraded mode.
+	if vecIDs := e.vectorHits(q, knn); len(vecIDs) > 0 {
+		add(vecIDs)
+	}
+	// Pathless ask: hop through files the first pass already found.
+	// "add rate limiting" hits the limiter decision, then pulls the Redis
+	// failed on that same file — without dumping last week's warehouse timeout.
+	if len(q.PathKeys) == 0 && len(ids) > 0 {
+		inferred, err := e.inferredPaths(ids)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if len(inferred) > 0 {
+			for _, typ := range []string{"failed", "decision", "constraint"} {
+				extra, err := e.Store.TypeIDsOverlapping(q.ProjectKey, typ, inferred, nil, InferTypeCap)
+				if err != nil {
+					return nil, nil, nil, err
+				}
+				add(extra)
+			}
+		}
+	}
+	// Recent faileds only when structure found nothing. Safety net, not default.
+	if len(ids) == 0 {
+		failedRecent, err := e.Store.IDsByType(q.ProjectKey, "failed", "", FailedRecentCap)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		add(failedRecent)
+	}
+	return ids, fts, knn, nil
 }
 
-func (e Engine) features(rec claim.Record, q query, fts map[string]float64) scored {
+func (e Engine) vectorHits(q query, knn map[string]float64) []string {
+	emb := e.embedder()
+	if emb == nil || e.Store == nil {
+		return nil
+	}
+	qtext := embed.Query(append(append([]string{}, q.QuestionTokens...), q.GoalTokens...))
+	if qtext == "" {
+		return nil
+	}
+	vecs, err := emb.Embed([]string{qtext})
+	if err != nil || len(vecs) == 0 || len(vecs[0]) == 0 {
+		return nil
+	}
+	hits, err := e.Store.SearchKNN(q.ProjectKey, emb.Name(), vecs[0], VectorCap)
+	if err != nil {
+		return nil
+	}
+	var ids []string
+	for _, h := range hits {
+		knn[h.ID] = float64(h.Cosine)
+		ids = append(ids, h.ID)
+	}
+	return ids
+}
+
+func (e Engine) inferredPaths(ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	n := len(ids)
+	if n > 40 {
+		n = 40
+	}
+	recs, err := e.Store.GetMany(ids[:n])
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, id := range ids[:n] {
+		rec, ok := recs[id]
+		if !ok {
+			continue
+		}
+		for _, k := range claim.PathKeys(rec.Paths) {
+			if k == "" || seen[k] {
+				continue
+			}
+			seen[k] = true
+			out = append(out, k)
+			if len(out) >= InferPathCap {
+				return out, nil
+			}
+		}
+	}
+	return out, nil
+}
+
+func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64) scored {
 	s := scored{rec: rec}
 	s.typeRank = float64(typeRank[rec.Type])
 	created, err := time.Parse(time.RFC3339, rec.CreatedAt)
@@ -233,13 +356,46 @@ func (e Engine) features(rec claim.Record, q query, fts map[string]float64) scor
 		s.isFTS = true
 		s.ftsRaw = v
 	}
-	overlapTokens := append(append([]string{}, q.QuestionTokens...), q.GoalTokens...)
-	overlap := s.path > 0 || tokenOverlap(overlapTokens, rec.Text)
-	if rec.Type == "failed" && (overlap || s.vector >= VectorGate) {
-		s.failedOverlap = 1
+	if v, ok := knn[rec.ID]; ok && v > 0 {
+		if v > 1 {
+			v = 1
+		}
+		s.vector = v
 	}
-	if (rec.Type == "decision" || rec.Type == "state" || rec.Type == "constraint") && (s.path > 0 || s.symbol > 0 || tokenOverlap(overlapTokens, rec.Text)) {
-		s.shippedOverlap = 1
+	nAgree := 0
+	if s.isFTS {
+		nAgree++
+	}
+	if s.path > 0 {
+		nAgree++
+	}
+	if s.symbol > 0 {
+		nAgree++
+	}
+	s.agree = float64(nAgree) / 3
+	overlapTokens := append(append([]string{}, q.QuestionTokens...), q.GoalTokens...)
+	hits := contentOverlap(overlapTokens, rec.Text)
+	strong := s.path > 0 || s.symbol > 0 || hits >= OverlapStrongMin || s.vector >= VectorGate
+	weak := !strong && hits >= 1
+	switch rec.Type {
+	case "failed":
+		if strong {
+			s.failedOverlap = 1
+		} else if weak {
+			s.failedWeak = 1
+		}
+	case "decision", "state", "constraint":
+		if strong {
+			s.shippedOverlap = 1
+		} else if weak {
+			s.shippedWeak = 1
+		}
+	}
+	if q.Dwell[rec.ID] {
+		s.dwell = 1
+	}
+	if q.Served[rec.ID] && s.dwell == 0 && s.failedOverlap == 0 && s.shippedOverlap == 0 {
+		s.served = 1
 	}
 	return s
 }

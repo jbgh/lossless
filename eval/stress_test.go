@@ -75,11 +75,11 @@ func TestStressAsk10kDecoys(t *testing.T) {
 	p50 := times[n/2]
 	p95 := times[(n*95)/100]
 	t.Logf("ask 10k decoys n=%d p50=%s p95=%s max=%s", n, p50, p95, times[n-1])
-	if p50 > 150*time.Millisecond {
-		t.Fatalf("p50 %s exceeds 150ms budget", p50)
+	if p50 > 500*time.Millisecond {
+		t.Fatalf("p50 %s exceeds 500ms ask budget", p50)
 	}
-	if p95 > 400*time.Millisecond {
-		t.Fatalf("p95 %s exceeds 400ms budget", p95)
+	if p95 > 2*time.Second {
+		t.Fatalf("p95 %s exceeds 2s ask budget", p95)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"lossless/internal/claim"
+	"lossless/internal/embed"
 )
 
 func tmp(t *testing.T) *Store {
@@ -470,6 +471,12 @@ func TestClosedDBErrors(t *testing.T) {
 	if _, err := st.GetMany([]string{"x"}); err == nil {
 		t.Fatal("getmany")
 	}
+	if _, err := st.SearchKNN("acme/api", "cluster-test", []float32{1}, 10); err == nil {
+		t.Fatal("knn")
+	}
+	if _, err := st.RecentActions("acme/api", "s", 10); err == nil {
+		t.Fatal("actions")
+	}
 	if err := st.SetCursor("p", 1); err == nil {
 		t.Fatal("cursor")
 	}
@@ -614,5 +621,69 @@ func TestUpsertNilSlices(t *testing.T) {
 	}
 	if got.Paths == nil {
 		// unmarshalling [] from json is empty slice not nil — fine
+	}
+}
+
+func TestClaimVectorsKNN(t *testing.T) {
+	st := tmp(t)
+	st.Embedder = embed.NewCluster(
+		[]string{"throttl", "token bucket"},
+		[]string{"warehouse"},
+	)
+	if _, err := st.WriteClaim(rec("R", "failed", "Redis token bucket failed in staging.", []string{"src/middleware/auth.ts"})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.WriteClaim(rec("W", "failed", "Warehouse query failed in export.", []string{"src/billing/export.ts"})); err != nil {
+		t.Fatal(err)
+	}
+	if st.VectorCount() != 2 {
+		t.Fatalf("count=%d", st.VectorCount())
+	}
+	q, err := st.Embedder.Embed([]string{"add throttling"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hits, err := st.SearchKNN("acme/api", "cluster-test", q[0], 2)
+	if err != nil || len(hits) == 0 || hits[0].ID != "R" {
+		t.Fatalf("%+v %v", hits, err)
+	}
+	if hits[0].Cosine < 0.55 {
+		t.Fatalf("cosine=%v", hits[0].Cosine)
+	}
+	n, err := st.BackfillVectors()
+	if err != nil || n != 0 {
+		t.Fatalf("backfill n=%d err=%v", n, err)
+	}
+	if err := st.DeleteVector("R"); err != nil {
+		t.Fatal(err)
+	}
+	n, err = st.BackfillVectors()
+	if err != nil || n != 1 {
+		t.Fatalf("re-embed n=%d err=%v", n, err)
+	}
+}
+
+func TestActionTapeRoundTrip(t *testing.T) {
+	st := tmp(t)
+	if err := st.AppendActions([]Action{
+		{ProjectKey: "acme/api", SessionID: "s1", Kind: ActionAsk, ClaimID: "A", Tokens: []string{"jwt"}, At: "2026-08-16T15:00:00Z"},
+		{ProjectKey: "acme/api", SessionID: "s1", Kind: ActionGet, ClaimID: "A", At: "2026-08-16T15:01:00Z"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.RecentActions("acme/api", "s1", 10)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if got[0].Kind != ActionGet || got[1].ClaimID != "A" {
+		t.Fatalf("%+v", got)
+	}
+	if st.NewestSessionID("acme/api") != "s1" {
+		t.Fatal(st.NewestSessionID("acme/api"))
+	}
+	st.RecordDwell("acme/api", "s1", "A")
+	got, err = st.RecentActions("acme/api", "s1", 10)
+	if err != nil || len(got) < 3 {
+		t.Fatalf("dwell %+v %v", got, err)
 	}
 }

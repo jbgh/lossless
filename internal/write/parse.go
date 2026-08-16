@@ -56,7 +56,7 @@ func ParseJSONL(chunk string, base int64) (msgs []Message, consumed int64) {
 
 func isOwnTool(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "ask", "remember", "catch-up", "catch_up", "catchup":
+	case "ask", "remember", "catch-up", "catch_up", "catchup", "get_record", "get-record":
 		return true
 	default:
 		return false

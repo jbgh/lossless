@@ -63,7 +63,7 @@ The expensive work we will keep doing is **parsers and adapters** (Grok vs Claud
 | What happened (session JSONL) | `raw/project/yyyy-mm/*.jsonl.zst` | Forever, 3–10 GB / 10 years compressed | **No.** Files. Append + seal. |
 | Typed facts | `export/**/*.md` | Slow (50–150 MB / 10 years) | Index only (`claims.sqlite`) |
 | Search over recent excerpts | `index/excerpts-YYYY-MM.sqlite` | One file per month, bounded | **Yes, partitioned** |
-| Claim vectors | next to claims or `index/vectors/` | Same order as claims | Side table / files, rebuildable |
+| Claim vectors | `claim_vectors` next to claims | Same order as claims | Side table, rebuildable |
 
 The anti-pattern is one `memory.sqlite` that eats every tool result for a decade. WAL never shrinks, one writer blocks every hook, FTS bloats, a corrupt file loses everything. That would be the wrong database *and* the wrong shape.
 

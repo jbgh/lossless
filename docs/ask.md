@@ -34,6 +34,7 @@ How records are chosen: [retrieval.md](retrieval.md).
 | `workspace_root` | no | Absolute repo path. Required for file mtime `[verify]`. Identity is `project`, not this path. |
 | `goal` | no | What the agent is about to do. Used for anti-repeat / anti-regression. |
 | `paths` | no | Repo-relative files in play. Boosts records tagged with those paths. |
+| `session_id` | no | Binds the action tape (last packs, GETs, remembers). If omitted, newest session for the project. |
 | `limit_tokens` | no | Max packed tokens. Default `1200`. Approx 4 chars = 1 token. |
 
 `project` is normalized: strip `.git`, lowercase, accept `owner/repo` or `owner__repo`.  

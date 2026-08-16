@@ -36,6 +36,9 @@ func (l Local) Remember(rec claim.Record) (write.CatchUpResult, error) {
 
 func (l Local) Get(id string) (store.RecordView, bool, error) {
 	rec, ok := l.Store.View(id)
+	if ok {
+		l.Store.RecordDwell(rec.ProjectKey, "", id)
+	}
 	return rec, ok, nil
 }
 

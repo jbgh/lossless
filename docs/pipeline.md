@@ -136,11 +136,13 @@ This is a database lookup plus a packer. Exact steps: `docs/retrieval.md`. In on
 ask(work context)
   normalize → project_key, tokens, path keys, symbols
   candidates (≤200)
+      hydrate last ask/get/remember/warn for this session
       FTS(question+goal) if session-conditioned
     ∪ path postings
     ∪ symbol postings
-    ∪ all active failed (no date gate)
-    ∪ overlapping decisions and constraints
+    ∪ failed/decision/constraint whose path or symbol overlaps
+    ∪ (pathless) same types on files the first pass already hit
+    ∪ recent faileds only if that union is empty
     or HEAD type caps if the query is still empty
   score each candidate (named weights, no model)
   mark [verify] if file mtime moved (stat top 30 only)
@@ -150,7 +152,7 @@ ask(work context)
   return
 ```
 
-No scan of the whole store. No network. No embeddings in v1. Empty packet is valid.
+No scan of the whole store. No network. Claim vectors are on-box and optional. Empty packet is valid.
 
 `GET /v1/records/:id` is the only follow-up: full claim + raw excerpt. The agent asks for that, not memory deciding to dump the transcript.
 
@@ -202,7 +204,7 @@ Add **indexes**, not a brain.
 
 | Add | When | Still |
 |-----|------|--------|
-| Claim-level vectors | **In the retrieval design now** (candidate source F + feature). On-box only. | Same `ask`, same packer. Path/type still win. |
+| Claim-level vectors | Candidate source F + cosine feature. On-box only. `LOSSLESS_EMBED_CMD` or a future in-process MiniLM. | Same `ask`, same packer. Path/type/overlap still win. |
 | Excerpt embeddings | Never as the hot index | Raw stays files; excerpts stay lexical |
 | Typed edges on claims | Already have path/symbol/supersede | Not a general knowledge graph |
 | Query expansion / LLM rerank | Never | Would put a model in the store |

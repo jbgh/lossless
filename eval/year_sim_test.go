@@ -49,37 +49,44 @@ func yearAsks() []yearAsk {
 	return []yearAsk{
 		{
 			name:    "jwt-almost-a-year-later",
-			req:     retrieve.Request{Question: "JWT library choice", Goal: "pick a JWT library"},
+			req:     retrieve.Request{Question: "JWT library choice", Goal: "pick a JWT library", SessionID: "year"},
 			needles: []string{"jose"},
+			forbid:  []string{"Warehouse"},
+		},
+		{
+			name:    "thin-after-year-jwt",
+			req:     retrieve.Request{SessionID: "year"},
+			needles: []string{"jose"},
+			forbid:  []string{"Warehouse"},
 		},
 		{
 			name:    "auth-rate-limit",
-			req:     retrieve.Request{Goal: "add rate limiting", Paths: []string{"src/middleware/auth.ts"}},
+			req:     retrieve.Request{Goal: "add rate limiting", Paths: []string{"src/middleware/auth.ts"}, SessionID: "year-auth"},
 			needles: []string{"Redis token bucket"},
 			forbid:  []string{"Warehouse"},
 			warn:    "failed",
 		},
 		{
 			name:    "headers",
-			req:     retrieve.Request{Question: "Authorization headers"},
+			req:     retrieve.Request{Question: "Authorization headers", SessionID: "year-headers"},
 			needles: []string{"Authorization"},
 			warn:    "constraint",
 		},
 		{
 			name:    "which-db",
-			req:     retrieve.Request{Question: "which database did we pick", Paths: []string{"src/db/client.ts"}},
+			req:     retrieve.Request{Question: "which database did we pick", Paths: []string{"src/db/client.ts"}, SessionID: "year-db"},
 			needles: []string{"postgres"},
 			forbid:  []string{"Redis token bucket"},
 		},
 		{
 			name:    "invoices",
-			req:     retrieve.Request{Goal: "export invoices", Paths: []string{"src/billing/export.ts"}},
+			req:     retrieve.Request{Goal: "export invoices", Paths: []string{"src/billing/export.ts"}, SessionID: "year-bill"},
 			needles: []string{"Warehouse"},
 			forbid:  []string{"jose"},
 		},
 		{
 			name:    "thin-head",
-			req:     retrieve.Request{},
+			req:     retrieve.Request{SessionID: "year-head"},
 			needles: []string{"Authorization"},
 		},
 	}
@@ -154,7 +161,7 @@ func TestYearCorpusRetrieve(t *testing.T) {
 	if miss > 0 {
 		t.Fatalf("year corpus accuracy %d/%d", hits, hits+miss)
 	}
-	if p50 > 150*time.Millisecond {
+	if p50 > 500*time.Millisecond {
 		t.Fatalf("year ask p50 %s", p50)
 	}
 }
@@ -245,7 +252,7 @@ func seedYearCorpus(t *testing.T, st *store.Store) int {
 			text := yearDecoyText(typ, topic.noun, topic.path, d, j)
 			if _, err := st.WriteClaim(claim.Record{
 				Type: typ, Text: text, Paths: []string{topic.path},
-				CreatedAt: day.Add(time.Duration(j*3) * time.Hour).Format(time.RFC3339),
+				CreatedAt:  day.Add(time.Duration(j*3) * time.Hour).Format(time.RFC3339),
 				ProjectKey: "acme/api", Harness: harnessFor(d + j),
 				SessionID: fmt.Sprintf("d%03d", d), Source: "import", Status: "active",
 			}); err != nil {

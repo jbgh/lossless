@@ -160,6 +160,108 @@ func TestJWTParaphraseFindsJoseWithoutPath(t *testing.T) {
 	}
 }
 
+func TestPathlessAskDoesNotPackForeignRecentFailed(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "01JJOSEOLD", Type: "decision",
+		Text:      "Use jose, not jsonwebtoken, for Edge.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2025-12-14T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "01JBILLF", Type: "failed",
+		Text:      "Invoice export timed out against the warehouse API.",
+		Paths:     []string{"src/billing/export.ts"},
+		CreatedAt: "2026-08-12T00:00:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project:  "acme/api",
+		Question: "why not a JWT library",
+		Goal:     "pick a JWT library",
+	})
+	if !strings.Contains(textsOf(out), "jose") {
+		t.Fatalf("pathless jwt missed jose: %+v", out)
+	}
+	if strings.Contains(textsOf(out), "warehouse") || strings.Contains(textsOf(out), "Invoice") {
+		t.Fatalf("recent foreign failed rode along: %+v", out)
+	}
+	if hasWarn(out, "failed") {
+		t.Fatalf("job-1 warn on unrelated warehouse: %v", out.Warnings)
+	}
+}
+
+func TestTwoHopFindsFailedViaBridgeDecision(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "01JRATE", Type: "decision",
+		Text:      "Rate limiter lives in src/middleware/auth.ts as an in-process token bucket.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-07-22T09:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "01JREDIS", Type: "failed",
+		Text:      "Redis token bucket failed in src/middleware/auth.ts staging.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2025-11-03T16:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "01JWARE", Type: "failed",
+		Text:      "Warehouse query failed in src/billing/export.ts because the cursor timed out.",
+		Paths:     []string{"src/billing/export.ts"},
+		CreatedAt: "2026-08-10T09:00:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project:  "acme/api",
+		Question: "add rate limiting",
+		Goal:     "add rate limiting",
+	})
+	if !strings.Contains(textsOf(out), "Redis") {
+		t.Fatalf("two-hop missed redis failed: %+v", out)
+	}
+	if strings.Contains(textsOf(out), "Warehouse") {
+		t.Fatalf("two-hop leaked warehouse: %+v", out)
+	}
+}
+
+func TestOneWordOverlapDoesNotForceFailed(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "01JJOSE", Type: "decision",
+		Text:      "Picked jose over jsonwebtoken on the Edge runtime.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-07-20T11:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "01JLIB", Type: "failed",
+		Text:      "The standard library import failed in src/utils/fmt.ts on CI.",
+		Paths:     []string{"src/utils/fmt.ts"},
+		CreatedAt: "2026-08-12T00:00:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project:  "acme/api",
+		Question: "JWT library choice",
+		Goal:     "pick a JWT library",
+	})
+	if !strings.Contains(textsOf(out), "jose") {
+		t.Fatalf("missed jose: %+v", out)
+	}
+	if hasWarn(out, "failed") {
+		t.Fatalf("one-word 'library' must not force a failed warn: %v", out.Warnings)
+	}
+}
+
+func TestContentOverlapExpandsJWT(t *testing.T) {
+	if contentOverlap([]string{"jwt", "library"}, "Use jose, not jsonwebtoken, for Edge.") < 1 {
+		t.Fatal("jwt should hit jsonwebtoken")
+	}
+	if contentOverlap([]string{"library", "choice"}, "Use jose, not jsonwebtoken, for Edge.") != 0 {
+		t.Fatal("stopped words must not count")
+	}
+	if contentOverlap([]string{"rate", "limiting"}, "Rate limiter lives in auth.ts as an in-process token bucket.") < 1 {
+		t.Fatal("rate should hit")
+	}
+}
+
 func TestOldJoseSurvivesRecentBillingFailed(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{
@@ -252,7 +354,7 @@ func TestHeadMixesTypesAndDropsJoseRestatement(t *testing.T) {
 	})
 	writeRec(t, st, claim.Record{
 		ID: "01JF", Type: "failed",
-		Text: "Redis token bucket failed in staging; connection pool exhausted.",
+		Text:      "Redis token bucket failed in staging; connection pool exhausted.",
 		CreatedAt: "2026-08-01T18:12:00Z", Paths: []string{"src/middleware/auth.ts"},
 	})
 	out := askAt(t, st, Request{Project: "acme/api"})

@@ -237,7 +237,7 @@ Same heuristic extract as the spike (`failed` / `decision` / `constraint` / `sta
 
 `remember` bypasses heuristics: the payload *is* the claim. Still redacted. Still gets a raw line in a `manual/<date>.jsonl` so it is part of "everything."
 
-After a claim is written, embed `text` (+ symbols) into the claim vector index if the on-box embedder is present. Same transaction as the claim write if cheap; otherwise a queue, like deferred extract. Missing embedder is fine (degraded retrieve). Do not embed raw lines or tool bodies.
+After a claim is written, embed `text` (+ symbols) into `claim_vectors` if `Store.Embedder` is set. Missing embedder is fine (degraded retrieve). Do not embed raw lines or tool bodies. A write never fails because embed failed. `lossless embed-backfill` fills gaps after you attach a model (`LOSSLESS_EMBED_CMD` or `LOSSLESS_EMBED_MODEL`).
 
 Supersede: new active row, old `status=superseded`, file rewritten. Never delete the markdown file.
 

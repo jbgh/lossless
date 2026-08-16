@@ -63,6 +63,24 @@ func TestNormalizeAndHelpers(t *testing.T) {
 	if uniq([]string{"", "a", "a", "b"})[0] != "a" {
 		t.Fatal(uniq([]string{"", "a", "a", "b"}))
 	}
+	q, err = normalize(Request{Project: "acme/api", Question: "JWT library choice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range q.Symbols {
+		if s == "library" || s == "choice" {
+			t.Fatalf("english leftover leaked into symbols: %v", q.Symbols)
+		}
+	}
+	foundJWT := false
+	for _, s := range q.Symbols {
+		if s == "jwt" || s == "jsonwebtoken" {
+			foundJWT = true
+		}
+	}
+	if !foundJWT {
+		t.Fatalf("jwt should remain a symbol: %v", q.Symbols)
+	}
 	_ = os.Remove(filepath.Join(dir, "nope"))
 }
 
