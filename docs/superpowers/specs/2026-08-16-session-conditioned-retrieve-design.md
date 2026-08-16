@@ -1,7 +1,7 @@
 # Design: session-conditioned retrieve
 
 Date: 2026-08-16
-Status: DRAFT
+Status: IMPLEMENTED
 Amends: `docs/retrieval.md` sections 1–5 (normalize, candidates, features, score, pack)
 API: unchanged. `POST /v1/ask` still returns ≤5 claims.
 

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -183,6 +184,14 @@ LIMIT ?`, project, typ, limit)
 }
 
 func (s *Store) DecisionIDsOverlapping(project string, pathKeys, symbols []string, limit int) ([]string, error) {
+	return s.TypeIDsOverlapping(project, "decision", pathKeys, symbols, limit)
+}
+
+func (s *Store) ConstraintIDsOverlapping(project string, pathKeys, symbols []string, limit int) ([]string, error) {
+	return s.TypeIDsOverlapping(project, "constraint", pathKeys, symbols, limit)
+}
+
+func (s *Store) TypeIDsOverlapping(project, typ string, pathKeys, symbols []string, limit int) ([]string, error) {
 	if limit <= 0 || (len(pathKeys) == 0 && len(symbols) == 0) {
 		return nil, nil
 	}
@@ -199,14 +208,14 @@ func (s *Store) DecisionIDsOverlapping(project string, pathKeys, symbols []strin
 		}
 	}
 	if len(pathKeys) > 0 {
-		ids, err := s.idsByPostingType(`path_postings`, `path_key`, project, "decision", pathKeys, 40, limit)
+		ids, err := s.idsByPostingType(`path_postings`, `path_key`, project, typ, pathKeys, 40, limit)
 		if err != nil {
 			return nil, err
 		}
 		add(ids)
 	}
 	if len(out) < limit && len(symbols) > 0 {
-		ids, err := s.idsByPostingType(`symbol_postings`, `symbol`, project, "decision", symbols, 40, limit)
+		ids, err := s.idsByPostingType(`symbol_postings`, `symbol`, project, typ, symbols, 40, limit)
 		if err != nil {
 			return nil, err
 		}
@@ -258,6 +267,39 @@ LIMIT ?`, table, col)
 	return out, nil
 }
 
+func (s *Store) HeadPriorityIDs(project string, failedN, decisionN, constraintN int) ([]string, error) {
+	project = projectkey.Normalize(project)
+	seen := map[string]bool{}
+	var out []string
+	add := func(typ string, n int) error {
+		if n <= 0 {
+			return nil
+		}
+		ids, err := s.IDsByType(project, typ, "", n)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			out = append(out, id)
+		}
+		return nil
+	}
+	if err := add("failed", failedN); err != nil {
+		return nil, err
+	}
+	if err := add("decision", decisionN); err != nil {
+		return nil, err
+	}
+	if err := add("constraint", constraintN); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (s *Store) ColdPriorityIDs(project string, limit int) ([]string, error) {
 	project = projectkey.Normalize(project)
 	if limit <= 0 {
@@ -285,6 +327,42 @@ func (s *Store) ColdPriorityIDs(project string, limit int) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+func (s *Store) RecentPaths(project string, limit int) ([]string, error) {
+	project = projectkey.Normalize(project)
+	if limit <= 0 {
+		return nil, nil
+	}
+	rows, err := s.DB.Query(`
+SELECT paths_json FROM records
+WHERE project_key = ? AND status = 'active'
+ORDER BY created_at DESC
+LIMIT ?`, project, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	seen := map[string]bool{}
+	var out []string
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var paths []string
+		if err := json.Unmarshal([]byte(raw), &paths); err != nil {
+			continue
+		}
+		for _, p := range claim.PathKeys(paths) {
+			if p == "" || seen[p] {
+				continue
+			}
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) reindex(rec claim.Record) error {

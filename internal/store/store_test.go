@@ -292,6 +292,27 @@ func TestSearchAndPostings(t *testing.T) {
 	if err != nil || len(capped) != 1 {
 		t.Fatal(capped, err)
 	}
+	head, err := st.HeadPriorityIDs("acme/api", 12, 10, 8)
+	if err != nil || len(head) < 3 {
+		t.Fatal(head, err)
+	}
+	con, err := st.ConstraintIDsOverlapping("acme/api", []string{"auth.ts"}, nil, 10)
+	if err != nil {
+		t.Fatal(con, err)
+	}
+	recent, err := st.RecentPaths("acme/api", 8)
+	if err != nil || len(recent) == 0 {
+		t.Fatal(recent, err)
+	}
+	if ids, err := st.HeadPriorityIDs("acme/api", 0, 0, 0); err != nil || len(ids) != 0 {
+		t.Fatal(ids, err)
+	}
+	if ids, err := st.RecentPaths("acme/api", 0); err != nil || ids != nil {
+		t.Fatal(ids, err)
+	}
+	if ids, err := st.ConstraintIDsOverlapping("acme/api", nil, nil, 10); err != nil || ids != nil {
+		t.Fatal(ids, err)
+	}
 
 	many, err := st.GetMany(nil)
 	if err != nil || len(many) != 0 {
@@ -436,6 +457,15 @@ func TestClosedDBErrors(t *testing.T) {
 	}
 	if _, err := st.ColdPriorityIDs("acme/api", 5); err == nil {
 		t.Fatal("cold")
+	}
+	if _, err := st.HeadPriorityIDs("acme/api", 12, 10, 8); err == nil {
+		t.Fatal("head")
+	}
+	if _, err := st.ConstraintIDsOverlapping("acme/api", []string{"a"}, nil, 10); err == nil {
+		t.Fatal("con")
+	}
+	if _, err := st.RecentPaths("acme/api", 8); err == nil {
+		t.Fatal("recent")
 	}
 	if _, err := st.GetMany([]string{"x"}); err == nil {
 		t.Fatal("getmany")

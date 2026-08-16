@@ -20,8 +20,10 @@ var errBadRequest = errors.New("project or workspace_root required")
 var ErrBadRequest = errBadRequest
 
 type Engine struct {
-	Store *store.Store
-	Now   func() time.Time
+	Store         *store.Store
+	Now           func() time.Time
+	Home          string
+	LocateSession func(project, workspace string) string
 }
 
 func (e Engine) now() time.Time {
@@ -40,6 +42,7 @@ func (e Engine) Ask(req Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
+	q = e.maybeCompile(req, q)
 	empty := Response{Context: []Hit{}, Warnings: []string{}, Project: q.ProjectKey}
 	ids, ftsBM25, err := e.candidates(q)
 	if err != nil {
@@ -70,15 +73,15 @@ func (e Engine) Ask(req Request) (Response, error) {
 	}
 	normBM25(cand)
 	for i := range cand {
-		cand[i].score = cand[i].preStale(q.Cold)
+		cand[i].score = cand[i].preStale(q.Head)
 	}
 	sortScored(cand)
 	e.markStale(cand, q.WorkspaceRoot)
 	for i := range cand {
-		cand[i].score = cand[i].preStale(q.Cold) - WStale*cand[i].stale
+		cand[i].score = cand[i].preStale(q.Head) - WStale*cand[i].stale
 	}
 	sortScored(cand)
-	packed := pack(cand, q.LimitTokens)
+	packed := pack(cand, q.LimitTokens, q.Head)
 	packed = evictFailed(packed, cand, q.LimitTokens)
 	hits, warnings, tokens := emit(packed)
 	return Response{Context: hits, Warnings: warnings, Tokens: tokens, Project: q.ProjectKey}, nil
@@ -100,8 +103,8 @@ type scored struct {
 	isFTS          bool
 }
 
-func (s scored) preStale(cold bool) float64 {
-	if cold {
+func (s scored) preStale(head bool) float64 {
+	if head {
 		return WColdType*(s.typeRank/5) + WColdPath*s.path + WColdRecency*s.recency
 	}
 	return WFailedOverlap*s.failedOverlap +
@@ -127,8 +130,8 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, error) {
 			ids = append(ids, id)
 		}
 	}
-	if q.Cold {
-		pri, err := e.Store.ColdPriorityIDs(q.ProjectKey, ColdPriorityCap)
+	if q.Head {
+		pri, err := e.Store.HeadPriorityIDs(q.ProjectKey, HeadFailedCap, HeadDecisionCap, HeadConstraintCap)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -139,7 +142,7 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, error) {
 				return nil, nil, err
 			}
 			add(p)
-		} else {
+		} else if len(ids) < ColdPriorityCap {
 			st, err := e.Store.IDsByType(q.ProjectKey, "state", "", ColdStateCap)
 			if err != nil {
 				return nil, nil, err
@@ -176,8 +179,7 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, error) {
 		}
 		add(sy)
 	}
-	since := e.now().UTC().AddDate(0, 0, -FailedLookback).Format(time.RFC3339)
-	failed, err := e.Store.IDsByType(q.ProjectKey, "failed", since, FailedCap)
+	failed, err := e.Store.IDsByType(q.ProjectKey, "failed", "", FailedCap)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -187,6 +189,11 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, error) {
 		return nil, nil, err
 	}
 	add(dec)
+	con, err := e.Store.ConstraintIDsOverlapping(q.ProjectKey, q.PathKeys, q.Symbols, ConstraintCap)
+	if err != nil {
+		return nil, nil, err
+	}
+	add(con)
 	return ids, fts, nil
 }
 
@@ -201,7 +208,7 @@ func (e Engine) features(rec claim.Record, q query, fts map[string]float64) scor
 	if ageDays < 0 {
 		ageDays = 0
 	}
-	s.recency = math.Pow(0.5, ageDays/HalfLifeDays)
+	s.recency = typeRecency(rec.Type, ageDays)
 	s.path = jaccard(q.PathKeys, claim.PathKeys(rec.Paths))
 	qSym := q.Symbols
 	rSym := make([]string, 0, len(rec.Symbols))
@@ -218,7 +225,7 @@ func (e Engine) features(rec claim.Record, q query, fts map[string]float64) scor
 	if rec.Type == "failed" && (overlap || s.vector >= VectorGate) {
 		s.failedOverlap = 1
 	}
-	if (rec.Type == "decision" || rec.Type == "state") && (s.path > 0 || s.symbol > 0 || tokenOverlap(overlapTokens, rec.Text)) {
+	if (rec.Type == "decision" || rec.Type == "state" || rec.Type == "constraint") && (s.path > 0 || s.symbol > 0 || tokenOverlap(overlapTokens, rec.Text)) {
 		s.shippedOverlap = 1
 	}
 	return s
@@ -303,27 +310,140 @@ func sortScored(cs []scored) {
 	})
 }
 
-func pack(cs []scored, limit int) []scored {
+func typeRecency(typ string, ageDays float64) float64 {
+	var hl float64
+	switch typ {
+	case "constraint":
+		return 1
+	case "decision":
+		hl = DecisionHalfLifeDays
+	case "state", "thread":
+		hl = StateHalfLifeDays
+	default:
+		hl = FailedHalfLifeDays
+	}
+	if hl <= 0 {
+		return 1
+	}
+	return math.Pow(0.5, ageDays/hl)
+}
+
+func pathCluster(paths []string) []string {
+	var out []string
+	for _, p := range claim.PathKeys(paths) {
+		base := p
+		if i := strings.LastIndex(p, "/"); i >= 0 {
+			base = p[i+1:]
+		}
+		if base != "" {
+			out = append(out, strings.ToLower(base))
+		}
+	}
+	return out
+}
+
+func sharePathCluster(a, b scored) bool {
+	as := map[string]bool{}
+	for _, p := range pathCluster(a.rec.Paths) {
+		as[p] = true
+	}
+	if len(as) == 0 {
+		return false
+	}
+	for _, p := range pathCluster(b.rec.Paths) {
+		if as[p] {
+			return true
+		}
+	}
+	return false
+}
+
+func coverSim(a, b scored, head bool) float64 {
+	sameType := a.rec.Type == b.rec.Type
+	if sameType && (head || sharePathCluster(a, b)) {
+		return 1
+	}
+	return jaccard(claim.Tokens(a.rec.Text), claim.Tokens(b.rec.Text))
+}
+
+func pack(cs []scored, limit int, head bool) []scored {
+	if len(cs) == 0 {
+		return nil
+	}
+	remaining := append([]scored(nil), cs...)
 	var out []scored
 	var packedText [][]string
 	tokens := 0
-	for _, c := range cs {
-		if c.score <= 0 && len(out) > 0 {
-			break
-		}
-		if diverseSkip(c, out, packedText) {
-			continue
-		}
-		hit := toHit(c, false)
-		n := estimateTokens(mustJSON(hit))
+
+	fits := func(c scored) (int, bool) {
+		n := estimateTokens(mustJSON(toHit(c, false)))
 		if tokens+n > limit && len(out) > 0 {
-			break
+			return 0, false
+		}
+		return n, true
+	}
+	takeAt := func(i int) bool {
+		c := remaining[i]
+		if diverseSkip(c, out, packedText) {
+			remaining = append(remaining[:i], remaining[i+1:]...)
+			return false
+		}
+		n, ok := fits(c)
+		if !ok {
+			remaining = append(remaining[:i], remaining[i+1:]...)
+			return false
 		}
 		out = append(out, c)
 		packedText = append(packedText, claim.Tokens(c.rec.Text))
 		tokens += n
-		if len(out) >= PackCap {
+		remaining = append(remaining[:i], remaining[i+1:]...)
+		return true
+	}
+
+	bestFail := -1
+	for i, c := range remaining {
+		if c.failedOverlap == 1 && c.rec.Type == "failed" {
+			if bestFail < 0 || c.score > remaining[bestFail].score {
+				bestFail = i
+			}
+		}
+	}
+	if bestFail >= 0 {
+		_ = takeAt(bestFail)
+	}
+
+	for len(out) < PackCap && len(remaining) > 0 {
+		best := -1
+		bestVal := -1e9
+		bestSim := 1.0
+		for i, c := range remaining {
+			if c.score <= 0 && len(out) > 0 {
+				continue
+			}
+			if diverseSkip(c, out, packedText) {
+				continue
+			}
+			sim := 0.0
+			for _, p := range out {
+				if s := coverSim(c, p, head); s > sim {
+					sim = s
+				}
+			}
+			val := c.score - WCoverage*sim
+			if best < 0 || val > bestVal || (val == bestVal && sim < bestSim) {
+				best = i
+				bestVal = val
+				bestSim = sim
+			}
+		}
+		if best < 0 {
 			break
+		}
+		if remaining[best].score <= 0 && len(out) > 0 {
+			break
+		}
+		if !takeAt(best) {
+			continue
 		}
 	}
 	return out
@@ -404,6 +524,13 @@ func emit(packed []scored) ([]Hit, []string, int) {
 		}
 		if c.shippedOverlap == 1 && c.rec.Type == "decision" {
 			w := "Existing implementation may already cover part of this goal (see " + c.rec.ID + ")."
+			if !seenWarn[w] {
+				warnings = append(warnings, w)
+				seenWarn[w] = true
+			}
+		}
+		if c.shippedOverlap == 1 && c.rec.Type == "constraint" {
+			w := "A standing constraint applies (see " + c.rec.ID + "). Do not violate it without an explicit override."
 			if !seenWarn[w] {
 				warnings = append(warnings, w)
 				seenWarn[w] = true

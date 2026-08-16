@@ -78,7 +78,7 @@ See [retrieval.md](retrieval.md). Short version:
 2. Don't regress shipped work.
 3. Answer the question.
 
-Cold ask (`question` and `goal` both empty): type priority + recency + path. No BM25.
+Thin ask (`question` and `goal` empty, no paths): compile from the session tail if present. If still empty, pack project HEAD (type-capped failed/decision/constraint). Age never drops a claim. Recency is a tie-break.
 
 Stale files: ephemeral `[verify]` prefix. Do not persist stale.
 

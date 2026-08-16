@@ -136,11 +136,12 @@ This is a database lookup plus a packer. Exact steps: `docs/retrieval.md`. In on
 ask(work context)
   normalize → project_key, tokens, path keys, symbols
   candidates (≤200)
-      FTS(lookup_text)
+      FTS(question+goal) if session-conditioned
     ∪ path postings
     ∪ symbol postings
-    ∪ recent failed
-    ∪ overlapping decisions
+    ∪ all active failed (no date gate)
+    ∪ overlapping decisions and constraints
+    or HEAD type caps if the query is still empty
   score each candidate (named weights, no model)
   mark [verify] if file mtime moved (stat top 30 only)
   pack ≤5, token budget, diversity

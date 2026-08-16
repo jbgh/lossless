@@ -65,7 +65,7 @@ func TestPackScoreCutoffDiversityAndEvict(t *testing.T) {
 	dupHash := scored{score: 1.5, rec: claim.Record{ID: "B", Type: "decision", Text: "totally different text body", ClaimHash: "h1", CreatedAt: "1"}}
 	dupText := scored{score: 1.4, rec: claim.Record{ID: "C", Type: "decision", Text: "alpha unique words here", ClaimHash: "h2", CreatedAt: "1"}}
 	zero := scored{score: 0, rec: claim.Record{ID: "D", Type: "state", Text: "zero score should stop", CreatedAt: "1"}}
-	got := pack([]scored{keep, dupHash, dupText, zero}, 1200)
+	got := pack([]scored{keep, dupHash, dupText, zero}, 1200, false)
 	if len(got) != 1 || got[0].rec.ID != "A" {
 		t.Fatalf("%+v", got)
 	}
@@ -73,7 +73,7 @@ func TestPackScoreCutoffDiversityAndEvict(t *testing.T) {
 	// token budget stops after first
 	big := scored{score: 3, rec: claim.Record{ID: "T1", Type: "decision", Text: strings.Repeat("word ", 40)}}
 	next := scored{score: 2, rec: claim.Record{ID: "T2", Type: "decision", Text: strings.Repeat("other ", 40)}}
-	got = pack([]scored{big, next}, 20)
+	got = pack([]scored{big, next}, 20, false)
 	if len(got) != 1 {
 		t.Fatalf("token stop: %d", len(got))
 	}

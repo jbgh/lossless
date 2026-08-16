@@ -12,17 +12,29 @@ const (
 	SymbolTotalCap  = 80
 	FailedCap       = 40
 	DecisionCap     = 40
+	ConstraintCap   = 40
 	VectorCap       = 80
 	ColdPriorityCap = 30
-	ColdPathCap     = 40
-	ColdStateCap    = 10
-	PackCap         = 5
-	StaleStatCap    = 30
-	DefaultLimit    = 1200
-	HalfLifeDays    = 14
-	DiversityJac    = 0.8
-	FailedLookback  = 180
-	VectorGate      = 0.55
+	HeadFailedCap     = 12
+	HeadDecisionCap   = 10
+	HeadConstraintCap = 8
+	ColdPathCap       = 40
+	ColdStateCap      = 10
+	PackCap           = 5
+	StaleStatCap      = 30
+	DefaultLimit      = 1200
+	HalfLifeDays          = 14
+	FailedHalfLifeDays    = 14
+	StateHalfLifeDays     = 7
+	DecisionHalfLifeDays  = 180
+	DiversityJac          = 0.8
+	VectorGate            = 0.55
+	RichTokenMin          = 2
+	CompileTailMsgs       = 40
+	CompileTailChars      = 32000
+	CompileQuestionCap    = 500
+	CompilePathCap        = 8
+	RecentClaimPathLimit  = 8
 
 	WFailedOverlap  = 4.0
 	WShippedOverlap = 2.5
@@ -31,12 +43,13 @@ const (
 	WHotSymbol      = 1.0
 	WHotBM25        = 0.9
 	WHotVector      = 0.9
-	WHotRecency     = 0.8
+	WHotRecency     = 0.2
 	WStale          = 0.7
+	WCoverage       = 0.8
 
 	WColdType    = 2.0
 	WColdPath    = 1.2
-	WColdRecency = 1.0
+	WColdRecency = 0.2
 )
 
 var typeRank = map[string]int{

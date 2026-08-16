@@ -42,6 +42,7 @@ type query struct {
 	PathKeys       []string
 	Symbols        []string
 	Cold           bool
+	Head           bool
 	WorkspaceRoot  string
 	LimitTokens    int
 }
@@ -80,18 +81,12 @@ func normalize(req Request) (query, error) {
 	for _, t := range append(append([]string{}, qtoks...), gtoks...) {
 		addSym(t)
 	}
-	for _, p := range paths {
-		addSym(p)
-		if st := claim.Stem(p); st != "" {
-			addSym(st)
-		}
-	}
-	lookup := uniq(append(append(append([]string{}, qtoks...), gtoks...), symbols...))
+	lookup := uniq(append(append([]string{}, qtoks...), gtoks...))
 	limit := req.LimitTokens
 	if limit <= 0 {
 		limit = DefaultLimit
 	}
-	return query{
+	q := query{
 		ProjectKey:     project,
 		QuestionTokens: qtoks,
 		GoalTokens:     gtoks,
@@ -101,7 +96,17 @@ func normalize(req Request) (query, error) {
 		Cold:           len(qtoks) == 0 && len(gtoks) == 0,
 		WorkspaceRoot:  req.WorkspaceRoot,
 		LimitTokens:    limit,
-	}, nil
+	}
+	q.Head = isHead(q)
+	return q, nil
+}
+
+func rich(q query) bool {
+	return len(q.PathKeys) > 0 || len(q.QuestionTokens)+len(q.GoalTokens) >= RichTokenMin
+}
+
+func isHead(q query) bool {
+	return len(q.PathKeys) == 0 && len(q.Symbols) == 0 && len(q.LookupTokens) == 0
 }
 
 func identLower(s string) bool {

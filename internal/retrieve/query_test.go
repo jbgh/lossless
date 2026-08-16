@@ -21,7 +21,7 @@ func TestNormalizeAndHelpers(t *testing.T) {
 		t.Fatalf("%+v %v", q, err)
 	}
 	if len(q.PathKeys) < 2 || len(q.Symbols) == 0 || len(q.LookupTokens) == 0 {
-		t.Fatalf("%+v", q)
+		t.Fatalf("paths/symbols/lookup: %+v", q)
 	}
 	if _, err := normalize(Request{}); err == nil {
 		t.Fatal("bad request")

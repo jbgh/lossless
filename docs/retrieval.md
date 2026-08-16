@@ -16,7 +16,7 @@ No LLM on the retrieve path. No network. Embeddings, when used, are **on-box** a
 | 2 | Do not regress shipped work | Agent rewrites auth and drops `jose` |
 | 3 | Answer the question | Agent cannot find "why we rejected X" |
 
-Cold ask (`question` and `goal` both empty): skip job 3. Return recent high-priority claims for the project, path-boosted if `paths` is set.
+Thin ask (`question` and `goal` both empty, no paths): compile work context from the session tail if one exists. If the query is still empty, pack project HEAD (type-capped failed/decision/constraint). Age never drops a claim.
 
 ---
 
@@ -44,7 +44,7 @@ Lexical is not enough for job 3 ("answer the question") when humans paraphrase. 
 
 Grok's own memory is 0.7 vector + 0.3 BM25 because session notes are chatty. Ours adds path/type because this is a repo. Cosine is a candidate source and a feature, not the product.
 
-On-box model (default): a small sentence embedder (e.g. `all-MiniLM-L6-v2`, 384-d). No API. Rebuildable from claim markdown if we change the model (store `embed_model` + `embed_dim` in index meta). Cold ask (no question/goal): skip vectors, same as skip BM25.
+On-box model (default): a small sentence embedder (e.g. `all-MiniLM-L6-v2`, 384-d). No API. Rebuildable from claim markdown if we change the model (store `embed_model` + `embed_dim` in index meta). HEAD coverage (nothing to condition on): skip vectors, same as skip BM25.
 
 ---
 
@@ -95,7 +95,7 @@ Never scan the full project table. The spike's `listActive` is banned.
 
 ---
 
-## 1. Normalize
+## 1. Normalize, then compile if thin
 
 From the request, build a `Query`:
 
@@ -105,9 +105,28 @@ question_tokens unicode word tokens, len > 1, lowercased
 goal_tokens     same, from goal
 path_keys       each paths[] as given, plus basename
 symbols         tokens that look like identifiers (camel, snake, dotted, or a known path stem)
-cold            question_tokens and goal_tokens both empty
 lookup_text     question_tokens ∪ goal_tokens ∪ symbols   # used for FTS
+rich            path_keys nonempty OR (question_tokens + goal_tokens) >= 2
 ```
+
+If **rich**, use the Query as-is. Do not overwrite caller fields.
+
+If **thin**, compile from the session tail and fill only empty fields:
+
+1. Newest owned raw `*.jsonl` for `project_key` under the store root (or `LocateSession` in tests).
+2. Tail last 40 usable messages / 32k chars. Same skip list as extract.
+3. Last human user line → `question` (cap 500).
+4. `pathRE` hits + recent claim paths → `paths` (cap 8).
+5. Failed/error language in the tail joins `lookup_text` only.
+
+If locate fails or the tail is empty, compile is a no-op.
+
+After compile:
+
+| Mode | When | Objective |
+|------|------|-----------|
+| **Session-conditioned** | any path, symbol, or lookup token | covering set for *this work*, any age |
+| **HEAD coverage** | still empty | covering set of what is true of the repo |
 
 Identifier heuristic: token matches `[A-Za-z_][A-Za-z0-9_]{2,}` or contains `/` or `.` and a file extension.
 
@@ -119,7 +138,7 @@ No LLM query expansion. No hand-built synonym list. Paraphrase ("JWT library" vs
 
 Build a set of at most **`CANDIDATE_CAP = 200`** record ids.
 
-### Hot ask (not cold)
+### Session-conditioned
 
 Union, then cap:
 
@@ -128,23 +147,26 @@ Union, then cap:
 | A. FTS | `lookup_text` against claims FTS, `project_key`, active. Order by BM25. | 80 |
 | B. Path | posting list for each `path_keys` | 40 per path, 80 total |
 | C. Symbol | posting list for each `symbols` | 40 per symbol, 80 total |
-| D. Failed | all `type=failed` for project with created_at in last 180 days | 40 |
-| E. Decision | all `type=decision` for project whose path or symbol overlaps query | 40 |
+| D. Failed | all active `type=failed` for the project. **No date filter.** | 40 |
+| E. Decision | active `decision` whose path or symbol overlaps | 40 |
+| E2. Constraint | active `constraint` whose path or symbol overlaps | 40 |
 | F. Vector | embed `lookup_text` once; kNN on claim vectors, same `project_key`, active. Cosine. | 80 |
 
-If A+B+C+F are empty, **do not** fall back to scanning all records. Return empty context. Empty is a valid answer.
+If A+B+C+F are empty, still keep D/E/E2. If the whole union is empty, return empty context. Empty is a valid answer.
 
 If the embedder is unavailable (first run, model not downloaded), skip F and continue. Lexical+structure still works. Missing vectors is degraded mode, not a hard failure.
 
-### Cold ask
+### HEAD coverage
 
-Skip A. Take:
+Type-capped so one type cannot eat the set:
 
-| Source | How | Cap |
-|--------|-----|-----|
-| D' | `failed` then `decision` then `constraint`, recency order | 30 |
-| B' | path posting lists if `paths` present | 40 |
-| F | `state` recency | 10 |
+| Source | Cap | Order inside the cap |
+|--------|-----|----------------------|
+| failed | 12 | recency (tie-break only) |
+| decision | 10 | recency |
+| constraint | 8 | recency |
+| path postings if `path_keys` exist | 40 | — |
+| state | 10 | only if no paths and the type caps did not fill 30 |
 
 No FTS. No vectors. No excerpts.
 
@@ -161,13 +183,13 @@ Compute only on the candidate set. Every feature is in `[0, 1]` except `type_ran
 | Feature | Formula | Notes |
 |---------|---------|--------|
 | `type_rank` | `failed=5, decision=4, constraint=3, state=2, thread=1, excerpt=0` | Same as schema |
-| `recency` | `0.5 ** (age_days / 14)` | Half-life 14 days. Clock = request time. |
+| `recency` | `0.5 ** (age_days / half_life)` | Type-aware. Clock = request time. `failed` 14d, `state`/`thread` 7d, `decision` 180d, `constraint` = 1 (does not fade). |
 | `path` | Jaccard of query `path_keys` vs record paths (basename counts as a hit) | 0 if either side empty |
 | `symbol` | Jaccard of query symbols vs record `symbols` | 0 if either side empty |
 | `bm25` | min-max normalize BM25 over **this candidate set** | 0 if record was not an FTS hit |
 | `vector` | cosine(query, claim) clipped to `[0,1]` | 0 if embedder off or record has no vector |
 | `failed_overlap` | 1 if `type=failed` AND (`path>0` OR `vector>=0.55` OR token overlap of goal∪question with text ≥ 1 token len>3) | Job 1; vector gate is how paraphrase still warns |
-| `shipped_overlap` | 1 if `type in {decision,state}` AND (`path>0` OR `symbol>0` OR same token overlap) | Job 2 |
+| `shipped_overlap` | 1 if `type in {decision,state,constraint}` AND (`path>0` OR `symbol>0` OR same token overlap) | Job 2 |
 | `stale` | 1 if `workspace_root` set and any tagged file mtime > stored `path_mtime` | Ephemeral. Stat at most the current top 30 by pre-stale score. |
 
 Token overlap for `failed_overlap` / `shipped_overlap` uses `goal_tokens ∪ question_tokens` against `text` tokens. One hit is enough. This is a **boolean gate**, not a score.
@@ -178,7 +200,7 @@ Do not persist `stale`. Prefix `[verify] ` on `text` at pack time if `stale=1`.
 
 ## 4. Score
 
-### Hot
+### Session-conditioned
 
 ```
 score =
@@ -189,25 +211,25 @@ score =
   + 1.0 * symbol
   + 0.9 * bm25
   + 0.9 * vector
-  + 0.8 * recency
+  + 0.2 * recency
   - 0.7 * stale
 ```
 
-Job 1 outranks job 2 outranks "sounds like." A failed-on-same-path record beats a higher cosine hit in another file.
+Job 1 outranks job 2 outranks "sounds like." Recency cannot beat an overlapping 10-month constraint. A failed-on-same-path record beats a higher cosine hit in another file.
 
 `bm25` and `vector` are **equal** features. We do not pick a winner between lexical and semantic; we union candidates and let structure decide. Optional RRF (`1/(60+rank_fts) + 1/(60+rank_knn)`) may replace the two 0.9 terms if mixing raw BM25 with cosine is messy in eval. Same weights file, measured, not taste.
 
-### Cold
+### HEAD coverage
 
 ```
 score =
     2.0 * (type_rank / 5)
   + 1.2 * path
-  + 1.0 * recency
+  + 0.2 * recency
   - 0.7 * stale
 ```
 
-No `bm25`. No overlap flags (query is empty).
+No `bm25`. No overlap flags (the query is empty). Type and (if present) path decide. Recency breaks ties.
 
 Weights are named constants in one file (`weights.ts` / `weights.go`). Changing a weight is a one-line change plus a re-run of the eval. Do not bury them in `ask.ts`.
 
@@ -219,13 +241,16 @@ No learned ranker in v1.
 
 Sort candidates by `score` desc, then `created_at` desc, then `id`.
 
-Walk the list:
+Walk with **coverage, then score**:
 
-1. Drop `score <= 0` after the first kept hit.
-2. **Diversity:** skip a record if its `claim_hash` or normalized text Jaccard to an already-packed hit is ≥ 0.8. Same decision restated five times is a packing bug.
-3. Estimate tokens as `ceil(json_len / 4)` of the `AskHit` object.
-4. Stop when adding the next hit would exceed `limit_tokens` (default 1200) and at least one hit is packed.
-5. Hard cap **5** hits.
+1. If any `failed_overlap == 1`, pack the highest-scored of those first (job 1 cannot lose to the cap).
+2. Repeatedly pack the remaining candidate that maximizes `score - 0.8 * max_sim(already packed)`.
+3. `sim` is 1.0 if same type and (HEAD, or sharing a path basename). Else text Jaccard.
+4. On a score tie, prefer the lower sim (uncovered type/path).
+5. Drop `score <= 0` after the first kept hit.
+6. **Diversity:** skip a record if its `claim_hash` or normalized text Jaccard to an already-packed hit is ≥ 0.8.
+7. Estimate tokens as `ceil(json_len / 4)` of the `AskHit` object. Stop when the next hit would exceed `limit_tokens` (default 1200) and at least one hit is packed.
+8. Hard cap **5** hits.
 
 ### Warnings (first-class, not a side effect of rank)
 
@@ -235,6 +260,7 @@ After packing, scan the **packed** hits plus any `failed_overlap=1` candidate th
 |-----------|---------|
 | Any packed or uncapped-but-overlapping `failed` | `A prior attempt at this goal failed (see {id}). Do not repeat it without new evidence.` |
 | Any packed `decision` with `shipped_overlap=1` | `Existing implementation may already cover part of this goal (see {id}).` |
+| Any packed `constraint` with `shipped_overlap=1` | `A standing constraint applies (see {id}). Do not violate it without an explicit override.` |
 
 If a `failed_overlap` record did not fit in the 5, **evict the lowest-score non-failed packed hit** and insert it. Job 1 is not allowed to lose to the cap.
 
