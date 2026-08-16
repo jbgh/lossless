@@ -17,5 +17,5 @@ cover-html: cover
 	@echo "wrote coverage.html"
 
 bench:
-	go test ./eval/ -run 'TestSimBenchmarkSuite|TestStress' -count=1 -timeout 120s -v
+	go test ./eval/ -run 'TestSimBenchmarkSuite|TestStress|TestYearCorpus' -count=1 -timeout 180s -v
 	go run ./cmd/lossless bench --root testdata/bench

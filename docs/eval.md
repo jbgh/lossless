@@ -22,6 +22,8 @@ Each case scores:
 
 Stress (`eval/stress_test.go`): 10k decoy claims + gold failed (p50/p95), 32 concurrent asks, 80-session catch-up.
 
+Year corpus (`eval/year_sim_test.go`): weekday chatter for 365 days (~630 claims) plus five golds from Aug 2025 through Aug 2026. Asks check that a year-old jose decision, a Nov Redis failure, a Feb constraint, a May postgres pick, and an Aug warehouse timeout still pack, and that auth work does not leak invoices. Also catch-up of 120 generated sessions (~60/s) and a cross-project isolation check.
+
 Add a case by dropping a JSONL in `sessions/` and a JSON file in `cases/`. Gold is substrings and types, not claim ids, because extract assigns ids at ingest.
 
 Algorithm notes the suite forced:

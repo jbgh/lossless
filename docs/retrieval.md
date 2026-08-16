@@ -147,7 +147,7 @@ Union, then cap:
 | A. FTS | `lookup_text` against claims FTS, `project_key`, active. Order by BM25. | 80 |
 | B. Path | posting list for each `path_keys` | 40 per path, 80 total |
 | C. Symbol | posting list for each `symbols` | 40 per symbol, 80 total |
-| D. Failed | all active `type=failed` for the project. **No date filter.** | 40 |
+| D. Failed | active `failed` whose path or symbol overlaps, plus a few recent faileds as a safety net. **No date filter.** | 40 overlap + 8/4 recent |
 | E. Decision | active `decision` whose path or symbol overlaps | 40 |
 | E2. Constraint | active `constraint` whose path or symbol overlaps | 40 |
 | F. Vector | embed `lookup_text` once; kNN on claim vectors, same `project_key`, active. Cosine. | 80 |

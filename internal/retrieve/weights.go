@@ -11,6 +11,7 @@ const (
 	SymbolPerCap    = 40
 	SymbolTotalCap  = 80
 	FailedCap       = 40
+	FailedRecentCap = 8
 	DecisionCap     = 40
 	ConstraintCap   = 40
 	VectorCap       = 80

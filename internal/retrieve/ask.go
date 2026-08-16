@@ -180,11 +180,22 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, error) {
 		}
 		add(sy)
 	}
-	failed, err := e.Store.IDsByType(q.ProjectKey, "failed", "", FailedCap)
+	failedOv, err := e.Store.TypeIDsOverlapping(q.ProjectKey, "failed", q.PathKeys, q.Symbols, FailedCap)
 	if err != nil {
 		return nil, nil, err
 	}
-	add(failed)
+	add(failedOv)
+	// Recent failures are a safety net only when no file is in play.
+	// A year of other-file failures must not ride along with an auth.ts ask.
+	recentN := 0
+	if len(q.PathKeys) == 0 {
+		recentN = FailedRecentCap
+	}
+	failedRecent, err := e.Store.IDsByType(q.ProjectKey, "failed", "", recentN)
+	if err != nil {
+		return nil, nil, err
+	}
+	add(failedRecent)
 	dec, err := e.Store.DecisionIDsOverlapping(q.ProjectKey, q.PathKeys, q.Symbols, DecisionCap)
 	if err != nil {
 		return nil, nil, err
