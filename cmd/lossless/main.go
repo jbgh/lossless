@@ -391,11 +391,11 @@ func runSetup(args []string) int {
 		UserHome: os.Getenv("HOME"), DataHome: *home, Exe: exe, URL: *url, Token: env.Token(),
 		Service: !*noService, Start: !*noStart,
 	})
+	fmt.Print(res.Format())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	fmt.Print(res.Format())
 	return 0
 }
 

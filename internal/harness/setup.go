@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,16 +42,22 @@ func Setup(opts SetupOpts) (SetupResult, error) {
 	if opts.Exe == "" {
 		return out, fmt.Errorf("executable required")
 	}
+	if err := CheckDaemonURL(opts.URL); err != nil {
+		return out, err
+	}
 	hooks, err := InstallHooks(opts.UserHome, opts.Exe)
 	if err != nil {
 		return out, err
 	}
 	out.Wrote = append(out.Wrote, hooks...)
 	mcp, err := InstallMCP(MCPConfig{Home: opts.UserHome, Exe: opts.Exe, URL: opts.URL, Token: opts.Token})
-	if err != nil {
+	out.Wrote = append(out.Wrote, mcp...)
+	if err != nil && len(mcp) == 0 {
 		return out, err
 	}
-	out.Wrote = append(out.Wrote, mcp...)
+	if err != nil {
+		out.Hints = append(out.Hints, "mcp: "+err.Error())
+	}
 
 	if opts.Service {
 		path, err := InstallUserService(opts.Exe, opts.UserHome, opts.DataHome, opts.URL, opts.Token)
@@ -75,6 +82,11 @@ func Setup(opts SetupOpts) (SetupResult, error) {
 		out.Daemon = st
 	} else {
 		out.Hints = append(out.Hints, "start the daemon: "+opts.Exe+" serve --watch")
+		if opts.Start {
+			out.Hints = append(out.Hints, "Start a new agent session so MCP tools appear.")
+			out.Hints = append(out.Hints, "Grok: /hooks then r")
+			return out, fmt.Errorf("daemon did not start at %s", base)
+		}
 	}
 	out.Hints = append(out.Hints, "Start a new agent session so MCP tools appear.")
 	out.Hints = append(out.Hints, "Grok: /hooks then r")
@@ -150,10 +162,12 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 		add("home", true, dataHome)
 	}
 	base := DaemonBase(url)
+	daemonOK := false
 	if st, err := ProbeHealth(base); err != nil {
 		add("daemon", false, base+" not reachable")
 	} else {
 		add("daemon", true, st)
+		daemonOK = true
 	}
 	if remoteHTTP(base) && !strings.HasPrefix(base, "https://") {
 		add("url", false, base+" remote home must be https")
@@ -184,12 +198,16 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 	add("mcp", mcpOK, mcpDetail)
 
 	svc := ServicePath(userHome)
-	if svc == "" {
-		add("service", false, "no user service on "+runtime.GOOS)
-	} else if _, err := os.Stat(svc); err != nil {
-		add("service", false, "not installed — lossless setup")
-	} else {
-		add("service", true, svc)
+	if svc != "" {
+		if _, err := os.Stat(svc); err == nil {
+			add("service", true, svc)
+		} else if daemonOK {
+			add("service", true, "no unit; daemon is running")
+		} else {
+			add("service", false, "not installed — lossless setup")
+		}
+	} else if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		add("service", true, "no user service on "+runtime.GOOS)
 	}
 	return r
 }
@@ -242,8 +260,17 @@ func opencodeJSONPath(home string) string {
 }
 
 func ProbeHealth(base string) (string, error) {
+	parsed, err := url.Parse(strings.TrimRight(base, "/"))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return "", fmt.Errorf("invalid daemon URL")
+	}
 	u := strings.TrimRight(base, "/") + "/health"
-	client := &http.Client{Timeout: 400 * time.Millisecond}
+	client := &http.Client{
+		Timeout: 400 * time.Millisecond,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return fmt.Errorf("redirects disabled")
+		},
+	}
 	res, err := client.Get(u)
 	if err != nil {
 		return "", err

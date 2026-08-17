@@ -29,22 +29,54 @@ func ServicePath(userHome string) string {
 	}
 }
 
+func serviceEnvPath(dataHome string) string {
+	return filepath.Join(dataHome, "service.env")
+}
+
 func InstallUserService(exe, userHome, dataHome, url, token string) (string, error) {
 	dest := ServicePath(userHome)
 	if dest == "" {
 		return "", fmt.Errorf("no user service on %s", runtime.GOOS)
 	}
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+	if err := checkUnitString(exe, "executable"); err != nil {
+		return "", err
+	}
+	if err := checkUnitString(dataHome, "home"); err != nil {
+		return "", err
+	}
+	if err := writeServiceEnv(dataHome, url, token); err != nil {
 		return "", err
 	}
 	body, err := serviceUnit(exe, dataHome, url, token)
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(dest, body, 0o600); err != nil {
+	if err := writeUserConfig(dest, body, 0o600); err != nil {
 		return "", err
 	}
 	return dest, nil
+}
+
+func writeServiceEnv(dataHome, url, token string) error {
+	if err := checkUnitString(token, "token"); err != nil {
+		return err
+	}
+	base := DaemonBase(url)
+	if err := checkUnitString(base, "url"); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dataHome, 0o700); err != nil {
+		return err
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "LOSSLESS_HOME=%s\n", strconv.Quote(dataHome))
+	if base != defaultDaemon {
+		fmt.Fprintf(&b, "LOSSLESS_URL=%s\n", strconv.Quote(base))
+	}
+	if token != "" {
+		fmt.Fprintf(&b, "LOSSLESS_TOKEN=%s\n", strconv.Quote(token))
+	}
+	return writeUserConfig(serviceEnvPath(dataHome), []byte(b.String()), 0o600)
 }
 
 func StartUserService(dest string) error {
@@ -127,26 +159,33 @@ func launchdPlist(exe, dataHome, url, token string) []byte {
 }
 
 func systemdUnit(exe, dataHome, url, token string) []byte {
-	var env []string
-	env = append(env, "Environment=LOSSLESS_HOME="+dataHome)
-	if base := DaemonBase(url); base != defaultDaemon {
-		env = append(env, "Environment=LOSSLESS_URL="+base)
-	}
-	if token != "" {
-		env = append(env, "Environment=LOSSLESS_TOKEN="+token)
-	}
+	_ = url
+	_ = token
 	return []byte(fmt.Sprintf(`[Unit]
 Description=lossless memory daemon
 After=default.target
 
 [Service]
+EnvironmentFile=%s
 ExecStart=%s serve --watch --home %s
 Restart=on-failure
-%s
 
 [Install]
 WantedBy=default.target
-`, exe, dataHome, strings.Join(env, "\n")))
+`, systemdQuote(serviceEnvPath(dataHome)), systemdQuote(exe), systemdQuote(dataHome)))
+}
+
+func systemdQuote(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		if r == '\\' || r == '"' || r == '$' {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 func xmlEscape(s string) string {

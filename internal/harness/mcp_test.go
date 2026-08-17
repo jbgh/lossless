@@ -109,6 +109,30 @@ func TestStdioEnvOnlyWhenNonLoopback(t *testing.T) {
 	}
 }
 
+func TestCheckDaemonURL(t *testing.T) {
+	if err := CheckDaemonURL(""); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckDaemonURL("http://127.0.0.1:7432"); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckDaemonURL("https://home.example/mcp"); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckDaemonURL("http://home.example"); err == nil {
+		t.Fatal("cleartext remote")
+	}
+	if err := CheckDaemonURL("ftp://home.example"); err == nil {
+		t.Fatal("ftp")
+	}
+}
+
+func TestInstallHooksRequiresHome(t *testing.T) {
+	if _, err := InstallHooks("", "/bin/am"); err == nil {
+		t.Fatal("empty home")
+	}
+}
+
 func TestUpsertTOMLKeepsNeighbors(t *testing.T) {
 	src := []byte("[other]\nx = 1\n\n[mcp_servers.lossless]\nurl = \"old\"\n\n[mcp_servers.lossless.headers]\nAuthorization = \"x\"\n\n[keep]\ny = 2\n")
 	got := upsertTOMLTable(src, "mcp_servers.lossless", "[mcp_servers.lossless]\nurl = \"new\"\n")
@@ -121,5 +145,9 @@ func TestUpsertTOMLKeepsNeighbors(t *testing.T) {
 	}
 	if strings.Count(s, "[mcp_servers.lossless]") != 1 {
 		t.Fatal(s)
+	}
+	commented := upsertTOMLTable([]byte("[mcp_servers.lossless] # old\nurl = \"old\"\n"), "mcp_servers.lossless", "[mcp_servers.lossless]\nurl = \"new\"\n")
+	if strings.Contains(string(commented), "old") || strings.Count(string(commented), "[mcp_servers.lossless]") != 1 {
+		t.Fatal(string(commented))
 	}
 }

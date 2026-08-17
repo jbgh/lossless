@@ -107,6 +107,12 @@ func containsCommand(v any, command string) bool {
 }
 
 func InstallHooks(home, exe string) ([]string, error) {
+	if home == "" {
+		return nil, fmt.Errorf("home required")
+	}
+	if exe == "" {
+		return nil, fmt.Errorf("executable required")
+	}
 	var out []string
 	writers := []func() (string, error){
 		func() (string, error) { return WriteGrokHooks(home, exe) },
@@ -165,7 +171,7 @@ func WriteCodexHooks(home, exe string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(dest, merged, 0o644); err != nil {
+	if err := writeUserConfig(dest, merged, 0o600); err != nil {
 		return "", err
 	}
 	return dest, nil
@@ -305,7 +311,7 @@ func WriteCodexFeatures(home string) (string, error) {
 	if b, err := os.ReadFile(dest); err == nil {
 		existing = b
 	}
-	if err := os.WriteFile(dest, MergeCodexFeatures(existing), 0o644); err != nil {
+	if err := writeUserConfig(dest, MergeCodexFeatures(existing), 0o600); err != nil {
 		return "", err
 	}
 	return dest, nil
@@ -324,7 +330,7 @@ func WriteClaudeHooks(home, exe string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(dest, merged, 0o644); err != nil {
+	if err := writeUserConfig(dest, merged, 0o600); err != nil {
 		return "", err
 	}
 	return dest, nil

@@ -123,10 +123,100 @@ func TestInstallUserServiceWritesUnit(t *testing.T) {
 	if !strings.Contains(s, "serve") || !strings.Contains(s, data) {
 		t.Fatal(s)
 	}
-	if !strings.Contains(s, "sekrit") {
-		t.Fatal("service unit is 0600 and must carry the token so the daemon starts")
-	}
 	st, _ := os.Stat(p)
+	if st.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v", st.Mode().Perm())
+	}
+	envb, err := os.ReadFile(serviceEnvPath(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(envb), "sekrit") {
+		t.Fatal("token must live in 0600 service.env")
+	}
+	if runtime.GOOS == "linux" && strings.Contains(s, "sekrit") {
+		t.Fatal("systemd unit must not inline the token")
+	}
+	if runtime.GOOS == "linux" && !strings.Contains(s, "EnvironmentFile") {
+		t.Fatal(s)
+	}
+}
+
+func TestInstallUserServiceRejectsControlChars(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip(runtime.GOOS)
+	}
+	_, err := InstallUserService("/bin/am", t.TempDir(), t.TempDir(), "", "sekrit\nExecStart=/evil")
+	if err == nil {
+		t.Fatal("newline token")
+	}
+}
+
+func TestSystemdQuoteAndNoInlineToken(t *testing.T) {
+	unit := string(systemdUnit(`/opt/my tools/lossless`, `/home/u/My Home/.lossless`, "https://home.example", "sekrit"))
+	if strings.Contains(unit, "sekrit") {
+		t.Fatal(unit)
+	}
+	if !strings.Contains(unit, `"/opt/my tools/lossless"`) || !strings.Contains(unit, `"/home/u/My Home/.lossless"`) {
+		t.Fatal(unit)
+	}
+}
+
+func TestSetupRejectsCleartextRemote(t *testing.T) {
+	_, err := Setup(SetupOpts{
+		UserHome: t.TempDir(), DataHome: t.TempDir(), Exe: "/bin/am",
+		URL: "http://home.example:7432", Service: false, Start: false,
+	})
+	if err == nil {
+		t.Fatal("expected https requirement")
+	}
+}
+
+func TestDoctorServiceOkWhenDaemonUp(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"records":0,"embedder":"none"}`))
+	}))
+	t.Cleanup(srv.Close)
+	rep := Doctor(t.TempDir(), t.TempDir(), "/bin/am", srv.URL, "")
+	for _, c := range rep.Checks {
+		if c.Name == "service" && !c.OK {
+			t.Fatalf("service should pass when daemon is up: %+v", c)
+		}
+	}
+}
+
+func TestProbeHealthNoRedirect(t *testing.T) {
+	var hit bool
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(evil.Close)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, evil.URL+"/health", http.StatusFound)
+	}))
+	t.Cleanup(srv.Close)
+	if _, err := ProbeHealth(srv.URL); err == nil {
+		t.Fatal("expected redirect reject")
+	}
+	if hit {
+		t.Fatal("followed redirect")
+	}
+}
+
+func TestWriteUserConfigPreservesMode(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, ".claude.json")
+	if err := os.WriteFile(p, []byte(`{"model":"x"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeUserConfig(p, []byte(`{"model":"y"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if st.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %v", st.Mode().Perm())
 	}

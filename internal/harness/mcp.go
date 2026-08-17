@@ -3,6 +3,7 @@ package harness
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -43,6 +44,21 @@ func stdioEnv(cfg MCPConfig) map[string]string {
 	return map[string]string{"LOSSLESS_URL": base}
 }
 
+func CheckDaemonURL(raw string) error {
+	base := DaemonBase(raw)
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("invalid daemon URL")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("daemon URL must be http or https")
+	}
+	if remoteHTTP(base) && u.Scheme != "https" {
+		return fmt.Errorf("remote URL must be https")
+	}
+	return nil
+}
+
 func needsMCPAuth(cfg MCPConfig) bool {
 	return strings.TrimSpace(cfg.Token) != "" || remoteHTTP(DaemonBase(cfg.URL))
 }
@@ -69,9 +85,13 @@ func InstallMCP(cfg MCPConfig) ([]string, error) {
 	if cfg.Exe == "" {
 		return nil, fmt.Errorf("executable required")
 	}
+	if err := CheckDaemonURL(cfg.URL); err != nil {
+		return nil, err
+	}
 	env := stdioEnv(cfg)
 	auth := needsMCPAuth(cfg)
 	var out []string
+	var errs []error
 	writers := []func() (string, error){
 		func() (string, error) { return WriteGrokMCP(cfg.Home, MCPEndpoint(cfg.URL), auth) },
 		func() (string, error) { return WriteClaudeMCP(cfg.Home, cfg.Exe, env) },
@@ -82,11 +102,12 @@ func InstallMCP(cfg MCPConfig) ([]string, error) {
 	for _, w := range writers {
 		p, err := w()
 		if err != nil {
-			return out, err
+			errs = append(errs, err)
+			continue
 		}
 		out = append(out, p)
 	}
-	return out, nil
+	return out, errors.Join(errs...)
 }
 
 func MergeClaudeMCP(existing []byte, exe string, env map[string]string) ([]byte, error) {
@@ -127,7 +148,7 @@ func WriteClaudeMCP(home, exe string, env map[string]string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(dest, merged, 0o644); err != nil {
+	if err := writeUserConfig(dest, merged, 0o600); err != nil {
 		return "", err
 	}
 	return dest, nil
@@ -152,7 +173,7 @@ func WriteGrokMCP(home, url string, auth bool) (string, error) {
 	if b, err := os.ReadFile(dest); err == nil {
 		existing = b
 	}
-	if err := os.WriteFile(dest, MergeGrokMCP(existing, url, auth), 0o644); err != nil {
+	if err := writeUserConfig(dest, MergeGrokMCP(existing, url, auth), 0o600); err != nil {
 		return "", err
 	}
 	return dest, nil
@@ -179,7 +200,7 @@ func WriteCodexMCP(home, exe string, env map[string]string) (string, error) {
 	if b, err := os.ReadFile(dest); err == nil {
 		existing = b
 	}
-	if err := os.WriteFile(dest, MergeCodexMCP(existing, exe, env), 0o644); err != nil {
+	if err := writeUserConfig(dest, MergeCodexMCP(existing, exe, env), 0o600); err != nil {
 		return "", err
 	}
 	return dest, nil
@@ -223,7 +244,7 @@ func WritePiMCP(home, exe string, env map[string]string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(dest, merged, 0o644); err != nil {
+	if err := writeUserConfig(dest, merged, 0o600); err != nil {
 		return "", err
 	}
 	return dest, nil
@@ -280,7 +301,7 @@ func WriteOpenCodeMCP(home, exe string, env map[string]string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", dest, err)
 	}
-	if err := os.WriteFile(dest, merged, 0o644); err != nil {
+	if err := writeUserConfig(dest, merged, 0o600); err != nil {
 		return "", err
 	}
 	return dest, nil
@@ -292,9 +313,7 @@ func upsertTOMLTable(existing []byte, name, body string) []byte {
 	var keep []string
 	skip := false
 	for _, line := range lines {
-		trim := strings.TrimSpace(line)
-		if strings.HasPrefix(trim, "[") && strings.HasSuffix(trim, "]") {
-			n := strings.TrimSuffix(strings.TrimPrefix(trim, "["), "]")
+		if n, ok := tomlTableName(line); ok {
 			skip = n == name || strings.HasPrefix(n, name+".")
 		}
 		if skip {

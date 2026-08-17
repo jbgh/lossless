@@ -115,7 +115,7 @@ Two Codex workers on the same repo = two session ids, one project. Claims collid
 - Home binds `127.0.0.1` unless `--listen` is set. Public listen **requires** a token. No token + `0.0.0.0` = refuse to start.
 - Remote `LOSSLESS_URL` / sidecar URL must be `https`. Loopback `http://127.0.0.1` is fine. Outbound clients do not follow redirects (so a 302 cannot bounce a bearer token to another host).
 - TLS via Tailscale Serve or Caddy. The binary does not terminate Let’s Encrypt in v1.
-- Token is a high-entropy bearer, stored in env / `0600` file. Rotating it is a restart. `lossless setup` may copy it into the launchd/systemd unit (`0600`) so the daemon starts on login. Harness MCP configs only reference `${LOSSLESS_TOKEN}`.
+- Token is a high-entropy bearer, stored in env / `0600` `service.env`. Rotating it is a restart. `lossless setup` writes that file so the user service can start the daemon on login. The systemd unit uses `EnvironmentFile` and never inlines the token. Harness MCP configs only reference `${LOSSLESS_TOKEN}`. Existing `~/.claude.json` / `config.toml` modes are preserved so setup cannot make a `0600` file world-readable.
 - Sidecar redacts **before** the bytes leave the machine. Home redacts again.
 - Store dirs are `0700`. `export/`, `raw/`, `spool/`, and sqlite files are `0600`. Catch-up refuses symlinks and anything that is not a `.jsonl`. Claim IDs must be a single path-safe token.
 - Disk on the VPS: your LUKS / provider volume encryption. App-level at-rest encryption is not v1.
