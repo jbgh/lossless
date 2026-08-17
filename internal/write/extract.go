@@ -4,25 +4,16 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"lossless/internal/claim"
+	"lossless/internal/gate"
 	"lossless/internal/redact"
 )
 
-var (
-	pathRE       = regexp.MustCompile(`(?:[\w.-]+/)+[\w.-]+\.[A-Za-z0-9]+`)
-	hardFailedRE = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|doesn't work|doesn’t work|doesn't compile|doesn’t compile|won't compile|won’t compile|failed|failure|didn't compile|does not work|threw)\b`)
-	softFailedRE = regexp.MustCompile(`(?i)\b(revert|abort)\b`)
-	exceptionTo  = regexp.MustCompile(`(?i)exception to`)
-	numberedItem = regexp.MustCompile(`^\d+[.)]\s+`)
-	constraintRE = regexp.MustCompile(`(?i)\b(always|never|don't|do not|must|we use|we don't)\b`)
-	hedgeRE      = regexp.MustCompile(`(?i)\b(i don't think|i do not think|not sure|maybe|probably|might|should we|could we|can we|do we)\b`)
-	questionRE   = regexp.MustCompile(`(?i)^\s*(should|could|can|may|do|did|is|are|will)\b`)
-	stateRE      = regexp.MustCompile(`(?i)\b(working on|current plan|next step|now implementing)\b`)
-	decisionRE   = regexp.MustCompile(`(?i)\b(decided|going with|we'll use|we will use|picked \w+ over|chose|instead of)\b`)
-)
+var pathRE = regexp.MustCompile(`(?:[\w.-]+/)+[\w.-]+\.[A-Za-z0-9]+`)
 
 var priority = map[string]int{"failed": 5, "decision": 4, "constraint": 3, "state": 2, "thread": 1}
 
@@ -58,7 +49,7 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			}
 			paths := redact.FilterPaths(uniq(append(findPaths(sent), near...)))
 			typ := classify(sent, msg)
-			if typ == "failed" && (statusFailed(sent) || failedAsObject(sent) || !groundedFailed(sent, paths)) {
+			if typ == "failed" && (gate.StatusFailed(sent) || gate.FailedAsObject(sent) || !groundedFailed(sent, paths)) {
 				continue
 			}
 			if typ == "" {
@@ -73,9 +64,6 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			}
 			if redact.ShouldDropClaim(text, paths) {
 				continue
-			}
-			if p := paths; len(p) > 8 {
-				p = p[:8]
 			}
 			drafts = append(drafts, makeRec(typ, text, paths, msg.Offset, opts))
 		}
@@ -152,282 +140,6 @@ func primaryDir(paths []string) string {
 		return p[:i]
 	}
 	return p
-}
-
-func classify(sentence string, msg Message) string {
-	if isQuestion(sentence) {
-		return ""
-	}
-	probe := stripFailedNoise(stripPaths(sentence))
-	hard := hardFailedRE.MatchString(probe)
-	soft := softFailedRE.MatchString(probe)
-	if hard && !metaFailedTalk(sentence) {
-		return "failed"
-	}
-	if decisionRE.MatchString(sentence) && !planningDecision(sentence) && !narrativeDecision(sentence) {
-		return "decision"
-	}
-	if (msg.Error || (soft && !metaFailedTalk(sentence))) && !(decisionRE.MatchString(sentence) && !planningDecision(sentence)) {
-		return "failed"
-	}
-	if constraintRE.MatchString(sentence) && msg.Role == "user" && !hedgeRE.MatchString(sentence) && !sessionOpConstraint(sentence) && !agentPromptConstraint(sentence) {
-		return "constraint"
-	}
-	if stateRE.MatchString(sentence) {
-		return "state"
-	}
-	return ""
-}
-
-var (
-	backtickSpan = regexp.MustCompile("`[^`]*`")
-	typeTalkRE   = regexp.MustCompile(`(?i)\b(failed-overlap|shipped-overlap|type-cap|packtypecap|classified as|claim type|as a failed|as failed)\b`)
-)
-
-func stripTypeTalk(s string) string {
-	s = backtickSpan.ReplaceAllString(s, " ")
-	s = typeTalkRE.ReplaceAllString(s, " ")
-	return s
-}
-
-func stripFailedNoise(s string) string {
-	s = stripTypeTalk(s)
-	s = exceptionTo.ReplaceAllString(s, " ")
-	return s
-}
-
-func metaFailedTalk(s string) bool {
-	low := strings.ToLower(s)
-	for _, n := range []string{
-		"failed-overlap", "classified as", "type-cap", "packtype",
-		"extract noise", "ask pack", "in context", "blocking warning",
-		"failure mode", "failed eviction",
-	} {
-		if strings.Contains(low, n) {
-			return true
-		}
-	}
-	return false
-}
-
-func skipSentence(s string) bool {
-	t := strings.TrimSpace(s)
-	if t == "" {
-		return true
-	}
-	t = strings.TrimLeft(t, "\"“”'`")
-	if t == "" {
-		return true
-	}
-	if strings.HasPrefix(t, "#") || strings.HasPrefix(t, ">") || strings.HasPrefix(t, "|") || strings.HasPrefix(t, "<!--") ||
-		strings.HasPrefix(t, "---") || strings.HasPrefix(t, "+++") || strings.HasPrefix(t, "<<<<<<") ||
-		strings.HasPrefix(t, ">>>>>>") || strings.HasPrefix(t, "======") {
-		return true
-	}
-	if strings.Contains(t, " | ") {
-		return true
-	}
-	if strings.HasPrefix(t, "**") && strings.HasSuffix(t, "**") && !strings.Contains(t, ".") {
-		return true
-	}
-	if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") || numberedItem.MatchString(t) {
-		rest := t
-		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
-			rest = strings.TrimSpace(t[2:])
-		} else {
-			rest = strings.TrimSpace(numberedItem.ReplaceAllString(t, ""))
-		}
-		if strings.Contains(t, "**") || strings.HasPrefix(rest, "`") || strings.HasPrefix(rest, ">") || (len(t) < 80 && len(findPaths(t)) == 0) {
-			return true
-		}
-	}
-	low := strings.ToLower(t)
-	if strings.Contains(low, "fixture") || strings.Contains(low, "quoted the") || strings.Contains(low, "quoting the") {
-		return true
-	}
-	if strings.HasPrefix(low, "next i ") || strings.HasPrefix(low, "next i'") || strings.HasPrefix(low, "next i’ll") || strings.HasPrefix(low, "next i'll") {
-		return true
-	}
-	if metaFailedTalk(t) || sessionOpConstraint(t) || agentPromptConstraint(t) || planningDecision(t) || narrativeDecision(t) || statusFailed(t) || failedAsObject(t) || quotedAttribution(t) {
-		return true
-	}
-	if strings.HasPrefix(low, "remembered:") || strings.HasPrefix(low, "remembered ") {
-		return true
-	}
-	if yamlClaimChrome(t) {
-		return true
-	}
-	if strings.HasSuffix(t, "(") || strings.HasSuffix(t, "`." ) || strings.HasSuffix(t, "do not") {
-		return true
-	}
-	return false
-}
-
-func planningDecision(s string) bool {
-	low := strings.ToLower(strings.TrimSpace(s))
-	for _, p := range []string{
-		"i'll check", "i’ll check", "i will check", "i'll look", "i’ll look",
-		"i'll read", "i’ll read", "i'll audit", "i’ll audit",
-		"i'll fix", "i’ll fix", "i'll start", "i’ll start", "i'll add", "i’ll add",
-		"i'll inspect", "i’ll inspect", "i'll pull", "i’ll pull",
-		"i'll go with", "i’ll go with", "i will go with",
-		"let's go with", "lets go with", "i'll switch", "i’ll switch",
-		"i'll try", "i’ll try",
-		"i'll implement", "i’ll implement", "i will implement",
-		"i'll replace", "i’ll replace", "i'll swap", "i’ll swap",
-		"i'll rewrite", "i’ll rewrite", "i will rewrite",
-		"i'll migrate", "i’ll migrate", "i'll refactor", "i’ll refactor",
-		"the next hour", "we will use the next", "we'll use the next",
-	} {
-		if strings.Contains(low, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func sessionOpConstraint(s string) bool {
-	low := strings.ToLower(s)
-	for _, p := range []string{
-		"don't ask", "do not ask", "don't change source", "don't delete data",
-		"do not open a pr", "do not redo", "don't flag", "do not start",
-		"never mind", "don't push yet", "do not push yet",
-		"don't merge yet", "do not merge yet",
-		"don't commit yet", "do not commit yet",
-		"don't wait", "do not wait",
-		"don't have time", "do not have time", "we don't have time", "we do not have time",
-		"must be a bug", "must be a typo",
-	} {
-		if strings.Contains(low, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func yamlClaimChrome(s string) bool {
-	low := strings.ToLower(strings.TrimSpace(s))
-	low = strings.TrimPrefix(low, "- ")
-	for _, p := range []string{
-		"text: ", "text = ", "text=", "type: failed", "type: decision", "type: constraint",
-		"type: state", "type: thread", "type = ", "type=", "warnings:", "context:", "tokens:",
-		"[[context]]", "[context]",
-	} {
-		if strings.HasPrefix(low, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func narrativeDecision(s string) bool {
-	low := strings.ToLower(s)
-	for _, p := range []string{
-		"chose the wrong", "picked the wrong", "wrong approach",
-		"chose poorly", "picked poorly",
-		"almost picked", "almost chose", "almost going",
-	} {
-		if strings.Contains(low, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func quotedAttribution(s string) bool {
-	low := strings.ToLower(s)
-	if !strings.Contains(low, "said") {
-		return false
-	}
-	return strings.Contains(low, "said:") || strings.Contains(s, `"`) || strings.Contains(s, "“") || strings.Contains(s, "”")
-}
-
-func agentPromptConstraint(s string) bool {
-	low := strings.ToLower(s)
-	return strings.Contains(low, "why don't you") || strings.Contains(low, "why dont you") ||
-		strings.HasPrefix(low, "can you ") || strings.HasPrefix(low, "could you ")
-}
-
-func statusFailed(s string) bool {
-	low := strings.ToLower(s)
-	for _, n := range []string{
-		"ci unit-test", "unit-test failure", "unit test failure",
-		"background notification", "checking #", "pr #", "pr-size-check",
-		"which of those", "re-pushing", "exit 0",
-		"github actions", "actions workflow", "actions job",
-	} {
-		if strings.Contains(low, n) {
-			return true
-		}
-	}
-	return false
-}
-
-func failedAsObject(s string) bool {
-	low := strings.ToLower(s)
-	return strings.Contains(low, "failed items") || strings.Contains(low, "re-queues failed") ||
-		strings.Contains(low, "pre-failed skip") || strings.Contains(low, "failure reason") ||
-		strings.Contains(low, "retryable failure")
-}
-
-func groundedFailed(s string, paths []string) bool {
-	if len(paths) > 0 {
-		return true
-	}
-	if raw := findPaths(s); len(redact.FilterPaths(raw)) > 0 {
-		return true
-	}
-	if statusFailed(s) || failedAsObject(s) {
-		return false
-	}
-	if strings.Contains(s, "`") || strings.Contains(s, "**") {
-		return true
-	}
-	fields := strings.Fields(s)
-	for i, w := range fields {
-		w = strings.Trim(w, ".,;:()[]\"'")
-		if w == "" {
-			continue
-		}
-		if i == 0 && sentenceStarter[w] {
-			continue
-		}
-		if len(w) >= 3 && w[0] >= 'A' && w[0] <= 'Z' && !allUpper(w) {
-			return true
-		}
-		if strings.Contains(w, "-") && w[0] >= 'A' && w[0] <= 'Z' {
-			return true
-		}
-	}
-	return false
-}
-
-var sentenceStarter = map[string]bool{
-	"The": true, "This": true, "That": true, "These": true, "Those": true,
-	"So": true, "If": true, "We": true, "On": true, "A": true, "An": true,
-	"It": true, "I": true, "After": true, "Before": true, "When": true,
-	"While": true, "Then": true, "Also": true, "Just": true, "Checking": true,
-}
-
-func allUpper(s string) bool {
-	for _, r := range s {
-		if r >= 'a' && r <= 'z' {
-			return false
-		}
-	}
-	return true
-}
-
-func isQuestion(s string) bool {
-	s = strings.TrimSpace(s)
-	if strings.HasSuffix(s, "?") {
-		return true
-	}
-	low := strings.ToLower(s)
-	if strings.Contains(low, "why don't you") || strings.Contains(low, "why dont you") {
-		return true
-	}
-	return questionRE.MatchString(s)
 }
 
 func makeRec(typ, text string, paths []string, offset int64, opts ExtractOpts) claim.Record {
@@ -607,11 +319,7 @@ func uniq(xs []string) []string {
 }
 
 func sortByPri(rs []claim.Record) {
-	for i := 0; i < len(rs); i++ {
-		for j := i + 1; j < len(rs); j++ {
-			if priority[rs[j].Type] > priority[rs[i].Type] {
-				rs[i], rs[j] = rs[j], rs[i]
-			}
-		}
-	}
+	sort.SliceStable(rs, func(i, j int) bool {
+		return priority[rs[i].Type] > priority[rs[j].Type]
+	})
 }

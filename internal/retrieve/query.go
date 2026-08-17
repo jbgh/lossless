@@ -6,6 +6,7 @@ import (
 	"unicode"
 
 	"lossless/internal/claim"
+	"lossless/internal/gate"
 	"lossless/internal/projectkey"
 )
 
@@ -282,165 +283,31 @@ var jobOverlapStop = []string{
 
 func extractNoise(rec claim.Record) bool {
 	t := strings.TrimSpace(rec.Text)
-	if t == "" {
+	if t == "" || gate.SkipProse(t) || gate.ListChrome(t, true) {
 		return true
 	}
-	if strings.HasPrefix(t, "#") || strings.HasPrefix(t, "|") || strings.Contains(t, " | ") {
-		return true
-	}
-	if strings.HasPrefix(t, "**") && !strings.Contains(t, ".") {
-		return true
-	}
-	if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") || numberedItem.MatchString(t) {
-		rest := t
-		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
-			rest = strings.TrimSpace(t[2:])
-		} else {
-			rest = strings.TrimSpace(numberedItem.ReplaceAllString(t, ""))
-		}
-		if strings.Contains(t, "**") || strings.HasPrefix(rest, "`") || len(t) < 80 {
+	switch rec.Type {
+	case "state":
+		if gate.NextI(t) || gate.ProcessState(t) {
 			return true
 		}
-	}
-	low := strings.ToLower(t)
-	if strings.Contains(low, "failed-overlap") || strings.Contains(low, "classified as") || strings.Contains(low, "failure mode") {
-		return true
-	}
-	if rec.Type == "state" && (strings.HasPrefix(low, "next i ") || strings.HasPrefix(low, "next i'") || strings.HasPrefix(low, "next i’ll") || strings.HasPrefix(low, "next i'll")) {
-		return true
-	}
-	if rec.Type == "decision" && (planningDecision(low) || quotedAttribution(rec.Text) || narrativeDecision(low)) {
-		return true
-	}
-	if strings.HasPrefix(low, "remembered:") || strings.HasPrefix(low, "remembered ") {
-		return true
-	}
-	if rec.Type == "constraint" && (sessionOpConstraint(low) || agentPromptConstraint(low)) {
-		return true
-	}
-	if rec.Type == "failed" && (statusFailed(low) || failedAsObject(low) || (len(rec.Paths) == 0 && failedOnlyInTicks(t))) {
-		return true
-	}
-	if rec.Type == "state" && processState(low) {
-		return true
-	}
-	if truncatedClaim(t) {
-		return true
-	}
-	low2 := strings.ToLower(strings.TrimSpace(t))
-	low2 = strings.TrimPrefix(low2, "- ")
-	for _, p := range []string{"text: ", "text = ", "text=", "type: failed", "type: decision", "warnings:", "context:"} {
-		if strings.HasPrefix(low2, p) {
+	case "decision":
+		if gate.Planning(t) || gate.QuotedAttribution(t) || gate.NarrativeDecision(t) {
+			return true
+		}
+	case "constraint":
+		if gate.SessionOp(t) || gate.AgentPrompt(t) {
+			return true
+		}
+	case "failed":
+		if gate.StatusFailed(t) || gate.FailedAsObject(t) || (len(rec.Paths) == 0 && failedOnlyInTicks(t)) {
 			return true
 		}
 	}
 	return false
 }
 
-func statusFailed(low string) bool {
-	for _, n := range []string{
-		"ci unit-test", "unit-test failure", "unit test failure",
-		"background notification", "checking #", "pr #", "pr-size-check",
-		"which of those", "re-pushing", "exit 0",
-		"github actions", "actions workflow", "actions job",
-	} {
-		if strings.Contains(low, n) {
-			return true
-		}
-	}
-	return false
-}
-
-func failedAsObject(low string) bool {
-	return strings.Contains(low, "failed items") || strings.Contains(low, "re-queues failed") ||
-		strings.Contains(low, "pre-failed skip") || strings.Contains(low, "failure reason") ||
-		strings.Contains(low, "retryable failure")
-}
-
-func processState(low string) bool {
-	return strings.Contains(low, "in this session") || strings.Contains(low, "the next stop") ||
-		strings.Contains(low, "next test that matters") || strings.Contains(low, "not another fixture") ||
-		strings.Contains(low, "that row is always there") || strings.Contains(low, "i'll inspect") ||
-		strings.Contains(low, "i’ll inspect")
-}
-
-func truncatedClaim(t string) bool {
-	s := strings.TrimSpace(t)
-	if strings.HasSuffix(s, "(") || strings.HasSuffix(s, "`." ) || strings.HasSuffix(s, "do not") {
-		return true
-	}
-	if strings.HasSuffix(s, "path (`." ) || strings.Contains(s, "path (`." ) {
-		return true
-	}
-	return false
-}
-
-func planningDecision(low string) bool {
-	for _, p := range []string{
-		"i'll check", "i’ll check", "i will check", "i'll look", "i’ll look",
-		"i'll read", "i’ll read", "i'll audit", "i’ll audit",
-		"i'll fix", "i’ll fix", "i'll start", "i’ll start", "i'll add", "i’ll add",
-		"i'll inspect", "i’ll inspect", "i'll pull", "i’ll pull",
-		"i'll go with", "i’ll go with", "i will go with",
-		"let's go with", "lets go with", "i'll switch", "i’ll switch",
-		"i'll try", "i’ll try",
-		"i'll implement", "i’ll implement", "i will implement",
-		"i'll replace", "i’ll replace", "i'll swap", "i’ll swap",
-		"i'll rewrite", "i’ll rewrite", "i will rewrite",
-		"i'll migrate", "i’ll migrate", "i'll refactor", "i’ll refactor",
-		"the next hour", "we will use the next", "we'll use the next",
-	} {
-		if strings.Contains(low, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func sessionOpConstraint(low string) bool {
-	for _, p := range []string{
-		"don't ask", "do not ask", "don't change source", "don't delete data",
-		"do not open a pr", "do not redo", "don't flag", "do not start",
-		"never mind", "don't push yet", "do not push yet",
-		"don't merge yet", "do not merge yet",
-		"don't commit yet", "do not commit yet",
-		"don't wait", "do not wait",
-		"don't have time", "do not have time", "we don't have time", "we do not have time",
-		"must be a bug", "must be a typo",
-	} {
-		if strings.Contains(low, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func narrativeDecision(s string) bool {
-	low := strings.ToLower(s)
-	return strings.Contains(low, "chose the wrong") || strings.Contains(low, "picked the wrong") ||
-		strings.Contains(low, "wrong approach") || strings.Contains(low, "chose poorly") ||
-		strings.Contains(low, "picked poorly") || strings.Contains(low, "almost picked") ||
-		strings.Contains(low, "almost chose") || strings.Contains(low, "almost going")
-}
-
-func quotedAttribution(s string) bool {
-	low := strings.ToLower(s)
-	if !strings.Contains(low, "said") {
-		return false
-	}
-	return strings.Contains(low, "said:") || strings.Contains(s, `"`) || strings.Contains(s, "“") || strings.Contains(s, "”")
-}
-
-func agentPromptConstraint(low string) bool {
-	return strings.Contains(low, "why don't you") || strings.Contains(low, "why do not you") ||
-		strings.Contains(low, "why dont you") || strings.HasPrefix(low, "can you ") ||
-		strings.HasPrefix(low, "could you ")
-}
-
-var (
-	failedWord   = regexp.MustCompile(`(?i)\bfailed\b`)
-	numberedItem = regexp.MustCompile(`^\d+[.)]\s+`)
-)
+var failedWord = regexp.MustCompile(`(?i)\bfailed\b`)
 
 func failedOnlyInTicks(s string) bool {
 	if !failedWord.MatchString(s) {
