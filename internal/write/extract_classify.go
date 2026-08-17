@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	hardFailedRE = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|doesn't work|doesn’t work|doesn't compile|doesn’t compile|won't compile|won’t compile|failed|failure|didn't compile|does not work|threw)\b`)
+	hardFailedRE = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|doesn't work|doesn't compile|won't compile|failed|failure|didn't compile|does not work|threw)\b`)
 	softFailedRE = regexp.MustCompile(`(?i)\b(revert|abort)\b`)
 	exceptionTo  = regexp.MustCompile(`(?i)exception to`)
 	constraintRE = regexp.MustCompile(`(?i)\b(always|never|don't|do not|must|we use|we don't)\b`)
@@ -25,22 +25,23 @@ func classify(sentence string, msg Message) string {
 	if isQuestion(sentence) {
 		return ""
 	}
-	probe := stripFailedNoise(stripPaths(sentence))
+	folded := gate.Fold(sentence)
+	probe := stripFailedNoise(stripPaths(folded))
 	hard := hardFailedRE.MatchString(probe)
 	soft := softFailedRE.MatchString(probe)
 	if hard && !gate.MetaFailedTalk(sentence) {
 		return "failed"
 	}
-	if decisionRE.MatchString(sentence) && !gate.Planning(sentence) && !gate.NarrativeDecision(sentence) {
+	if decisionRE.MatchString(folded) && !gate.Planning(sentence) && !gate.NarrativeDecision(sentence) {
 		return "decision"
 	}
-	if (msg.Error || (soft && !gate.MetaFailedTalk(sentence))) && !(decisionRE.MatchString(sentence) && !gate.Planning(sentence)) {
+	if (msg.Error || (soft && !gate.MetaFailedTalk(sentence))) && !(decisionRE.MatchString(folded) && !gate.Planning(sentence)) {
 		return "failed"
 	}
-	if constraintRE.MatchString(sentence) && msg.Role == "user" && !hedgeRE.MatchString(sentence) && !gate.SessionOp(sentence) && !gate.AgentPrompt(sentence) {
+	if constraintRE.MatchString(folded) && msg.Role == "user" && !hedgeRE.MatchString(folded) && !gate.SessionOp(sentence) && !gate.AgentPrompt(sentence) {
 		return "constraint"
 	}
-	if stateRE.MatchString(sentence) {
+	if stateRE.MatchString(folded) {
 		return "state"
 	}
 	return ""
@@ -120,19 +121,9 @@ func isQuestion(s string) bool {
 	if strings.HasSuffix(s, "?") {
 		return true
 	}
-	low := strings.ToLower(s)
+	low := gate.Fold(s)
 	if strings.Contains(low, "why don't you") || strings.Contains(low, "why dont you") {
 		return true
 	}
-	return questionRE.MatchString(s)
+	return questionRE.MatchString(low)
 }
-
-// Wrappers so existing extract tests keep calling package-local names.
-func planningDecision(s string) bool      { return gate.Planning(s) }
-func sessionOpConstraint(s string) bool   { return gate.SessionOp(s) }
-func agentPromptConstraint(s string) bool { return gate.AgentPrompt(s) }
-func narrativeDecision(s string) bool     { return gate.NarrativeDecision(s) }
-func statusFailed(s string) bool          { return gate.StatusFailed(s) }
-func failedAsObject(s string) bool        { return gate.FailedAsObject(s) }
-func metaFailedTalk(s string) bool        { return gate.MetaFailedTalk(s) }
-func quotedAttribution(s string) bool     { return gate.QuotedAttribution(s) }

@@ -88,6 +88,20 @@ func Tokens(s string) []string {
 	return out
 }
 
+// Uniq keeps first-seen non-empty strings.
+func Uniq(xs []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, x := range xs {
+		if x == "" || seen[x] {
+			continue
+		}
+		seen[x] = true
+		out = append(out, x)
+	}
+	return out
+}
+
 // PathKeys is each path as given plus its basename.
 func PathKeys(paths []string) []string {
 	seen := map[string]bool{}

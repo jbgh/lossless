@@ -47,7 +47,7 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			if skipSentence(sent) {
 				continue
 			}
-			paths := redact.FilterPaths(uniq(append(findPaths(sent), near...)))
+			paths := redact.FilterPaths(claim.Uniq(append(findPaths(sent), near...)))
 			typ := classify(sent, msg)
 			if typ == "failed" && (gate.StatusFailed(sent) || gate.FailedAsObject(sent) || !groundedFailed(sent, paths)) {
 				continue
@@ -210,7 +210,7 @@ func collectPaths(msgs []Message) []string {
 	for _, m := range msgs {
 		found = append(found, findPaths(m.Text)...)
 	}
-	return uniq(found)
+	return claim.Uniq(found)
 }
 
 func nearby(msg Message, all []Message) []string {
@@ -306,17 +306,7 @@ func alnum(r rune) bool {
 	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
 }
 
-func uniq(xs []string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, x := range xs {
-		if x != "" && !seen[x] {
-			seen[x] = true
-			out = append(out, x)
-		}
-	}
-	return out
-}
+func uniq(xs []string) []string { return claim.Uniq(xs) }
 
 func sortByPri(rs []claim.Record) {
 	sort.SliceStable(rs, func(i, j int) bool {

@@ -97,7 +97,7 @@ func normalize(req Request) (query, error) {
 	for _, t := range append(append([]string{}, qtoks...), gtoks...) {
 		addSym(t)
 	}
-	lookup := uniq(append(append([]string{}, qtoks...), gtoks...))
+	lookup := claim.Uniq(append(append([]string{}, qtoks...), gtoks...))
 	limit := req.LimitTokens
 	if limit <= 0 {
 		limit = DefaultLimit
@@ -145,18 +145,7 @@ func identLower(s string) bool {
 	return true
 }
 
-func uniq(xs []string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, x := range xs {
-		if x == "" || seen[x] {
-			continue
-		}
-		seen[x] = true
-		out = append(out, x)
-	}
-	return out
-}
+func uniq(xs []string) []string { return claim.Uniq(xs) }
 
 func ftsMatch(tokens []string) string {
 	var parts []string
