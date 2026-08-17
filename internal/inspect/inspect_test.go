@@ -114,4 +114,7 @@ func TestBuildAndAskInspect(t *testing.T) {
 	if err != nil || ex.Kept < 1 {
 		t.Fatalf("%+v %v", ex, err)
 	}
+	if _, err := ExtractFile("/etc/passwd", "acme/api"); err == nil {
+		t.Fatal("passwd")
+	}
 }

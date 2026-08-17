@@ -36,13 +36,13 @@ What the **spec was** before this revision: BM25 + path + symbol + type + recenc
 
 Lexical is not enough for job 3 ("answer the question") when humans paraphrase. Vectors are not enough for jobs 1–2: cosine will happily surface a billing "rate limit" when you are in `auth.ts`.
 
-**Design: hybrid, structure first.**
+**Design: hybrid, structure first.** Inspect on a year of multi-discipline work (25/25 asks, embedder none) showed path + type + failed/shipped overlap already do jobs 1–2. Vectors stay optional. Missing embedder is degraded mode, not a hole. Do not retune `WFailedOverlap` / `WShippedOverlap` unless a live miss forces it.
 
-1. Filter / candidate with path, type, FTS, **and** claim-level kNN.
-2. Rank with failed/path/type **outweighing** cosine.
-3. Embed **claims only** (short texts, tens of thousands in a decade). Do **not** embed raw excerpts or tool bodies. That would recreate the "one giant index over forever" problem.
+1. Filter / candidate with path, type, FTS, and **optional** claim-level kNN.
+2. Rank with failed/path/type **outweighing** cosine when vectors exist.
+3. Embed **claims only** (short texts). Do **not** embed raw excerpts or tool bodies.
 
-Grok's own memory is 0.7 vector + 0.3 BM25 because session notes are chatty. Ours adds path/type because this is a repo. Cosine is a candidate source and a feature, not the product.
+Grok's own memory is 0.7 vector + 0.3 BM25 because session notes are chatty. Ours adds path/type because this is a repo. Cosine is a candidate source and a feature, not the product. Pack also drops out-of-neighborhood states and ungrounded pathless faileds so weekday chatter does not occupy a slot next to a real constraint.
 
 On-box model (default): a small sentence embedder (e.g. `all-MiniLM-L6-v2`, 384-d). No API. Rebuildable from claim markdown if we change the model (store `embed_model` + `embed_dim` in index meta). HEAD coverage (nothing to condition on): skip vectors, same as skip BM25.
 

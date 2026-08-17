@@ -140,6 +140,14 @@ func TestPackScoreCutoffDiversityAndEvict(t *testing.T) {
 	if len(got) != 1 || got[0].rec.ID != "DEC" {
 		t.Fatalf("oon state packed: %+v", got)
 	}
+
+	// pathless weekday failed chatter does not sit next to a real constraint
+	con := scored{score: 4.6, rec: claim.Record{ID: "CON", Type: "constraint", Text: "never run mobile-down --full"}}
+	weak := scored{score: 1.8, rec: claim.Record{ID: "CHAT", Type: "failed", Text: "the prefetch window failed in grid"}}
+	got = pack([]scored{weak, con}, 1200, false)
+	if len(got) != 1 || got[0].rec.ID != "CON" {
+		t.Fatalf("ungrounded failed packed: %+v", got)
+	}
 }
 
 func itoa(i int) string {

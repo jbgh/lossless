@@ -11,9 +11,13 @@ import (
 
 const maxCatchUpBytes = 64 << 20
 
-// checkIngestFile is the catch-up read gate. The daemon must not ingest
-// arbitrary local files (/etc/passwd, ~/.ssh/id_rsa) just because a
-// loopback client sent a path.
+// CheckJSONLFile is the catch-up / inspect read gate. The daemon must
+// not ingest arbitrary local files (/etc/passwd, ~/.ssh/id_rsa) just
+// because a loopback client sent a path.
+func CheckJSONLFile(path string) error {
+	return checkIngestFile(path)
+}
+
 func checkIngestFile(path string) error {
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("path required")

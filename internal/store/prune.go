@@ -1,8 +1,10 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"lossless/internal/claim"
 	"lossless/internal/projectkey"
@@ -45,9 +47,8 @@ func (s *Store) DeleteRecord(id string) error {
 	if err != nil {
 		return err
 	}
-	enc := projectkey.Encode(rec.ProjectKey)
-	if enc != "" && enc != "unknown" && SafeRecordID(rec.ID) {
-		_ = os.Remove(filepath.Join(s.Root, "export", enc, rec.ID+".md"))
+	if dest, err := s.confinedFile("export", projectkey.Encode(rec.ProjectKey), rec.ID+".md"); err == nil {
+		_ = os.Remove(dest)
 	}
 	return nil
 }
@@ -81,7 +82,58 @@ func (s *Store) RemoveProjectRaw(project string) error {
 	if enc == "" || enc == "unknown" {
 		return nil
 	}
-	_ = os.RemoveAll(filepath.Join(s.Root, "raw", enc))
-	_ = os.RemoveAll(filepath.Join(s.Root, "export", enc))
+	if dest, err := s.confinedDir("raw", enc); err == nil {
+		_ = os.RemoveAll(dest)
+	}
+	if dest, err := s.confinedDir("export", enc); err == nil {
+		_ = os.RemoveAll(dest)
+	}
 	return nil
+}
+
+func (s *Store) confinedDir(elem ...string) (string, error) {
+	return confinedPath(s.Root, true, elem...)
+}
+
+func (s *Store) confinedFile(elem ...string) (string, error) {
+	return confinedPath(s.Root, false, elem...)
+}
+
+func confinedPath(root string, dir bool, elem ...string) (string, error) {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	for _, e := range elem {
+		if e == "" || e == "." || e == ".." || strings.Contains(e, "..") ||
+			strings.Contains(e, "/") || strings.Contains(e, string(filepath.Separator)) {
+			return "", fmt.Errorf("refusing path element %q", e)
+		}
+	}
+	dest := filepath.Join(append([]string{rootAbs}, elem...)...)
+	destAbs, err := filepath.Abs(dest)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(rootAbs, destAbs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes home")
+	}
+	fi, err := os.Lstat(destAbs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return destAbs, nil
+		}
+		return "", err
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("refusing symlink")
+	}
+	if dir && !fi.IsDir() {
+		return "", fmt.Errorf("not a directory")
+	}
+	if !dir && !fi.Mode().IsRegular() && fi.Mode()&os.ModeSymlink == 0 && fi.IsDir() {
+		return "", fmt.Errorf("not a file")
+	}
+	return destAbs, nil
 }

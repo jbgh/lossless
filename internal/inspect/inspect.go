@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"lossless/internal/claim"
@@ -193,20 +194,27 @@ func ExtractFile(path, project string) (*ExtractView, error) {
 }
 
 func readJSONL(path string) (string, string, error) {
-	fi, err := os.Stat(path)
+	if err := write.CheckJSONLFile(path); err != nil {
+		return "", "", err
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", "", err
+	}
+	f, err := os.OpenFile(abs, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return "", "", err
+	}
+	defer f.Close()
+	fi, err := f.Stat()
 	if err != nil {
 		return "", "", err
 	}
 	const tail = 4 << 20
 	if fi.Size() <= 8<<20 {
-		b, err := os.ReadFile(path)
+		b, err := io.ReadAll(f)
 		return string(b), "", err
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "", "", err
-	}
-	defer f.Close()
 	if _, err := f.Seek(-tail, io.SeekEnd); err != nil {
 		return "", "", err
 	}

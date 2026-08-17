@@ -129,6 +129,7 @@ func pack(cs []scored, limit int, head bool) []scored {
 	remaining := append([]scored(nil), cs...)
 	if !head {
 		remaining = dropOonState(remaining)
+		remaining = dropUngroundedFailed(remaining)
 	}
 	var out []scored
 	var packedText [][]string
@@ -209,6 +210,23 @@ func pack(cs []scored, limit int, head bool) []scored {
 		}
 	}
 	return out
+}
+
+// dropUngroundedFailed removes faileds with no path, symbol, or
+// failed-overlap when a stronger type is already in the pool. Inspect
+// showed pathless weekday chatter filling slots next to a real constraint.
+func dropUngroundedFailed(cs []scored) []scored {
+	var rest []scored
+	for _, c := range cs {
+		if c.rec.Type == "failed" && c.failedOverlap != 1 && c.path == 0 && c.symbol == 0 && c.hop == 0 {
+			continue
+		}
+		rest = append(rest, c)
+	}
+	if len(rest) == 0 {
+		return cs
+	}
+	return rest
 }
 
 // dropOonState removes states that share no path with the ask when

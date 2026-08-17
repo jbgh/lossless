@@ -88,7 +88,7 @@ func (e Engine) prepare(req Request) (prep, error) {
 	prof := selectProfile(q)
 	empty := Response{Context: []Hit{}, Warnings: []string{}, Project: q.ProjectKey}
 	p := prep{q: q, seed: seedPaths, out: empty}
-	ids, ftsBM25, knn, err := e.candidates(q)
+	ids, ftsBM25, knn, inferred, err := e.candidates(q)
 	if err != nil {
 		return prep{}, err
 	}
@@ -119,14 +119,14 @@ func (e Engine) prepare(req Request) (prep, error) {
 			old := cand[prev]
 			if rec.CreatedAt >= old.rec.CreatedAt {
 				p.drops = append(p.drops, traceDrop{rec: old.rec, reason: "duplicate", sc: old, scored: true})
-				cand[prev] = e.features(rec, q, ftsBM25, knn)
+				cand[prev] = e.features(rec, q, ftsBM25, knn, inferred)
 			} else {
 				p.drops = append(p.drops, traceDrop{rec: rec, reason: "duplicate"})
 			}
 			continue
 		}
 		seenHash[rec.ClaimHash] = len(cand)
-		cand = append(cand, e.features(rec, q, ftsBM25, knn))
+		cand = append(cand, e.features(rec, q, ftsBM25, knn, inferred))
 	}
 	before := cand
 	cand = dropOlderConflicts(cand)
@@ -230,6 +230,7 @@ type scored struct {
 	score          float64
 	ftsRaw         float64
 	isFTS          bool
+	hop            float64
 }
 
 func (s scored) pFail() float64 {
@@ -267,11 +268,11 @@ func (s scored) preStale(p Profile) float64 {
 		WServed*s.served
 }
 
-func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]float64, error) {
+func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]float64, []string, error) {
 	fts := map[string]float64{}
 	knn := map[string]float64{}
 	seen := map[string]bool{}
-	var ids []string
+	var ids, hop []string
 	add := func(list []string) {
 		for _, id := range list {
 			if id == "" || seen[id] || len(ids) >= CandidateCap {
@@ -284,23 +285,23 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]fl
 	if q.Head {
 		pri, err := e.Store.HeadPriorityIDs(q.ProjectKey, HeadFailedCap, HeadDecisionCap, HeadConstraintCap)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		add(pri)
 		if len(q.PathKeys) > 0 {
 			p, err := e.Store.IDsByPath(q.ProjectKey, q.PathKeys, PathPerCap, ColdPathCap)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 			add(p)
 		} else if len(ids) < ColdPriorityCap {
 			st, err := e.Store.IDsByType(q.ProjectKey, "state", "", ColdStateCap)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 			add(st)
 		}
-		return ids, fts, knn, nil
+		return ids, fts, knn, hop, nil
 	}
 
 	if match := ftsMatch(q.LookupTokens); match != "" {
@@ -319,30 +320,30 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]fl
 	if len(q.PathKeys) > 0 {
 		p, err := e.Store.IDsByPath(q.ProjectKey, q.PathKeys, PathPerCap, PathTotalCap)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		add(p)
 	}
 	if len(q.Symbols) > 0 {
 		sy, err := e.Store.IDsBySymbol(q.ProjectKey, q.Symbols, SymbolPerCap, SymbolTotalCap)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		add(sy)
 	}
 	failedOv, err := e.Store.TypeIDsOverlapping(q.ProjectKey, "failed", q.PathKeys, q.Symbols, FailedCap)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	add(failedOv)
 	dec, err := e.Store.DecisionIDsOverlapping(q.ProjectKey, q.PathKeys, q.Symbols, DecisionCap)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	add(dec)
 	con, err := e.Store.ConstraintIDsOverlapping(q.ProjectKey, q.PathKeys, q.Symbols, ConstraintCap)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	add(con)
 	// Vector kNN: paraphrase that shares no token/path/symbol.
@@ -356,27 +357,28 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]fl
 	if len(q.PathKeys) == 0 && len(ids) > 0 {
 		inferred, err := e.inferredPaths(ids)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		if len(inferred) > 0 {
 			for _, typ := range []string{"failed", "decision", "constraint"} {
 				extra, err := e.Store.TypeIDsOverlapping(q.ProjectKey, typ, inferred, nil, InferTypeCap)
 				if err != nil {
-					return nil, nil, nil, err
+					return nil, nil, nil, nil, err
 				}
 				add(extra)
 			}
+			hop = inferred
 		}
 	}
 	// Recent faileds only when structure found nothing. Safety net, not default.
 	if len(ids) == 0 {
 		failedRecent, err := e.Store.IDsByType(q.ProjectKey, "failed", "", FailedRecentCap)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		add(failedRecent)
 	}
-	return ids, fts, knn, nil
+	return ids, fts, knn, hop, nil
 }
 
 func (e Engine) vectorHits(q query, knn map[string]float64) []string {
@@ -437,7 +439,7 @@ func (e Engine) inferredPaths(ids []string) ([]string, error) {
 	return out, nil
 }
 
-func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64) scored {
+func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64, hop []string) scored {
 	s := scored{rec: rec}
 	s.typeRank = float64(typeRank[rec.Type])
 	created, err := time.Parse(time.RFC3339, rec.CreatedAt)
@@ -450,6 +452,9 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64)
 	}
 	s.recency = typeRecency(rec.Type, ageDays)
 	s.path = jaccard(q.PathKeys, claim.PathKeys(rec.Paths))
+	if s.path == 0 && len(hop) > 0 {
+		s.hop = jaccard(hop, claim.PathKeys(rec.Paths))
+	}
 	qSym := q.Symbols
 	rSym := make([]string, 0, len(rec.Symbols))
 	for _, sy := range rec.Symbols {
