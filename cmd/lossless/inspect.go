@@ -17,11 +17,13 @@ func runInspect(args []string) int {
 	home := homeFlag(fs)
 	project := fs.String("project", "", "owner/repo (omit for all projects)")
 	asJSON := fs.Bool("json", false, "print JSON")
-	doAsk := fs.Bool("ask", false, "run a live ask and print why each hit packed")
+	doAsk := fs.Bool("ask", false, "run a live ask and print why each hit packed or dropped")
 	goal := fs.String("goal", "", "ask goal (with --ask)")
 	question := fs.String("question", "", "ask question (with --ask)")
 	session := fs.String("session", "", "session id")
 	ws := fs.String("workspace", "", "workspace root (derives project if set)")
+	jsonl := fs.String("jsonl", "", "session JSONL to show extract keep/skip")
+	prune := fs.Bool("prune", false, "drop hook-test ingest and supersede extract-noise")
 	var paths stringsFlag
 	fs.Var(&paths, "path", "repo-relative path for --ask (repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -37,6 +39,15 @@ func runInspect(args []string) int {
 		return 1
 	}
 	defer st.Close()
+	var pruned *inspect.PruneResult
+	if *prune {
+		res, err := inspect.Prune(st)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		pruned = &res
+	}
 	rep, err := inspect.Build(st, *project)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -54,6 +65,15 @@ func runInspect(args []string) int {
 		}
 		rep.Ask = view
 	}
+	if *jsonl != "" {
+		ex, err := inspect.ExtractFile(*jsonl, *project)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		rep.Extract = ex
+	}
+	rep.Prune = pruned
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")

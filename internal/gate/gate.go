@@ -117,7 +117,26 @@ func Truncated(s string) bool {
 	if strings.HasSuffix(s, "(") || strings.HasSuffix(s, "`.") || strings.HasSuffix(s, "do not") {
 		return true
 	}
-	return strings.HasSuffix(s, "path (`.") || strings.Contains(s, "path (`.")
+	if strings.HasSuffix(s, "path (`.") || strings.Contains(s, "path (`.") {
+		return true
+	}
+	if strings.Contains(s, "…)") || strings.Contains(s, "...)") {
+		return true
+	}
+	if strings.HasSuffix(s, "|") {
+		return true
+	}
+	if f := strings.Fields(s); len(f) > 0 && strings.Contains(f[0], "`") {
+		return true
+	}
+	if strings.Count(s, "`")%2 == 1 && strings.HasSuffix(s, ".") {
+		return true
+	}
+	low := Fold(s)
+	if ConstraintFragment(s) && (strings.Contains(s, "`") || strings.Contains(s, "|") || strings.Contains(low, "…")) {
+		return true
+	}
+	return false
 }
 
 func FixtureTalk(s string) bool {
@@ -161,7 +180,8 @@ func ListChrome(s string, shortNoPath bool) bool {
 	if strings.Contains(s, "**") || strings.HasPrefix(rest, "`") || strings.HasPrefix(rest, ">") {
 		return true
 	}
-	return shortNoPath && len(s) < 80
+	// Pathless bullets are recap chrome. Pathful list items can still be claims.
+	return shortNoPath
 }
 
 // SkipProse is the path-agnostic half of extract skipSentence: headings,
@@ -181,6 +201,12 @@ func SkipProse(s string) bool {
 	if strings.HasPrefix(t, "**") && strings.HasSuffix(t, "**") && !strings.Contains(t, ".") {
 		return true
 	}
+	if strings.HasPrefix(t, "**") && strings.Count(t, "**") == 1 && len(t) < 40 {
+		return true
+	}
+	if hasPrefixFold(t, []string{"**what was wrong", "**what you do next"}) {
+		return true
+	}
 	if FixtureTalk(t) || NextI(t) {
 		return true
 	}
@@ -188,10 +214,14 @@ func SkipProse(s string) bool {
 		NarrativeDecision(t) || StatusFailed(t) || FailedAsObject(t) || QuotedAttribution(t) {
 		return true
 	}
-	if RememberedProse(t) || YAMLClaimChrome(t) || Truncated(t) {
+	if RememberedProse(t) || YAMLClaimChrome(t) || Truncated(t) || SkillTalk(t) {
 		return true
 	}
 	return false
+}
+
+func SkillTalk(s string) bool {
+	return containsAny(s, skillTalk)
 }
 
 var (
@@ -239,12 +269,16 @@ var (
 		"extract noise", "ask pack", "in context", "blocking warning",
 		"failure mode", "failed eviction",
 		"off-topic", "ranking/topic",
-		"failed/decision", "classify now", "curly apostrophe",
+		"failed/decision", "classify now",
 		"forced failed", "counts as a",
 	}
 	processState = []string{
 		"in this session", "the next stop", "next test that matters",
 		"not another fixture", "that row is always there", "i'll inspect",
+	}
+	skillTalk = []string{
+		"ignore a skill", "can ignore a skill",
+		"one sentence on a tool", "not a guarantee",
 	}
 	yamlChrome = []string{
 		"text: ", "text = ", "text=", "type: failed", "type: decision", "type: constraint",

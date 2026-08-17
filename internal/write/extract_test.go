@@ -47,6 +47,36 @@ func TestExtractClassifiesAndDrops(t *testing.T) {
 	}
 }
 
+func TestExtractTraceCountsSkips(t *testing.T) {
+	tr := &ExtractTrace{}
+	got := Extract([]Message{
+		{Role: "assistant", Text: "We decided to use jose, not jsonwebtoken, for Edge.", Offset: 1},
+		{Role: "assistant", Text: "short", Offset: 2},
+		{Role: "assistant", Text: "unrelated no classify words here at all really.", Offset: 3},
+		{Role: "assistant", Text: "1. first item without a path token here", Offset: 4},
+	}, ExtractOpts{ProjectKey: "acme/api", Trace: tr})
+	if len(got) != 1 || tr.Kept != 1 || tr.Drafts != 1 {
+		t.Fatalf("kept=%d drafts=%d recs=%+v", tr.Kept, tr.Drafts, got)
+	}
+	if tr.SkipCounts["untyped"] < 1 {
+		t.Fatalf("skips %+v", tr.SkipCounts)
+	}
+	if tr.Sentences < 3 {
+		t.Fatalf("sentences %d", tr.Sentences)
+	}
+}
+
+func TestExtractSkipsSkillTalkAndFragments(t *testing.T) {
+	got := Extract([]Message{
+		{Role: "assistant", Text: "This is still not a guarantee — a model can ignore a skill — but it is no longer “one sentence on a tool next to grep.", Offset: 1},
+		{Role: "assistant", Text: "swift`, …) and looked like “this failed, so that decision is dead.", Offset: 2},
+		{Role: "assistant", Text: "We decided to use jose, not jsonwebtoken, for Edge.", Offset: 3},
+	}, ExtractOpts{ProjectKey: "acme/api"})
+	if len(got) != 1 || !strings.Contains(got[0].Text, "jose") {
+		t.Fatalf("%+v", got)
+	}
+}
+
 func TestExtractKeepsDurableFromEarlyInLongSession(t *testing.T) {
 	var msgs []Message
 	msgs = append(msgs, Message{
@@ -312,8 +342,8 @@ func TestExtractQuestionIsNotDecisionOrConstraint(t *testing.T) {
 
 func TestExtractDoesNotMarkHypotheticalAsFailed(t *testing.T) {
 	got := Extract([]Message{{
-		Role: "assistant",
-		Text: "I was going to try jsonwebtoken unless we already rejected that.",
+		Role:   "assistant",
+		Text:   "I was going to try jsonwebtoken unless we already rejected that.",
 		Offset: 1,
 	}}, ExtractOpts{ProjectKey: "acme/api"})
 	for _, r := range got {
@@ -322,8 +352,8 @@ func TestExtractDoesNotMarkHypotheticalAsFailed(t *testing.T) {
 		}
 	}
 	real := Extract([]Message{{
-		Role: "assistant",
-		Text: "We rejected Redis for rate limiting in src/middleware/auth.ts.",
+		Role:   "assistant",
+		Text:   "We rejected Redis for rate limiting in src/middleware/auth.ts.",
 		Offset: 2,
 	}}, ExtractOpts{ProjectKey: "acme/api"})
 	ok := false

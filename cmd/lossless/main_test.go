@@ -232,6 +232,9 @@ func TestRunInstallHooks(t *testing.T) {
 func TestRunHookGrok(t *testing.T) {
 	old := os.Stdin
 	t.Cleanup(func() { os.Stdin = old })
+	// Isolated home + no sidecar. Default sidecar is the live daemon.
+	t.Setenv("LOSSLESS_SIDECAR", "off")
+	t.Setenv("LOSSLESS_HOME", t.TempDir())
 
 	setStdin := func(s string) {
 		r, w, err := os.Pipe()

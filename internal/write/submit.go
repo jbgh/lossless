@@ -35,9 +35,12 @@ func catchUpWait(source string) time.Duration {
 // If the sidecar timed out it may already be writing — spool and let --ensure
 // replay (a no-op if the cursor moved). Never open the store in that case.
 func SubmitCatchUp(req CatchUpRequest) {
-	err := postCatchUp(SidecarURL(), req, catchUpWait(req.Source))
-	if err == nil {
-		return
+	var err error
+	if side := SidecarURL(); side != "" {
+		err = postCatchUp(side, req, catchUpWait(req.Source))
+		if err == nil {
+			return
+		}
 	}
 	home := MemoryHome()
 	if uncertainSidecar(err) {

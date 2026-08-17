@@ -132,6 +132,14 @@ func TestPackScoreCutoffDiversityAndEvict(t *testing.T) {
 		{score: 1, rec: claim.Record{ID: "a", CreatedAt: "1"}},
 		{score: 1, rec: claim.Record{ID: "c", CreatedAt: "2"}},
 	})
+
+	// oon state does not take a slot when a decision is available
+	dec := scored{score: 3, rec: claim.Record{ID: "DEC", Type: "decision", Text: "we decided to use jose"}}
+	oon := scored{score: 4, oon: 1, rec: claim.Record{ID: "SKILL", Type: "state", Text: "a model can ignore a skill"}}
+	got = pack([]scored{oon, dec}, 1200, false)
+	if len(got) != 1 || got[0].rec.ID != "DEC" {
+		t.Fatalf("oon state packed: %+v", got)
+	}
 }
 
 func itoa(i int) string {
@@ -343,7 +351,7 @@ func TestAskMemoraLikeDoesNotFloodFaileds(t *testing.T) {
 	})
 	writeRec(t, st, claim.Record{
 		ID: "WHY", Type: "constraint", SessionID: "live",
-		Text: "the scrubbing video doesn't seem to work why don't you verify on the emulator and you'll see what i mean",
+		Text:      "the scrubbing video doesn't seem to work why don't you verify on the emulator and you'll see what i mean",
 		CreatedAt: "2026-08-02T00:00:00Z",
 	})
 	writeRec(t, st, claim.Record{
@@ -352,17 +360,17 @@ func TestAskMemoraLikeDoesNotFloodFaileds(t *testing.T) {
 	})
 	writeRec(t, st, claim.Record{
 		ID: "CI", Type: "failed", SessionID: "live",
-		Text: "CI failed on PR #3088 — investigating and fixing before TestFlight.",
+		Text:      "CI failed on PR #3088 — investigating and fixing before TestFlight.",
 		CreatedAt: "2026-08-04T00:00:00Z",
 	})
 	writeRec(t, st, claim.Record{
 		ID: "LIGHTBOX", Type: "decision", SessionID: "live",
-		Text: "Android Photos-like lightbox open uses a same-window hero overlay above NavHost.",
+		Text:      "Android Photos-like lightbox open uses a same-window hero overlay above NavHost.",
 		CreatedAt: "2026-08-05T00:00:00Z",
 	})
 	writeRec(t, st, claim.Record{
 		ID: "QA", Type: "constraint", SessionID: "live",
-		Text: "Android lightbox QA runs on memora-eu. Never mobile-down --full on the shared emulator.",
+		Text:  "Android lightbox QA runs on memora-eu. Never mobile-down --full on the shared emulator.",
 		Paths: []string{"scripts/mobile/mobile-up.sh"}, CreatedAt: "2026-08-06T00:00:00Z",
 	})
 	out := askAt(t, st, Request{
@@ -391,27 +399,27 @@ func TestAskDropsExtractNoiseAndKeepsRealWork(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{
 		ID: "REALFAIL", Type: "failed", SessionID: "live",
-		Text: "If a harness rewrites chat_history.jsonl smaller, a cursor past EOF makes catch-up a no-op.",
+		Text:  "If a harness rewrites chat_history.jsonl smaller, a cursor past EOF makes catch-up a no-op.",
 		Paths: []string{"internal/write/catchup.go"}, CreatedAt: "2026-08-17T05:12:00Z",
 	})
 	writeRec(t, st, claim.Record{
 		ID: "REALDEC", Type: "decision", SessionID: "manual",
-		Text: "Keep the MCP/HTTP read verb as ask. Do not say ask pack; the result is context.",
+		Text:  "Keep the MCP/HTTP read verb as ask. Do not say ask pack; the result is context.",
 		Paths: []string{"internal/harness/skill.md"}, CreatedAt: "2026-08-17T06:20:00Z",
 	})
 	writeRec(t, st, claim.Record{
 		ID: "NOISE1", Type: "failed", SessionID: "live",
-		Text: "| **Claims** | owner/repo | A Grok `failed` on acme/api is what Claude’s ask is supposed to see.",
+		Text:      "| **Claims** | owner/repo | A Grok `failed` on acme/api is what Claude’s ask is supposed to see.",
 		CreatedAt: "2026-08-17T05:47:00Z",
 	})
 	writeRec(t, st, claim.Record{
 		ID: "NOISE2", Type: "failed", SessionID: "live",
-		Text: "Force in the best failed-overlap (do not repeat burned work).",
+		Text:      "Force in the best failed-overlap (do not repeat burned work).",
 		CreatedAt: "2026-08-17T06:21:00Z",
 	})
 	writeRec(t, st, claim.Record{
 		ID: "NOISE3", Type: "failed", SessionID: "live",
-		Text: "Raising to 8 or 10 would make recall look better with extract noise classified as `failed`.",
+		Text:      "Raising to 8 or 10 would make recall look better with extract noise classified as `failed`.",
 		CreatedAt: "2026-08-17T06:17:00Z",
 	})
 	out := askAt(t, st, Request{

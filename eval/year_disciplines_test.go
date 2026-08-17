@@ -1,8 +1,9 @@
 package eval
 
 // Year-plus multi-discipline sim: generate Grok/Claude/Codex JSONL
-// sessions across mobile, kernel, frontend, backend, game, and infra,
-// ingest via CatchUp, backdate golds, then ask as if it is Aug 2026.
+// sessions across mobile, kernel, frontend, backend, game, infra,
+// embedded, and data, ingest via CatchUp, backdate golds, then ask
+// as if it is Aug 2026. Inspect + Explain dump tape/claims/why.
 
 import (
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"lossless/internal/claim"
+	"lossless/internal/inspect"
 	"lossless/internal/retrieve"
 	"lossless/internal/store"
 	"lossless/internal/write"
@@ -116,6 +119,34 @@ func discWorlds() []discWorld {
 				{"infra/secrets.ts", "kms wrap"},
 			},
 		},
+		{
+			name: "embedded", project: "acme/fw",
+			gold: []discGold{
+				{0, "2025-09-08T18:00:00Z", "decision", "We decided to use FreeRTOS, not bare metal, in src/rtos/main.c.", "src/rtos/main.c", "FreeRTOS"},
+				{12, "2025-12-18T15:00:00Z", "failed", "Watchdog reset failed in src/rtos/main.c on brownout.", "src/rtos/main.c", "Watchdog reset"},
+				{26, "2026-04-16T11:00:00Z", "constraint", "Never disable interrupts around I2C in src/rtos/main.c.", "src/rtos/main.c", "disable interrupts"},
+			},
+			chatter: [][2]string{
+				{"src/hal/i2c.c", "nack retry"},
+				{"src/hal/adc.c", "oversample"},
+				{"src/boot/vector.c", "vtors"},
+				{"src/net/lwip.c", "mtu clamp"},
+			},
+		},
+		{
+			name: "data", project: "acme/lake",
+			gold: []discGold{
+				{0, "2025-10-10T18:00:00Z", "decision", "We decided to use Iceberg, not Hive, in jobs/compact.py.", "jobs/compact.py", "Iceberg"},
+				{12, "2026-01-22T16:00:00Z", "failed", "Compaction failed in jobs/compact.py on the late partition.", "jobs/compact.py", "Compaction failed"},
+				{26, "2026-05-07T10:00:00Z", "constraint", "Never drop a partition from a laptop in jobs/compact.py.", "jobs/compact.py", "drop a partition"},
+			},
+			chatter: [][2]string{
+				{"jobs/ingest.py", "schema drift"},
+				{"jobs/dq.py", "null spike"},
+				{"jobs/backfill.py", "watermark"},
+				{"jobs/expire.py", "retain days"},
+			},
+		},
 	}
 }
 
@@ -170,7 +201,13 @@ func TestYearDisciplinesCatchUpAndAsk(t *testing.T) {
 	}
 	for _, w := range worlds {
 		recs, _ := st.ListActive(w.project)
+		noise := 0
 		var found []string
+		for _, c := range recs {
+			if retrieve.ExtractNoise(c) {
+				noise++
+			}
+		}
 		for _, g := range w.gold {
 			ok := false
 			for _, c := range recs {
@@ -183,42 +220,50 @@ func TestYearDisciplinesCatchUpAndAsk(t *testing.T) {
 				t.Errorf("extract missed %s gold %q", w.name, g.needle)
 			}
 		}
-		t.Logf("%s golds: %s (n=%d)", w.name, strings.Join(found, " | "), len(recs))
+		rep, err := inspect.Build(st, w.project)
+		if err != nil {
+			t.Fatal(w.name, err)
+		}
+		t.Logf("inspect %s  claims=%d noise=%d golds=%s", w.name, len(recs), noise, strings.Join(found, " | "))
+		if rep.Detail == nil || rep.Detail.ByType["failed"] == 0 || rep.Detail.ByType["decision"] == 0 {
+			t.Errorf("%s inspect types %+v", w.name, rep.Detail)
+		}
 	}
 
 	eng := retrieve.Engine{Store: st, Now: func() time.Time { return discNow }}
 	var hits, miss int
 	for _, ask := range discAsks() {
-		out, err := eng.Ask(ask.req)
+		tr, err := eng.Explain(ask.req)
 		if err != nil {
 			t.Fatal(ask.name, err)
 		}
-		blob := textsOfHits(out)
+		blob := discTraceBlob(tr)
 		ok := true
 		for _, n := range ask.needles {
 			if !strings.Contains(blob, n) {
-				t.Errorf("%s: missing %q in %+v", ask.name, n, summarizePacket(out))
+				t.Errorf("%s: missing %q packed=%s dropped=%s", ask.name, n, discPacked(tr), discDropped(tr))
 				ok = false
 			}
 		}
 		for _, n := range ask.forbid {
 			if strings.Contains(blob, n) {
-				t.Errorf("%s: leaked %q in %+v", ask.name, n, summarizePacket(out))
+				t.Errorf("%s: leaked %q packed=%s", ask.name, n, discPacked(tr))
 				ok = false
 			}
 		}
-		if liveNoiseHits(out) {
-			t.Errorf("%s: extract noise packed: %+v", ask.name, summarizePacket(out))
+		if discNoisePacked(tr) {
+			t.Errorf("%s: extract noise packed: %s", ask.name, discPacked(tr))
 			ok = false
 		}
 		if ok {
 			hits++
-			t.Logf("OK  %-22s %s", ask.name, summarizePacket(out))
+			t.Logf("OK  %-24s %s", ask.name, discPacked(tr))
 		} else {
 			miss++
+			t.Logf("MISS %-24s dropped %s", ask.name, discDropped(tr))
 		}
 	}
-	t.Logf("discipline asks %d/%d corpus=%d", hits, hits+miss, st.CountActive())
+	t.Logf("discipline asks %d/%d corpus=%d worlds=%d", hits, hits+miss, st.CountActive(), len(worlds))
 	if miss > 0 {
 		t.Fatalf("discipline year accuracy %d/%d", hits, hits+miss)
 	}
@@ -236,7 +281,7 @@ func discAsks() []discAsk {
 			name:    "mobile-year-later-hero",
 			req:     retrieve.Request{Project: "acme/lens", Question: "how does lightbox open", Paths: []string{"ios/LightboxView.swift"}},
 			needles: []string{"same-window hero"},
-			forbid:  []string{"MSI-X", "Pulumi", "jose", "30Hz"},
+			forbid:  []string{"MSI-X", "Pulumi", "jose", "30Hz", "FreeRTOS", "Iceberg"},
 		},
 		{
 			name:    "mobile-who-reacted",
@@ -253,7 +298,7 @@ func discAsks() []discAsk {
 			name:    "kernel-msix",
 			req:     retrieve.Request{Project: "acme/nic", Question: "which interrupt model", Paths: []string{"drivers/net/acme_nic.c"}},
 			needles: []string{"MSI-X"},
-			forbid:  []string{"same-window hero", "CSS modules", "jose"},
+			forbid:  []string{"same-window hero", "CSS modules", "jose", "FreeRTOS", "Iceberg"},
 		},
 		{
 			name:    "kernel-dma",
@@ -335,12 +380,99 @@ func discAsks() []discAsk {
 			needles: []string{"laptop to prod"},
 		},
 		{
+			name:    "embedded-rtos",
+			req:     retrieve.Request{Project: "acme/fw", Question: "why not bare metal", Paths: []string{"src/rtos/main.c"}},
+			needles: []string{"FreeRTOS"},
+			forbid:  []string{"Iceberg", "jose", "Pulumi", "same-window hero"},
+		},
+		{
+			name:    "embedded-watchdog",
+			req:     retrieve.Request{Project: "acme/fw", Goal: "fix brownout reset", Paths: []string{"src/rtos/main.c"}},
+			needles: []string{"Watchdog reset"},
+			forbid:  []string{"Compaction failed", "DMA map"},
+		},
+		{
+			name:    "embedded-i2c-irq",
+			req:     retrieve.Request{Project: "acme/fw", Question: "can we disable irq around i2c", Paths: []string{"src/rtos/main.c"}},
+			needles: []string{"disable interrupts"},
+		},
+		{
+			name:    "data-iceberg",
+			req:     retrieve.Request{Project: "acme/lake", Question: "why not Hive", Paths: []string{"jobs/compact.py"}},
+			needles: []string{"Iceberg"},
+			forbid:  []string{"FreeRTOS", "jose", "30Hz"},
+		},
+		{
+			name:    "data-compact",
+			req:     retrieve.Request{Project: "acme/lake", Goal: "fix late partition", Paths: []string{"jobs/compact.py"}},
+			needles: []string{"Compaction failed"},
+			forbid:  []string{"Watchdog reset", "State lock"},
+		},
+		{
+			name:    "data-drop-partition",
+			req:     retrieve.Request{Project: "acme/lake", Question: "drop partition from my laptop", Paths: []string{"jobs/compact.py"}},
+			needles: []string{"drop a partition"},
+		},
+		{
 			name:    "empty-project",
 			req:     retrieve.Request{Project: "acme/none", Question: "jose"},
 			needles: nil,
-			forbid:  []string{"jose", "Pulumi", "Who-reacted"},
+			forbid:  []string{"jose", "Pulumi", "Who-reacted", "FreeRTOS", "Iceberg"},
 		},
 	}
+}
+
+func discTraceBlob(tr retrieve.Trace) string {
+	var b strings.Builder
+	for _, h := range tr.Packed {
+		b.WriteString(h.Type)
+		b.WriteByte(':')
+		b.WriteString(h.Text)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func discPacked(tr retrieve.Trace) string {
+	var parts []string
+	for _, h := range tr.Packed {
+		parts = append(parts, h.Type+":"+clipDisc(h.Text, 42)+" ["+h.Why+"]")
+	}
+	if len(parts) == 0 {
+		return "(empty)"
+	}
+	return strings.Join(parts, " | ")
+}
+
+func discDropped(tr retrieve.Trace) string {
+	var parts []string
+	for i, h := range tr.Dropped {
+		if i >= 4 {
+			break
+		}
+		parts = append(parts, h.Type+":"+clipDisc(h.Text, 36)+" ["+h.Why+"]")
+	}
+	if len(parts) == 0 {
+		return "(none)"
+	}
+	return strings.Join(parts, " | ")
+}
+
+func discNoisePacked(tr retrieve.Trace) bool {
+	for _, h := range tr.Packed {
+		if retrieve.ExtractNoise(claim.Record{Type: h.Type, Text: h.Text, Paths: h.Paths}) {
+			return true
+		}
+	}
+	return false
+}
+
+func clipDisc(s string, n int) string {
+	s = strings.ReplaceAll(s, "\n", " ")
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 func discSession(w discWorld, sess, worldSess int) string {

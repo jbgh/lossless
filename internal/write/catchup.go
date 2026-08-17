@@ -6,10 +6,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
 
+	"lossless/internal/claim"
 	"lossless/internal/projectkey"
 	"lossless/internal/redact"
 	"lossless/internal/store"
@@ -63,6 +65,9 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 	session := req.SessionID
 	if session == "" {
 		session = strings.TrimSuffix(filepath.Base(req.JSONL), ".jsonl")
+	}
+	if refuseTestIngest(st.Root, req.WorkspaceRoot, req.JSONL, session) {
+		return CatchUpResult{Noop: true}, nil
 	}
 
 	unlock, err := lockSession(st, project, session)
@@ -349,3 +354,25 @@ func dumpOpenCode(st *store.Store, req *CatchUpRequest) (string, error) {
 	}
 	return writeVirtualJSONL(st, req.SessionID, lines)
 }
+
+// goTestDir is a testing.T temp folder: TestName + digits, e.g. TestRunHookGrok805684300.
+var goTestDir = regexp.MustCompile(`(?:^|/)Test[A-Z][A-Za-z0-9_]*[0-9]{3,}(?:/|$)`)
+
+// refuseTestIngest keeps go-test workspaces and bench fixtures out of a
+// live user home. Isolated test stores (their root is itself a Test* path)
+// still ingest so hook/catch-up tests can run.
+func refuseTestIngest(storeRoot, workspace, jsonl, session string) bool {
+	if !claim.FixtureSession(session) && !goTestPath(workspace) && !goTestPath(jsonl) {
+		return false
+	}
+	return !goTestPath(storeRoot)
+}
+
+func GoTestPath(p string) bool {
+	if p == "" {
+		return false
+	}
+	return goTestDir.MatchString(filepath.ToSlash(p))
+}
+
+func goTestPath(p string) bool { return GoTestPath(p) }

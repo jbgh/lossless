@@ -53,6 +53,43 @@ func TestCatchUpCopiesIntoOwnedRaw(t *testing.T) {
 	}
 }
 
+func TestCatchUpRefusesLiveTestIngest(t *testing.T) {
+	root := filepath.Join(os.TempDir(), "ll-refuse-live")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	st, err := store.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ws := t.TempDir()
+	src := writeJSONL(t, ws, "chat.jsonl",
+		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}`+"\n")
+	res, err := CatchUp(st, CatchUpRequest{
+		JSONL: src, WorkspaceRoot: ws, Harness: "grok", SessionID: "sess1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Noop || res.Extracted != 0 {
+		t.Fatalf("live home ingested a go-test session: %+v", res)
+	}
+	if st.CountActive() != 0 {
+		t.Fatal("claims leaked")
+	}
+}
+
+func TestGoTestPath(t *testing.T) {
+	if !goTestPath("/var/folders/xx/T/TestRunHookGrok805684300/003") {
+		t.Fatal("go test temp")
+	}
+	if goTestPath("/Users/jay/developer/lossless") || goTestPath("/tmp/TestingApp") {
+		t.Fatal("real path")
+	}
+}
+
 func TestCatchUpIdempotent(t *testing.T) {
 	st := tmpStore(t)
 	src := writeJSONL(t, t.TempDir(), "chat.jsonl",

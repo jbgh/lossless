@@ -46,7 +46,11 @@ func NewToken() (string, error) {
 }
 
 func Sidecar() string {
-	if u := os.Getenv("LOSSLESS_SIDECAR"); u != "" {
+	u := strings.TrimSpace(os.Getenv("LOSSLESS_SIDECAR"))
+	if u == "off" || u == "0" || u == "-" {
+		return ""
+	}
+	if u != "" {
 		return u
 	}
 	return "http://127.0.0.1:7432"

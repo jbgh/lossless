@@ -66,7 +66,52 @@ func TestBuildAndAskInspect(t *testing.T) {
 	if len(ask.Hits) == 0 || !strings.Contains(ask.Hits[0].Text, "jose") {
 		t.Fatalf("%+v", ask)
 	}
-	if ask.Hits[0].Why == "" || ask.Hits[0].Path == 0 {
+	if ask.Hits[0].Why == "" || ask.Hits[0].Path == 0 || !strings.Contains(ask.Hits[0].Why, "score=") {
 		t.Fatalf("why %+v", ask.Hits[0])
+	}
+
+	if _, err := st.WriteClaim(claim.Record{
+		ID: "01NOISE", Type: "state", ProjectKey: "acme/api",
+		Text:  "Working on src/middleware/auth.ts next.",
+		Paths: []string{"src/middleware/auth.ts"}, CreatedAt: "2026-08-01T00:00:00Z",
+		Harness: "grok", SessionID: "s1", Status: "active", Source: "import",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	det2, err := Build(st, "acme/api")
+	if err != nil || det2.Detail == nil || det2.Detail.RecentNoise < 1 {
+		t.Fatalf("noise %+v %v", det2.Detail, err)
+	}
+	var buf2 strings.Builder
+	Format(&buf2, det2)
+	if !strings.Contains(buf2.String(), "ask-would-drop") || !strings.Contains(buf2.String(), "noise") {
+		t.Fatal(buf2.String())
+	}
+
+	ask2, err := Ask(st, retrieve.Request{
+		Project: "acme/api", Question: "why not jsonwebtoken",
+		Paths: []string{"src/middleware/auth.ts"},
+	}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundNoise := false
+	for _, d := range ask2.Dropped {
+		if strings.Contains(d.Why, "extract-noise") && strings.Contains(d.Text, "Working on") {
+			foundNoise = true
+		}
+	}
+	if !foundNoise {
+		t.Fatalf("expected extract-noise drop %+v", ask2.Dropped)
+	}
+
+	jsonl := filepath.Join(t.TempDir(), "sess.jsonl")
+	line := `{"role":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."}` + "\n"
+	if err := os.WriteFile(jsonl, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ex, err := ExtractFile(jsonl, "acme/api")
+	if err != nil || ex.Kept < 1 {
+		t.Fatalf("%+v %v", ex, err)
 	}
 }

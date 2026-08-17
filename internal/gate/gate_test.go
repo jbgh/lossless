@@ -64,4 +64,22 @@ func TestSkipProse(t *testing.T) {
 	if SkipProse("We decided to use jose, not jsonwebtoken, for Edge.") {
 		t.Fatal("real decision")
 	}
+	if SkipProse("Skip-list phrases live in internal/gate (Fold curly apostrophes).") {
+		t.Fatal("curly apostrophe in a real decision")
+	}
+	if !SkillTalk("This is still not a guarantee — a model can ignore a skill — but it is no longer “one sentence on a tool next to grep.") {
+		t.Fatal("skill talk")
+	}
+	if !Truncated("swift`, …) and looked like “this failed, so that decision is dead.") {
+		t.Fatal("mid-sentence fragment")
+	}
+	if !Truncated("` and trailing-slash paths; YAML `text: Redis failed…` |") {
+		t.Fatal("pipe fragment")
+	}
+	if !ListChrome("- iOS hero thumb cache probes a fixed pixel-bucket list; if that misses, the first frame can be empty instead of the last good decode.", true) {
+		t.Fatal("long pathless bullet")
+	}
+	if SkipProse("Always never log Authorization headers in src/middleware/auth.ts.") {
+		t.Fatal("user constraint")
+	}
 }

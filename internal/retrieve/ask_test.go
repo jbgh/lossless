@@ -107,12 +107,12 @@ func TestAskDropsFixtureSessions(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{
 		ID: "FIXJOSE", Type: "decision", SessionID: "grok-auth", Source: "import",
-		Text: "We decided to use jose, not jsonwebtoken, for Edge.",
+		Text:      "We decided to use jose, not jsonwebtoken, for Edge.",
 		CreatedAt: "2026-08-01T00:00:00Z",
 	})
 	writeRec(t, st, claim.Record{
 		ID: "REALSKILL", Type: "decision", SessionID: "01a003db-f4a6-7f43-a694-082428bbff32", Source: "remember",
-		Text: "Setup writes the lossless skill into every harness native dir.",
+		Text:      "Setup writes the lossless skill into every harness native dir.",
 		CreatedAt: "2026-08-17T04:54:39Z",
 	})
 	out := askAt(t, st, Request{
@@ -126,6 +126,32 @@ func TestAskDropsFixtureSessions(t *testing.T) {
 	}
 	if !strings.Contains(got, "skill") {
 		t.Fatalf("real decision missing: %+v", out)
+	}
+}
+
+func TestAskDropsOonSkillState(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "JOSE", Type: "decision",
+		Text:  "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts.",
+		Paths: []string{"src/middleware/auth.ts"}, CreatedAt: "2026-07-01T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "SKILLSTATE", Type: "state",
+		Text:  "This is still not a guarantee — a model can ignore a skill — but it is no longer one sentence on a tool next to grep.",
+		Paths: []string{".claude/skills/lossless/SKILL.md"}, CreatedAt: "2026-08-17T04:41:01Z",
+	})
+	out := askAt(t, st, Request{
+		Project:  "acme/api",
+		Question: "why not jsonwebtoken",
+		Goal:     "add inspect visibility",
+		Paths:    []string{"src/middleware/auth.ts", "internal/inspect/inspect.go"},
+	})
+	if textsOf(out) != "" && strings.Contains(textsOf(out), "ignore a skill") {
+		t.Fatalf("skill-state packed: %+v", out.Context)
+	}
+	if !strings.Contains(textsOf(out), "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
 	}
 }
 

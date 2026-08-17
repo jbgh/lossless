@@ -33,6 +33,7 @@ go build -o lossless ./cmd/lossless
 ./lossless bench --root testdata/bench
 ./lossless setup            # hooks + MCP for every harness, keep the daemon up
 ./lossless doctor           # daemon, hooks, MCP, user service
+./lossless inspect          # tape vs claims vs last packs; --project KEY --ask --jsonl FILE; --prune
 ./lossless serve            # REST + /mcp; watches session files
 ./lossless install-hooks    # Grok + Claude + Codex + Pi + OpenCode
 ./lossless install-mcp      # MCP for Grok, Claude, Codex, Pi, OpenCode

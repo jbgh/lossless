@@ -23,6 +23,43 @@ type ExtractOpts struct {
 	Harness       string
 	SessionID     string
 	Source        string
+	Trace         *ExtractTrace
+}
+
+// ExtractTrace is why extract kept or skipped sentences. Nil on the live path.
+type ExtractTrace struct {
+	Messages   int            `json:"messages"`
+	Sentences  int            `json:"sentences"`
+	Drafts     int            `json:"drafts"`
+	Kept       int            `json:"kept"`
+	SkipCounts map[string]int `json:"skip_counts,omitempty"`
+	Samples    []SkipSample   `json:"samples,omitempty"`
+}
+
+type SkipSample struct {
+	Reason string `json:"reason"`
+	Text   string `json:"text"`
+}
+
+func (t *ExtractTrace) note(reason, sent string) {
+	if t == nil {
+		return
+	}
+	if t.SkipCounts == nil {
+		t.SkipCounts = map[string]int{}
+	}
+	t.SkipCounts[reason]++
+	if len(t.Samples) < 16 {
+		t.Samples = append(t.Samples, SkipSample{Reason: reason, Text: clipSent(sent, 120)})
+	}
+}
+
+func (t *ExtractTrace) skip(reason, sent string) {
+	if t == nil {
+		return
+	}
+	t.Sentences++
+	t.note(reason, sent)
 }
 
 func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
@@ -32,11 +69,15 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			usable = append(usable, m)
 		}
 	}
+	if opts.Trace != nil {
+		opts.Trace.Messages = len(usable)
+	}
 	recent := tail(usable, 40, 32000)
 	inTail := map[int64]bool{}
 	for _, m := range recent {
 		inTail[m.Offset] = true
 	}
+	tr := opts.Trace
 	drafts := []claim.Record{}
 	for _, msg := range usable {
 		if msg.Role == "tool" {
@@ -45,25 +86,44 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 		near := nearby(msg, usable)
 		for _, sent := range splitSentences(msg.Text) {
 			if skipSentence(sent) {
+				reason := "skip-prose"
+				if !gate.SkipProse(sent) {
+					reason = "list-chrome"
+				}
+				tr.skip(reason, sent)
 				continue
 			}
 			paths := redact.FilterPaths(claim.Uniq(append(findPaths(sent), near...)))
 			typ := classify(sent, msg)
 			if typ == "failed" && (gate.StatusFailed(sent) || gate.FailedAsObject(sent) || !groundedFailed(sent, paths)) {
+				reason := "ungrounded-failed"
+				if gate.StatusFailed(sent) {
+					reason = "status-failed"
+				} else if gate.FailedAsObject(sent) {
+					reason = "failed-as-object"
+				}
+				tr.skip(reason, sent)
 				continue
 			}
 			if typ == "" {
+				tr.skip("untyped", sent)
 				continue
 			}
 			if (typ == "state" || typ == "thread") && !inTail[msg.Offset] {
+				tr.skip("state-not-in-tail", sent)
 				continue
 			}
 			text := strings.TrimSpace(sent)
 			if len(text) < 12 || len(text) > 600 {
+				tr.skip("length", sent)
 				continue
 			}
 			if redact.ShouldDropClaim(text, paths) {
+				tr.skip("redact", sent)
 				continue
+			}
+			if tr != nil {
+				tr.Sentences++
 			}
 			drafts = append(drafts, makeRec(typ, text, paths, msg.Offset, opts))
 		}
@@ -79,10 +139,36 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 	for _, r := range dedup {
 		out = append(out, r)
 	}
+	if tr != nil {
+		tr.Drafts = len(out)
+	}
 	if len(out) > 12 {
-		out = capExtract(out, 12, 5)
+		kept := capExtract(out, 12, 5)
+		if tr != nil {
+			stay := map[string]bool{}
+			for _, r := range kept {
+				stay[r.ClaimHash] = true
+			}
+			for _, r := range out {
+				if !stay[r.ClaimHash] {
+					tr.note("cap-extract", r.Text)
+				}
+			}
+		}
+		out = kept
+	}
+	if tr != nil {
+		tr.Kept = len(out)
 	}
 	return out
+}
+
+func clipSent(s string, n int) string {
+	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 func capExtract(in []claim.Record, total, perType int) []claim.Record {

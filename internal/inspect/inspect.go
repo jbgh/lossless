@@ -2,9 +2,12 @@
 package inspect
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -12,25 +15,31 @@ import (
 	"lossless/internal/projectkey"
 	"lossless/internal/retrieve"
 	"lossless/internal/store"
+	"lossless/internal/write"
 )
 
 type Report struct {
-	Home     string               `json:"home"`
-	Records  int                  `json:"records"`
-	Vectors  int                  `json:"vectors"`
-	Embedder string               `json:"embedder"`
-	Projects []store.ProjectStats `json:"projects"`
-	Cursors  []store.CursorRow    `json:"cursors,omitempty"`
-	Detail   *ProjectDetail       `json:"detail,omitempty"`
-	Ask      *AskView             `json:"ask,omitempty"`
+	Home       string               `json:"home"`
+	Records    int                  `json:"records"`
+	Vectors    int                  `json:"vectors"`
+	Embedder   string               `json:"embedder"`
+	Projects   []store.ProjectStats `json:"projects"`
+	Cursors    []store.CursorRow    `json:"cursors,omitempty"`
+	CursorNote map[string]string    `json:"cursor_note,omitempty"`
+	Notes      []string             `json:"notes,omitempty"`
+	Detail     *ProjectDetail       `json:"detail,omitempty"`
+	Ask        *AskView             `json:"ask,omitempty"`
+	Extract    *ExtractView         `json:"extract,omitempty"`
+	Prune      *PruneResult         `json:"prune,omitempty"`
 }
 
 type ProjectDetail struct {
-	Key      string          `json:"key"`
-	ByType   map[string]int  `json:"by_type"`
-	Sessions []store.Session `json:"sessions"`
-	Recent   []claim.Record  `json:"recent"`
-	LastAsks []AskPack       `json:"last_asks"`
+	Key         string          `json:"key"`
+	ByType      map[string]int  `json:"by_type"`
+	Sessions    []store.Session `json:"sessions"`
+	Recent      []claim.Record  `json:"recent"`
+	RecentNoise int             `json:"recent_noise"`
+	LastAsks    []AskPack       `json:"last_asks"`
 }
 
 type AskPack struct {
@@ -48,7 +57,11 @@ type HitView struct {
 	When    string   `json:"when,omitempty"`
 	Paths   []string `json:"paths,omitempty"`
 	AgeDays float64  `json:"age_days,omitempty"`
+	Score   float64  `json:"score,omitempty"`
 	Path    float64  `json:"path,omitempty"`
+	Symbol  float64  `json:"symbol,omitempty"`
+	Fail    float64  `json:"fail,omitempty"`
+	Shipped float64  `json:"shipped,omitempty"`
 	Why     string   `json:"why,omitempty"`
 }
 
@@ -56,6 +69,19 @@ type AskView struct {
 	Project  string    `json:"project"`
 	Warnings []string  `json:"warnings"`
 	Hits     []HitView `json:"hits"`
+	Dropped  []HitView `json:"dropped,omitempty"`
+}
+
+type ExtractView struct {
+	JSONL      string             `json:"jsonl"`
+	Note       string             `json:"note,omitempty"`
+	Messages   int                `json:"messages"`
+	Sentences  int                `json:"sentences"`
+	Drafts     int                `json:"drafts"`
+	Kept       int                `json:"kept"`
+	SkipCounts map[string]int     `json:"skip_counts,omitempty"`
+	Claims     []claim.Record     `json:"claims,omitempty"`
+	Samples    []write.SkipSample `json:"samples,omitempty"`
 }
 
 func Build(st *store.Store, project string) (Report, error) {
@@ -77,6 +103,12 @@ func Build(st *store.Store, project string) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
+	allSess, err := st.ListSessions()
+	if err != nil {
+		return Report{}, err
+	}
+	rep.CursorNote = cursorNotes(allSess, curs)
+	rep.Notes = healthNotes(stats, curs)
 	if project == "" {
 		rep.Cursors = curs
 		return rep, nil
@@ -90,10 +122,6 @@ func Build(st *store.Store, project string) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	allSess, err := st.ListSessions()
-	if err != nil {
-		return Report{}, err
-	}
 	for _, s := range allSess {
 		if s.Project == key {
 			det.Sessions = append(det.Sessions, s)
@@ -102,6 +130,11 @@ func Build(st *store.Store, project string) (Report, error) {
 	det.Recent, err = st.ListRecentActive(key, 8)
 	if err != nil {
 		return Report{}, err
+	}
+	for _, c := range det.Recent {
+		if retrieve.ExtractNoise(c) {
+			det.RecentNoise++
+		}
 	}
 	acts, err := st.RecentActions(key, "", 40)
 	if err != nil {
@@ -122,47 +155,69 @@ func Ask(st *store.Store, req retrieve.Request, now time.Time) (*AskView, error)
 	if !now.IsZero() {
 		eng.Now = func() time.Time { return now }
 	}
-	out, err := eng.Ask(req)
+	tr, err := eng.Explain(req)
 	if err != nil {
 		return nil, err
 	}
-	view := &AskView{Project: out.Project, Warnings: out.Warnings}
-	for _, h := range out.Context {
-		view.Hits = append(view.Hits, describe(st, h, req.Paths, now))
+	view := &AskView{Project: tr.Project, Warnings: tr.Warnings}
+	for _, h := range tr.Packed {
+		view.Hits = append(view.Hits, fromTrace(h))
+	}
+	for _, h := range tr.Dropped {
+		view.Dropped = append(view.Dropped, fromTrace(h))
 	}
 	return view, nil
 }
 
-func describe(st *store.Store, h retrieve.Hit, askPaths []string, now time.Time) HitView {
-	v := HitView{ID: h.ID, Type: h.Type, Text: h.Text, When: h.When, Paths: h.Paths}
-	if now.IsZero() {
-		now = time.Now().UTC()
+func fromTrace(h retrieve.TraceHit) HitView {
+	return HitView{
+		ID: h.ID, Type: h.Type, Text: h.Text, When: h.When, Paths: h.Paths,
+		AgeDays: h.AgeDays, Score: h.Score, Path: h.Path, Symbol: h.Symbol,
+		Fail: h.Fail, Shipped: h.Shipped, Why: h.Why,
 	}
-	if t, err := time.Parse(time.RFC3339, h.When); err == nil {
-		v.AgeDays = now.Sub(t).Hours() / 24
-		if v.AgeDays < 0 {
-			v.AgeDays = 0
-		}
-	}
-	if rec, ok := st.Get(h.ID); ok {
-		v.Path = jaccard(claim.PathKeys(askPaths), claim.PathKeys(rec.Paths))
-	}
-	v.Why = why(h.Type, v.Path, v.AgeDays)
-	return v
 }
 
-func why(typ string, path, age float64) string {
-	var bits []string
-	bits = append(bits, typ)
-	if path > 0 {
-		bits = append(bits, fmt.Sprintf("path=%.2f", path))
-	} else {
-		bits = append(bits, "path=0")
+func ExtractFile(path, project string) (*ExtractView, error) {
+	data, note, err := readJSONL(path)
+	if err != nil {
+		return nil, err
 	}
-	if age >= 1 {
-		bits = append(bits, fmt.Sprintf("age=%.0fd", age))
+	msgs, _ := write.ParseJSONL(data, 0)
+	tr := &write.ExtractTrace{}
+	recs := write.Extract(msgs, write.ExtractOpts{ProjectKey: project, Source: "inspect", Trace: tr})
+	return &ExtractView{
+		JSONL: path, Note: note, Messages: tr.Messages, Sentences: tr.Sentences,
+		Drafts: tr.Drafts, Kept: tr.Kept, SkipCounts: tr.SkipCounts,
+		Claims: recs, Samples: tr.Samples,
+	}, nil
+}
+
+func readJSONL(path string) (string, string, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return "", "", err
 	}
-	return strings.Join(bits, " ")
+	const tail = 4 << 20
+	if fi.Size() <= 8<<20 {
+		b, err := os.ReadFile(path)
+		return string(b), "", err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", "", err
+	}
+	defer f.Close()
+	if _, err := f.Seek(-tail, io.SeekEnd); err != nil {
+		return "", "", err
+	}
+	b, err := io.ReadAll(f)
+	if err != nil {
+		return "", "", err
+	}
+	if i := bytes.IndexByte(b, '\n'); i >= 0 {
+		b = b[i+1:]
+	}
+	return string(b), fmt.Sprintf("tailed last 4M of %s", byteSize(fi.Size())), nil
 }
 
 func packsFromActions(st *store.Store, acts []store.Action, limit int) []AskPack {
@@ -211,64 +266,50 @@ func sessionMatches(sess []store.Session, path string) bool {
 	return false
 }
 
-func jaccard(a, b []string) float64 {
-	if len(a) == 0 || len(b) == 0 {
-		return 0
-	}
-	as := map[string]bool{}
-	for _, x := range a {
-		if x != "" {
-			as[x] = true
-		}
-	}
-	inter := 0
-	for _, x := range b {
-		if x != "" && as[x] {
-			inter++
-		}
-	}
-	union := len(as)
-	seen := map[string]bool{}
-	for _, x := range b {
-		if x == "" || seen[x] {
-			continue
-		}
-		seen[x] = true
-		if !as[x] {
-			union++
-		}
-	}
-	if union == 0 {
-		return 0
-	}
-	return float64(inter) / float64(union)
-}
-
 func Format(w io.Writer, r Report) {
 	fmt.Fprintf(w, "lossless inspect  %s\n", r.Home)
 	fmt.Fprintf(w, "records %d   vectors %d   embedder %s   projects %d\n",
 		r.Records, r.Vectors, r.Embedder, len(r.Projects))
+	if r.Prune != nil {
+		fmt.Fprintf(w, "pruned  projects %d  sessions %d  records %d  noise %d\n",
+			len(r.Prune.DroppedProjects), r.Prune.DroppedSessions, r.Prune.DroppedRecords, r.Prune.SupersededNoise)
+		for _, k := range r.Prune.DroppedProjects {
+			fmt.Fprintf(w, "  drop  %s\n", k)
+		}
+	}
 	if r.Detail == nil {
 		fmt.Fprintln(w)
 		fmt.Fprintf(w, "%-22s %6s %4s %4s %4s %4s %5s %8s  %s\n",
 			"PROJECT", "CLAIMS", "F", "D", "C", "S", "SESS", "RAW", "CURSORS")
+		hidden, hidClaims, hidRaw := 0, 0, int64(0)
 		for _, p := range r.Projects {
+			if tinyPathHash(p) {
+				hidden++
+				hidClaims += p.Active
+				hidRaw += p.RawBytes
+				continue
+			}
+			note := r.CursorNote[p.Key]
+			if note == "" {
+				note = "—"
+			}
 			fmt.Fprintf(w, "%-22s %6d %4d %4d %4d %4d %5d %8s  %s\n",
 				clip(p.Key, 22), p.Active, p.ByType["failed"], p.ByType["decision"],
-				p.ByType["constraint"], p.ByType["state"], p.Sessions, bytes(p.RawBytes),
-				cursorSummary(r.Cursors, p))
+				p.ByType["constraint"], p.ByType["state"], p.Sessions, byteSize(p.RawBytes), note)
 		}
-		nPast, nBehind := 0, 0
-		for _, c := range r.Cursors {
-			switch c.Status {
-			case "past-eof":
-				nPast++
-			case "behind":
-				nBehind++
+		if hidden > 0 {
+			fmt.Fprintf(w, "%-22s %6d %4s %4s %4s %4s %5s %8s  %s\n",
+				fmt.Sprintf("path-* × %d", hidden), hidClaims, "—", "—", "—", "—", "—",
+				byteSize(hidRaw), "no git origin")
+		}
+		if len(r.Notes) > 0 {
+			fmt.Fprintln(w)
+			for _, n := range r.Notes {
+				fmt.Fprintf(w, "note  %s\n", n)
 			}
 		}
-		if nPast+nBehind > 0 {
-			fmt.Fprintf(w, "\ncursors: %d past-eof  %d behind  (catch-up not even with the tape)\n", nPast, nBehind)
+		if r.Extract != nil {
+			formatExtract(w, r.Extract)
 		}
 		return
 	}
@@ -283,16 +324,20 @@ func Format(w io.Writer, r Report) {
 		cur := "no-cursor"
 		for _, c := range r.Cursors {
 			if c.Path == s.JSONL {
-				cur = fmt.Sprintf("%s %s/%s", c.Status, bytes(c.Cursor), bytes(c.Size))
+				cur = fmt.Sprintf("%s %s/%s", c.Status, byteSize(c.Cursor), byteSize(c.Size))
 				break
 			}
 		}
 		fmt.Fprintf(w, "  session  %s  %s  %s  %s\n", s.Harness, s.SessionID, filepath.Base(s.JSONL), cur)
 	}
 	if len(d.Recent) > 0 {
-		fmt.Fprintln(w, "\nrecent claims (stored; ask still drops extract noise)")
+		fmt.Fprintf(w, "\nrecent claims  %d stored, %d ask-would-drop\n", len(d.Recent), d.RecentNoise)
 		for _, c := range d.Recent {
-			fmt.Fprintf(w, "  [%s] %s  %s\n", c.Type, c.CreatedAt, clip(c.Text, 88))
+			tag := "     "
+			if retrieve.ExtractNoise(c) {
+				tag = "noise"
+			}
+			fmt.Fprintf(w, "  [%s] %s %s  %s\n", c.Type, tag, c.CreatedAt, clip(c.Text, 80))
 		}
 	}
 	if len(d.LastAsks) > 0 {
@@ -320,19 +365,141 @@ func Format(w io.Writer, r Report) {
 		for i, h := range r.Ask.Hits {
 			fmt.Fprintf(w, "  %d [%s] %s\n      %s\n", i+1, h.Type, h.Why, clip(h.Text, 100))
 		}
+		if len(r.Ask.Dropped) > 0 {
+			fmt.Fprintln(w, "  dropped")
+			for _, h := range r.Ask.Dropped {
+				fmt.Fprintf(w, "    [%s] %s\n      %s\n", h.Type, h.Why, clip(h.Text, 100))
+			}
+		}
+	}
+	if r.Extract != nil {
+		formatExtract(w, r.Extract)
 	}
 }
 
-func cursorSummary(curs []store.CursorRow, p store.ProjectStats) string {
-	// Overview: count statuses that belong to this project's sessions is
-	// unknown here; print raw-file count as a hint, plus global flags if one project.
-	if p.Sessions == 0 {
-		return "—"
+func formatExtract(w io.Writer, e *ExtractView) {
+	fmt.Fprintf(w, "\nextract  %s\n", e.JSONL)
+	if e.Note != "" {
+		fmt.Fprintf(w, "  %s\n", e.Note)
 	}
-	return fmt.Sprintf("%d sess", p.Sessions)
+	fmt.Fprintf(w, "  messages %d  sentences %d  drafts %d  kept %d\n",
+		e.Messages, e.Sentences, e.Drafts, e.Kept)
+	if len(e.SkipCounts) > 0 {
+		keys := make([]string, 0, len(e.SkipCounts))
+		for k := range e.SkipCounts {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var bits []string
+		for _, k := range keys {
+			bits = append(bits, fmt.Sprintf("%s=%d", k, e.SkipCounts[k]))
+		}
+		fmt.Fprintf(w, "  skip  %s\n", strings.Join(bits, "  "))
+	}
+	for _, c := range e.Claims {
+		fmt.Fprintf(w, "  keep [%s] %s\n", c.Type, clip(c.Text, 88))
+	}
+	if len(e.Samples) > 0 {
+		fmt.Fprintln(w, "  skip samples")
+		for _, s := range e.Samples {
+			fmt.Fprintf(w, "    [%s] %s\n", s.Reason, clip(s.Text, 88))
+		}
+	}
 }
 
-func bytes(n int64) string {
+func healthNotes(stats []store.ProjectStats, curs []store.CursorRow) []string {
+	var out []string
+	tiny := 0
+	for _, p := range stats {
+		if tinyPathHash(p) {
+			tiny++
+		}
+	}
+	if tiny > 0 {
+		out = append(out, fmt.Sprintf("%d path-hash projects with almost no claims (folders without git origin)", tiny))
+	}
+	nPast, nBehind := 0, 0
+	for _, c := range curs {
+		switch c.Status {
+		case "past-eof":
+			nPast++
+		case "behind":
+			nBehind++
+		}
+	}
+	if nPast+nBehind > 0 {
+		out = append(out, fmt.Sprintf("cursors: %d past-eof  %d behind  (catch-up not even with the tape)", nPast, nBehind))
+	}
+	for _, p := range stats {
+		if strings.HasPrefix(p.Key, "path-") || p.Active == 0 || p.RawBytes < 10<<20 {
+			continue
+		}
+		if p.RawBytes/int64(p.Active) >= 500<<10 {
+			out = append(out, fmt.Sprintf("%s: %s tape / %d claims", p.Key, byteSize(p.RawBytes), p.Active))
+		}
+	}
+	return out
+}
+
+func cursorNotes(sess []store.Session, curs []store.CursorRow) map[string]string {
+	jsonlToKey := map[string]string{}
+	for _, s := range sess {
+		if s.Project != "" {
+			jsonlToKey[s.JSONL] = s.Project
+		}
+	}
+	type tally struct{ ok, behind, past, miss int }
+	by := map[string]*tally{}
+	for _, c := range curs {
+		k := jsonlToKey[c.Path]
+		if k == "" {
+			continue
+		}
+		t := by[k]
+		if t == nil {
+			t = &tally{}
+			by[k] = t
+		}
+		switch c.Status {
+		case "ok":
+			t.ok++
+		case "behind":
+			t.behind++
+		case "past-eof":
+			t.past++
+		case "missing":
+			t.miss++
+		}
+	}
+	out := map[string]string{}
+	for k, t := range by {
+		if t.behind+t.past+t.miss == 0 {
+			out[k] = fmt.Sprintf("%d ok", t.ok)
+			continue
+		}
+		var bits []string
+		if t.behind > 0 {
+			bits = append(bits, fmt.Sprintf("%d behind", t.behind))
+		}
+		if t.past > 0 {
+			bits = append(bits, fmt.Sprintf("%d past-eof", t.past))
+		}
+		if t.miss > 0 {
+			bits = append(bits, fmt.Sprintf("%d missing", t.miss))
+		}
+		if t.ok > 0 {
+			bits = append(bits, fmt.Sprintf("%d ok", t.ok))
+		}
+		out[k] = strings.Join(bits, " ")
+	}
+	return out
+}
+
+func tinyPathHash(p store.ProjectStats) bool {
+	return strings.HasPrefix(p.Key, "path-") && p.Active <= 1 && p.RawBytes < 100<<10
+}
+
+func byteSize(n int64) string {
 	switch {
 	case n >= 1<<20:
 		return fmt.Sprintf("%.1fM", float64(n)/(1<<20))

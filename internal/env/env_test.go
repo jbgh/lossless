@@ -27,6 +27,10 @@ func TestURLTokenSidecarClient(t *testing.T) {
 	if Sidecar() != "http://127.0.0.1:7432" {
 		t.Fatal(Sidecar())
 	}
+	t.Setenv("LOSSLESS_SIDECAR", "off")
+	if Sidecar() != "" {
+		t.Fatal(Sidecar())
+	}
 	t.Setenv("LOSSLESS_SIDECAR", "http://side")
 	if Sidecar() != "http://side" {
 		t.Fatal(Sidecar())

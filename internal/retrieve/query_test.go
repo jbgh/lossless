@@ -134,6 +134,9 @@ func TestExtractNoiseAndJobOverlap(t *testing.T) {
 	if !extractNoise(claim.Record{Type: "state", Text: "So the next test that matters is not another fixture."}) {
 		t.Fatal("process state")
 	}
+	if !extractNoise(claim.Record{Type: "state", Text: "This is still not a guarantee — a model can ignore a skill — but it is no longer “one sentence on a tool next to grep.", Paths: []string{".claude/skills/lossless/SKILL.md"}}) {
+		t.Fatal("skill-state")
+	}
 	if extractNoise(claim.Record{Type: "failed", Text: "**Upload Complete** sheet: 7 of 10 uploaded, 3 failed.", Paths: []string{}}) {
 		t.Fatal("real upload failed")
 	}

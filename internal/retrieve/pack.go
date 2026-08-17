@@ -127,6 +127,9 @@ func pack(cs []scored, limit int, head bool) []scored {
 		return nil
 	}
 	remaining := append([]scored(nil), cs...)
+	if !head {
+		remaining = dropOonState(remaining)
+	}
 	var out []scored
 	var packedText [][]string
 	tokens := 0
@@ -206,6 +209,22 @@ func pack(cs []scored, limit int, head bool) []scored {
 		}
 	}
 	return out
+}
+
+// dropOonState removes states that share no path with the ask when
+// another type is in the pool. Pathless asks leave oon=0, so states stay.
+func dropOonState(cs []scored) []scored {
+	var rest []scored
+	for _, c := range cs {
+		if c.rec.Type == "state" && c.oon == 1 {
+			continue
+		}
+		rest = append(rest, c)
+	}
+	if len(rest) == 0 {
+		return cs
+	}
+	return rest
 }
 
 func diverseSkip(c scored, packed []scored, packedText [][]string) bool {

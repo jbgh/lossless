@@ -53,26 +53,51 @@ func Ask(st *store.Store, req Request) (Response, error) {
 }
 
 func (e Engine) Ask(req Request) (Response, error) {
-	q, err := normalize(req)
+	p, err := e.prepare(req)
 	if err != nil {
 		return Response{}, err
+	}
+	e.recordAsk(req, p.q, p.seed, p.out)
+	return p.out, nil
+}
+
+type prep struct {
+	q      query
+	seed   []string
+	cand   []scored
+	packed []scored
+	out    Response
+	drops  []traceDrop
+}
+
+type traceDrop struct {
+	rec    claim.Record
+	reason string
+	sc     scored
+	scored bool
+}
+
+func (e Engine) prepare(req Request) (prep, error) {
+	q, err := normalize(req)
+	if err != nil {
+		return prep{}, err
 	}
 	q = e.maybeCompile(req, q)
 	seedPaths := append([]string{}, q.PathKeys...)
 	q = e.hydrateActions(req, q)
 	prof := selectProfile(q)
 	empty := Response{Context: []Hit{}, Warnings: []string{}, Project: q.ProjectKey}
+	p := prep{q: q, seed: seedPaths, out: empty}
 	ids, ftsBM25, knn, err := e.candidates(q)
 	if err != nil {
-		return Response{}, err
+		return prep{}, err
 	}
 	if len(ids) == 0 {
-		e.recordAsk(req, q, seedPaths, empty)
-		return empty, nil
+		return p, nil
 	}
 	recs, err := e.Store.GetMany(ids)
 	if err != nil {
-		return Response{}, err
+		return prep{}, err
 	}
 	var cand []scored
 	seenHash := map[string]int{} // claim_hash -> index of newest
@@ -83,22 +108,32 @@ func (e Engine) Ask(req Request) (Response, error) {
 			continue
 		}
 		if dropFix && claim.FixtureSession(rec.SessionID) {
+			p.drops = append(p.drops, traceDrop{rec: rec, reason: "fixture-session"})
 			continue
 		}
 		if extractNoise(rec) {
+			p.drops = append(p.drops, traceDrop{rec: rec, reason: "extract-noise"})
 			continue
 		}
 		if prev, ok := seenHash[rec.ClaimHash]; ok {
-			if rec.CreatedAt >= cand[prev].rec.CreatedAt {
+			old := cand[prev]
+			if rec.CreatedAt >= old.rec.CreatedAt {
+				p.drops = append(p.drops, traceDrop{rec: old.rec, reason: "duplicate", sc: old, scored: true})
 				cand[prev] = e.features(rec, q, ftsBM25, knn)
+			} else {
+				p.drops = append(p.drops, traceDrop{rec: rec, reason: "duplicate"})
 			}
 			continue
 		}
 		seenHash[rec.ClaimHash] = len(cand)
 		cand = append(cand, e.features(rec, q, ftsBM25, knn))
 	}
+	before := cand
 	cand = dropOlderConflicts(cand)
+	p.drops = append(p.drops, droppedAs(before, cand, "older-conflict")...)
+	before = cand
 	cand = dropInvalidatedByNewerFailed(cand)
+	p.drops = append(p.drops, droppedAs(before, cand, "invalidated")...)
 	normBM25(cand)
 	for i := range cand {
 		cand[i].score = cand[i].preStale(prof)
@@ -110,11 +145,69 @@ func (e Engine) Ask(req Request) (Response, error) {
 	}
 	sortScored(cand)
 	packed := pack(cand, q.LimitTokens, q.Head)
+	preEvict := packed
 	packed = evictFailed(packed, cand, q.LimitTokens)
+	in := map[string]bool{}
+	for _, c := range packed {
+		in[c.rec.ID] = true
+	}
+	preIn := map[string]bool{}
+	for _, c := range preEvict {
+		preIn[c.rec.ID] = true
+	}
+	for _, c := range preEvict {
+		if !in[c.rec.ID] {
+			p.drops = append(p.drops, traceDrop{rec: c.rec, reason: "evicted-for-failed", sc: c, scored: true})
+		}
+	}
+	packedText := make([][]string, 0, len(packed))
+	for _, c := range packed {
+		packedText = append(packedText, claim.Tokens(c.rec.Text))
+	}
+	for _, c := range cand {
+		if in[c.rec.ID] {
+			continue
+		}
+		if preIn[c.rec.ID] {
+			continue
+		}
+		p.drops = append(p.drops, traceDrop{rec: c.rec, reason: packSkipReason(c, packed, packedText), sc: c, scored: true})
+	}
 	hits, warnings, tokens := emit(packed)
-	out := Response{Context: hits, Warnings: warnings, Tokens: tokens, Project: q.ProjectKey}
-	e.recordAsk(req, q, seedPaths, out)
-	return out, nil
+	p.cand = cand
+	p.packed = packed
+	p.out = Response{Context: hits, Warnings: warnings, Tokens: tokens, Project: q.ProjectKey}
+	return p, nil
+}
+
+func droppedAs(before, after []scored, reason string) []traceDrop {
+	stay := map[string]bool{}
+	for _, c := range after {
+		stay[c.rec.ID] = true
+	}
+	var out []traceDrop
+	for _, c := range before {
+		if !stay[c.rec.ID] {
+			out = append(out, traceDrop{rec: c.rec, reason: reason, sc: c, scored: true})
+		}
+	}
+	return out
+}
+
+func packSkipReason(c scored, packed []scored, packedText [][]string) string {
+	if diverseSkip(c, packed, packedText) {
+		return "diversity"
+	}
+	if typeCount(packed, c.rec.Type) >= PackTypeCap {
+		return "type-cap"
+	}
+	if c.score <= 0 && len(packed) > 0 {
+		return "score<=0"
+	}
+	if len(packed) >= PackCap {
+		return "pack-cap"
+	}
+	return "outranked"
 }
 
 type scored struct {
