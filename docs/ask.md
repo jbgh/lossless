@@ -8,7 +8,7 @@ MCP tools: `ask`, `remember`, `get_record` (same JSON as the REST bodies).
 - HTTP MCP: `http://127.0.0.1:7432/mcp` (same process as `serve`)
 - stdio MCP: `lossless mcp` (HTTP client of the local daemon)
 
-`lossless setup` is the one command: local hooks + MCP for Grok, Claude, Codex, Pi, and OpenCode, plus a user service so `serve` stays up. `lossless doctor` checks it. Default is this machine only. `lossless migrate` is optional, later, if you already have a home URL.
+`lossless setup` is the one command: local hooks + MCP + a **skill** (Grok and Claude) so the model calls `ask` on real work without the user typing `/lossless`. `lossless doctor` checks it. Default is this machine only. `lossless migrate` is optional, later, if you already have a home URL.
 
 No other read verbs in v1. Full record + excerpt: `GET /v1/records/:id`.
 

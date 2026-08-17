@@ -101,7 +101,7 @@ func usage() {
   lossless hook-grok          # stdin: Grok hook JSON; fail-open
   lossless hook-claude        # stdin: Claude hook JSON; fail-open
   lossless hook-codex         # stdin: Codex hook JSON; fail-open
-  lossless setup              # local hooks + MCP + user service (default)
+  lossless setup              # local hooks + MCP + skill + user service
   lossless doctor             # daemon, hooks, MCP, service
   lossless migrate --url https://home [--token TOKEN]   # optional: ship local tapes to a home you already run
   lossless token              # optional: print a random bearer

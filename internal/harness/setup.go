@@ -91,7 +91,7 @@ func Setup(opts SetupOpts) (SetupResult, error) {
 		}
 	}
 	out.Hints = append(out.Hints, "Start a new agent session so MCP tools appear.")
-	out.Hints = append(out.Hints, "Grok: /hooks then r")
+	out.Hints = append(out.Hints, "Grok: /hooks then r. Skills load from disk; /skills then r if this session is already open.")
 	return out, nil
 }
 
@@ -207,6 +207,12 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 		"opencode": opencodeJSONPath(userHome),
 	}, "lossless")
 	add("mcp", mcpOK, mcpDetail)
+
+	skillOK, skillDetail := checkFiles(map[string]string{
+		"grok":   filepath.Join(userHome, ".grok", "skills", "lossless", "SKILL.md"),
+		"claude": filepath.Join(userHome, ".claude", "skills", "lossless", "SKILL.md"),
+	}, "ask")
+	add("skills", skillOK, skillDetail)
 
 	svc := ServicePath(userHome)
 	if svc != "" {

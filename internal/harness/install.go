@@ -129,6 +129,11 @@ func InstallHooks(home, exe string) ([]string, error) {
 		}
 		out = append(out, p)
 	}
+	skills, err := InstallSkills(home)
+	if err != nil {
+		return out, err
+	}
+	out = append(out, skills...)
 	return out, nil
 }
 

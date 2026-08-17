@@ -33,6 +33,8 @@ func TestSetupWritesHooksAndMCP(t *testing.T) {
 		".claude.json",
 		".codex/config.toml",
 		".pi/agent/mcp.json",
+		".grok/skills/lossless/SKILL.md",
+		".claude/skills/lossless/SKILL.md",
 	} {
 		if _, err := os.Stat(filepath.Join(user, rel)); err != nil {
 			t.Fatal(rel, err)
@@ -54,28 +56,30 @@ func TestDoctorBeforeAndAfterSetup(t *testing.T) {
 	user := t.TempDir()
 	data := t.TempDir()
 	t.Setenv("OPENCODE_CONFIG", filepath.Join(user, ".config", "opencode"))
-	before := Doctor(user, data, "/bin/am", "", "")
+	dead := "http://127.0.0.1:1"
+	before := Doctor(user, data, "/bin/am", dead, "")
 	if before.Ok() {
 		t.Fatal("empty machine should fail doctor")
 	}
 	if _, err := Setup(SetupOpts{UserHome: user, DataHome: data, Exe: "/bin/am", Service: false, Start: false}); err != nil {
 		t.Fatal(err)
 	}
-	// data home now exists; daemon still down
-	after := Doctor(user, data, "/bin/am", "", "")
-	var hooks, mcp, daemon Check
+	after := Doctor(user, data, "/bin/am", dead, "")
+	var hooks, mcp, skills, daemon Check
 	for _, c := range after.Checks {
 		switch c.Name {
 		case "hooks":
 			hooks = c
 		case "mcp":
 			mcp = c
+		case "skills":
+			skills = c
 		case "daemon":
 			daemon = c
 		}
 	}
-	if !hooks.OK || !mcp.OK {
-		t.Fatalf("hooks=%+v mcp=%+v", hooks, mcp)
+	if !hooks.OK || !mcp.OK || !skills.OK {
+		t.Fatalf("hooks=%+v mcp=%+v skills=%+v", hooks, mcp, skills)
 	}
 	if daemon.OK {
 		t.Fatal("daemon should be down")

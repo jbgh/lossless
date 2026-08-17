@@ -46,7 +46,7 @@ One-time install (any supported harness):
 ./lossless doctor
 ```
 
-That writes hooks + MCP for Grok, Claude, Codex, Pi, and OpenCode, and installs a user service so the daemon stays up. Then start a new agent session (Grok: `/hooks` then `r`). Everything stays on this machine.
+That writes hooks, MCP, and a skill so the model calls `ask` on real work without you typing `/lossless`. Then start a new agent session (Grok: `/hooks` then `r`; `/skills` then `r` if the session is already open). Everything stays on this machine.
 
 If you later run your own home somewhere and want this laptop to use it: `lossless migrate --url https://…` (see [docs/deploy.md](docs/deploy.md)). Setup never does that for you.
 
