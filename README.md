@@ -10,7 +10,7 @@ Transcripts stay on your machine. Apache-2.0.
 
 ```
 ask({ question, project, paths, goal })
-  → packed context + warnings
+  → context + warnings
 ```
 
 See [docs/architecture.html](docs/architecture.html) for a one-page map of the loop, store, and retrieve algorithm. [docs/pipeline.md](docs/pipeline.md) is the loop in prose, [docs/deploy.md](docs/deploy.md) is the portable REST + MCP contract (local by default; a remote home is manual). Then [docs/write.md](docs/write.md), [docs/ask.md](docs/ask.md), [docs/retrieval.md](docs/retrieval.md), [docs/harnesses.md](docs/harnesses.md), [docs/stack.md](docs/stack.md).

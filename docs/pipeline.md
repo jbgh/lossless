@@ -1,6 +1,6 @@
 # Pipeline: who asks, what memory does, what happens after
 
-Write path (`docs/write.md`) gets bytes in. Retrieval (`docs/retrieval.md`) ranks rows. This file is the **loop**: when a query is formed, who forms it, what lossless is allowed to be, and what the harness does with the packet.
+Write path (`docs/write.md`) gets bytes in. Retrieval (`docs/retrieval.md`) ranks rows. This file is the **loop**: when a query is formed, who forms it, what lossless is allowed to be, and what the harness does with the context.
 
 This is the decision that decides whether we are a database or a second agent. We are neither a chatbot nor cass. We are a **work-context index**.
 
@@ -25,7 +25,7 @@ Vectors and graphs are optional indexes later. They do not change this split.
 ```
                     ┌─────────────────────┐
    work context     │   AGENT / HARNESS   │  when to ask, what we are doing,
-   ─────────────►   │   (skill + hooks)   │  what to do with the packet
+   ─────────────►   │   (skill + hooks)   │  what to do with the context
                     └─────────┬───────────┘
                               │ ask({ goal, paths, question })
                               ▼
@@ -45,7 +45,7 @@ Vectors and graphs are optional indexes later. They do not change this split.
 |---------------------|-------------|-----------|
 | **All intelligence in the model** (memory is raw FTS/grep) | Simple store. cass. | Every model writes a different query. Anti-regression is optional. We are not a product. |
 | **All intelligence in memory** (LLM rerank, "figure out what they need") | Magical demos. | Network, cost, hook timeouts, a second agent that can hallucinate your past. Secrets leave the box if the reranker is hosted. |
-| **Split (this design)** | Same packet from Grok, Claude, Codex. Warnings are deterministic. Store stays local and testable. | We must *force the ask* via skill/hook. Models that ignore the skill get nothing. |
+| **Split (this design)** | Same context from Grok, Claude, Codex. Warnings are deterministic. Store stays local and testable. | We must *force the ask* via skill/hook. Models that ignore the skill get nothing. |
 
 Letta puts memory tools in the agent's hands (self-edit). claude-mem auto-injects compressed observations. Grok's own memory auto-searches on first turn and after compact. cass is a human search box.
 
@@ -146,19 +146,19 @@ ask(work context)
     or HEAD type caps if the query is still empty
   score each candidate (named weights, no model)
   mark [verify] if file mtime moved (stat top 30 only)
-  pack ≤5, token budget, diversity
+  context ≤5, token budget, diversity
   if a failed-overlap missed the cap, evict something else
-  warnings only for ids that are in the packet
+  warnings only for ids that are in context
   return
 ```
 
-No scan of the whole store. No network. Claim vectors are on-box and optional. Empty packet is valid.
+No scan of the whole store. No network. Claim vectors are on-box and optional. Empty context is valid.
 
 `GET /v1/records/:id` is the only follow-up: full claim + raw excerpt. The agent asks for that, not memory deciding to dump the transcript.
 
 ---
 
-## After the packet returns
+## After context returns
 
 1. **Land in the window.** Tool result on `ask`, or one injected block. Not a hidden system rewrite of history.
 2. **Agent policy (skill, not memory):**

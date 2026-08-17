@@ -12,7 +12,7 @@ func toolDefs() []map[string]any {
 	return []map[string]any{
 		{
 			"name":        "ask",
-			"description": "Required before implementing, changing behavior, or continuing after compact. Packs past failed/decisions/constraints for the current goal and files. Send workspace_root, goal, and paths. Treat warnings as blocking unless the user overrides. Do not wait for the user to mention lossless. Skip trivia.",
+			"description": "Required before implementing, changing behavior, or continuing after compact. Returns past failed/decisions/constraints for the current goal and files in context (≤5). Send workspace_root, goal, and paths. Treat warnings as blocking unless the user overrides. Do not wait for the user to mention lossless. Skip trivia.",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -22,7 +22,7 @@ func toolDefs() []map[string]any {
 					"goal":           map[string]any{"type": "string", "description": "What the agent is about to do."},
 					"paths":          map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Repo-relative files in play."},
 					"session_id":     map[string]any{"type": "string", "description": "Optional session id so ask can hydrate the action tape."},
-					"limit_tokens":   map[string]any{"type": "integer", "description": "Packed token budget. Default 1200."},
+					"limit_tokens":   map[string]any{"type": "integer", "description": "Token budget for context. Default 1200."},
 				},
 			},
 		},
@@ -44,7 +44,7 @@ func toolDefs() []map[string]any {
 		},
 		{
 			"name":        "get_record",
-			"description": "Fetch one claim by id (from an ask hit). Does not change the ask packet.",
+			"description": "Fetch one claim by id (from an ask hit). Does not change the ask context.",
 			"inputSchema": map[string]any{
 				"type":     "object",
 				"required": []string{"id"},

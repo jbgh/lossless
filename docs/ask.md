@@ -1,6 +1,6 @@
 # `ask` contract
 
-This is the portable read surface. Any harness or model sends current work. lossless retrieves and packs the past. The caller does not search or rank.
+This is the portable read surface. Any harness or model sends current work. lossless retrieves the past into `context`. The caller does not search or rank.
 
 Default: `POST http://127.0.0.1:7432/v1/ask`  
 MCP tools: `ask`, `remember`, `get_record` (same JSON as the REST bodies).
@@ -34,8 +34,8 @@ How records are chosen: [retrieval.md](retrieval.md).
 | `workspace_root` | no | Absolute repo path. Required for file mtime `[verify]`. Identity is `project`, not this path. |
 | `goal` | no | What the agent is about to do. Used for anti-repeat / anti-regression. |
 | `paths` | no | Repo-relative files in play. Boosts records tagged with those paths. |
-| `session_id` | no | Binds the action tape (last packs, GETs, remembers). If omitted, newest session for the project. |
-| `limit_tokens` | no | Max packed tokens. Default `1200`. Approx 4 chars = 1 token. |
+| `session_id` | no | Binds the action tape (last ask context, GETs, remembers). If omitted, newest session for the project. |
+| `limit_tokens` | no | Max tokens in `context`. Default `1200`. Approx 4 chars = 1 token. |
 
 `project` is normalized: strip `.git`, lowercase, accept `owner/repo` or `owner__repo`.  
 `https://github.com/Acme/API.git` and `git@github.com:acme/api.git` are the same store: `acme/api`.
@@ -79,7 +79,7 @@ See [retrieval.md](retrieval.md). Short version:
 2. Don't regress shipped work.
 3. Answer the question.
 
-Thin ask (`question` and `goal` empty, no paths): compile from the session tail if present. If still empty, pack project HEAD (type-capped failed/decision/constraint). Age never drops a claim. Recency is a tie-break.
+Thin ask (`question` and `goal` empty, no paths): compile from the session tail if present. If still empty, fill `context` from project HEAD (type-capped failed/decision/constraint). Age never drops a claim. Recency is a tie-break.
 
 Stale files: ephemeral `[verify]` prefix. Do not persist stale.
 

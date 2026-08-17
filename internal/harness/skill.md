@@ -13,7 +13,7 @@ when-to-use: >
 
 # lossless
 
-The chat window is lossy. The session tape is not. lossless is the checkout: a small pack of past work for **this** goal and files. The user should not have to type `/lossless` or say "ask memory."
+The chat window is lossy. The session tape is not. lossless is the checkout: a small `context` of past work for **this** goal and files. The user should not have to type `/lossless` or say "ask memory."
 
 The MCP tool is `ask` (Grok may show `lossless__ask`). Hooks already write the tape. Your job is the read.
 
@@ -32,7 +32,7 @@ Call **again** when the topic or files change (auth → billing is a new ask).
 
 - trivia, chit-chat, or "what's in this file"
 - you already asked this turn for the same goal and paths
-- you are only answering from the pack you just got
+- you are only answering from the context you just got
 
 ## How to call
 
@@ -46,9 +46,9 @@ ask({
 })
 ```
 
-`project` is optional if `workspace_root` is set. Do not invent a search query. Do not rank. Send current work; lossless packs ≤5 records.
+`project` is optional if `workspace_root` is set. Do not invent a search query. Do not rank. Send current work; lossless returns ≤5 records in `context`.
 
-## After the pack
+## After context returns
 
 - Treat `warnings` as blocking unless the user overrides.
 - Do not repeat a `failed` without new evidence.

@@ -1,6 +1,6 @@
 # Retrieval engine
 
-This is the read-path spec. `docs/ask.md` is the I/O contract. This file is how we pick the 5 records that go in the packet.
+This is the read-path spec. `docs/ask.md` is the I/O contract. This file is how we pick the ≤5 records that go in `context`.
 
 No LLM on the retrieve path. No network. Embeddings, when used, are **on-box** and only on **claims**.
 
@@ -242,7 +242,7 @@ P_answer  = profile mix (type, path, symbol, bm25, vector, agree, recency)
 score     = 4.0*P_fail + 2.5*P_regress + P_answer + 0.8*dwell - 0.9*served
 ```
 
-`dwell` is a claim the agent `GET`/`remember`ed, and only when this ask is still the same work (thin continue, same question, or same files). A rich ask on a new path does not inherit last GET’s symbols — that was leaking Redis into a billing packet. `served` is last pack, cancelled by strong overlap so job 1/2 cannot lose to “we already showed you.”
+`dwell` is a claim the agent `GET`/`remember`ed, and only when this ask is still the same work (thin continue, same question, or same files). A rich ask on a new path does not inherit last GET’s symbols — that was leaking Redis into a billing context. `served` is last context, cancelled by strong overlap so job 1/2 cannot lose to “we already showed you.”
 
 When the caller named files, claims on other files get an out-of-network discount (`P_answer × 0.5`), same idea as X’s OON weight. Job 1/2 overlap is not discounted.
 
@@ -297,7 +297,7 @@ After packing, scan the **packed** hits plus any `failed_overlap=1` candidate th
 
 If a `failed_overlap` record did not fit in the 5, **evict the lowest-score non-failed packed hit** and insert it. Job 1 is not allowed to lose to the cap.
 
-Warnings must cite ids that appear in `context`. If you warn, the record is in the packet.
+Warnings must cite ids that appear in `context`. If you warn, the record is in `context`.
 
 ---
 
