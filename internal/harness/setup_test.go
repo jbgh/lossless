@@ -35,8 +35,16 @@ func TestSetupWritesHooksAndMCP(t *testing.T) {
 		".pi/agent/mcp.json",
 		".grok/skills/lossless/SKILL.md",
 		".claude/skills/lossless/SKILL.md",
+		".agents/skills/lossless/SKILL.md",
+		".codex/skills/lossless/SKILL.md",
+		".pi/agent/skills/lossless/SKILL.md",
+		".config/opencode/skills/lossless/SKILL.md",
 		".grok/rules/lossless.md",
 		".claude/rules/lossless.md",
+		".claude/CLAUDE.md",
+		".codex/AGENTS.md",
+		".pi/agent/AGENTS.md",
+		".config/opencode/AGENTS.md",
 	} {
 		if _, err := os.Stat(filepath.Join(user, rel)); err != nil {
 			t.Fatal(rel, err)
@@ -67,7 +75,7 @@ func TestDoctorBeforeAndAfterSetup(t *testing.T) {
 		t.Fatal(err)
 	}
 	after := Doctor(user, data, "/bin/am", dead, "")
-	var hooks, mcp, skills, daemon Check
+	var hooks, mcp, skills, rules, daemon Check
 	for _, c := range after.Checks {
 		switch c.Name {
 		case "hooks":
@@ -76,12 +84,14 @@ func TestDoctorBeforeAndAfterSetup(t *testing.T) {
 			mcp = c
 		case "skills":
 			skills = c
+		case "rules":
+			rules = c
 		case "daemon":
 			daemon = c
 		}
 	}
-	if !hooks.OK || !mcp.OK || !skills.OK {
-		t.Fatalf("hooks=%+v mcp=%+v skills=%+v", hooks, mcp, skills)
+	if !hooks.OK || !mcp.OK || !skills.OK || !rules.OK {
+		t.Fatalf("hooks=%+v mcp=%+v skills=%+v rules=%+v", hooks, mcp, skills, rules)
 	}
 	if daemon.OK {
 		t.Fatal("daemon should be down")

@@ -90,7 +90,7 @@ func Setup(opts SetupOpts) (SetupResult, error) {
 			return out, fmt.Errorf("daemon did not start at %s", base)
 		}
 	}
-	out.Hints = append(out.Hints, "Start a new agent session so MCP tools appear.")
+	out.Hints = append(out.Hints, "Start a new agent session so MCP tools and the lossless skill appear.")
 	out.Hints = append(out.Hints, "Grok: /hooks then r. Skills load from disk; /skills then r if this session is already open.")
 	return out, nil
 }
@@ -208,16 +208,10 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 	}, "lossless")
 	add("mcp", mcpOK, mcpDetail)
 
-	skillOK, skillDetail := checkFiles(map[string]string{
-		"grok":   filepath.Join(userHome, ".grok", "skills", "lossless", "SKILL.md"),
-		"claude": filepath.Join(userHome, ".claude", "skills", "lossless", "SKILL.md"),
-	}, "ask")
+	skillOK, skillDetail := checkFiles(SkillDests(userHome), "ask")
 	add("skills", skillOK, skillDetail)
 
-	ruleOK, ruleDetail := checkFiles(map[string]string{
-		"grok":   filepath.Join(userHome, ".grok", "rules", "lossless.md"),
-		"claude": filepath.Join(userHome, ".claude", "rules", "lossless.md"),
-	}, "ask")
+	ruleOK, ruleDetail := checkFiles(RuleDests(userHome), "ask")
 	add("rules", ruleOK, ruleDetail)
 
 	svc := ServicePath(userHome)
@@ -237,7 +231,7 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 
 func checkFiles(files map[string]string, needle string) (bool, string) {
 	var ok, missing []string
-	order := []string{"grok", "claude", "codex", "pi", "opencode"}
+	order := []string{"grok", "claude", "codex", "pi", "opencode", "agents"}
 	for _, name := range order {
 		p, exists := files[name]
 		if !exists {

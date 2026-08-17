@@ -51,6 +51,10 @@ Install: `lossless setup`. That is hooks + MCP for all five, a launchd/systemd u
 |--|------|-------------|----|----------|-------|
 | MCP config | `~/.grok/config.toml` HTTP `/mcp` | `~/.claude.json` stdio `lossless mcp` | `~/.pi/agent/mcp.json` stdio | `~/.config/opencode/opencode.json` local | `~/.codex/config.toml` stdio |
 | Token | `headers.Authorization = Bearer ${LOSSLESS_TOKEN}` | inherit env | inherit env | inherit env | inherit env |
+| Skill | `~/.grok/skills/lossless/SKILL.md` | `~/.claude/skills/lossless/SKILL.md` | `~/.pi/agent/skills/lossless/SKILL.md` (+ `~/.agents/skills`) | `~/.config/opencode/skills/lossless/SKILL.md` (also sees `~/.claude/skills` and `~/.agents/skills`) | `~/.codex/skills/lossless/SKILL.md` (+ `~/.agents/skills`) |
+| Always-on rule | `~/.grok/rules/lossless.md` | `~/.claude/CLAUDE.md` marked section + `~/.claude/rules/lossless.md` | `~/.pi/agent/AGENTS.md` marked section | `~/.config/opencode/AGENTS.md` marked section | `~/.codex/AGENTS.md` marked section (`AGENTS.override.md` if that file is already the active global) |
+
+The skill is when/how to call `ask`. The always-on rule is the one-liner that stays in session context so the model does not wait for `/lossless`. Setup upserts a marked `<!-- lossless:start -->` … `<!-- lossless:end -->` block and leaves the rest of the user's CLAUDE.md / AGENTS.md alone.
 
 Install order: **Grok → Claude → Codex → Pi → OpenCode**. That is popularity plus "do we have a file we can copy before the window dies."
 
