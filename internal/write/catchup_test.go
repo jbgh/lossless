@@ -281,6 +281,25 @@ func TestRememberRejectsUnsafeID(t *testing.T) {
 	}
 }
 
+func TestRememberDropsTraversalPaths(t *testing.T) {
+	st := tmpStore(t)
+	res, err := Remember(st, claim.Record{
+		Type: "decision", Text: "Use jose, not jsonwebtoken, for Edge.",
+		ProjectKey: "acme/api",
+		Paths:      []string{"src/auth.ts", "../.ssh/id_rsa", "/etc/passwd", "src/ok.go"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := st.Get(res.IDs[0])
+	if !ok {
+		t.Fatal("missing")
+	}
+	if len(got.Paths) != 2 || got.Paths[0] != "src/auth.ts" || got.Paths[1] != "src/ok.go" {
+		t.Fatalf("paths: %v", got.Paths)
+	}
+}
+
 func TestRememberValidationAndDefaults(t *testing.T) {
 	st := tmpStore(t)
 	if _, err := Remember(st, claim.Record{}); err == nil {

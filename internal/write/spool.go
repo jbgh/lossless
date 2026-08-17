@@ -131,11 +131,12 @@ func Ensure(st *store.Store, home string) (EnsureResult, error) {
 
 func sanitizeName(s string) string {
 	s = strings.Map(func(r rune) rune {
-		if r == '/' || r == '\\' || r == ':' || r == ' ' {
+		if r < 0x20 || r == 0x7f || r == '/' || r == '\\' || r == ':' || r == ' ' {
 			return '-'
 		}
 		return r
 	}, s)
+	s = strings.ReplaceAll(s, "..", "_")
 	if s == "" {
 		return "job"
 	}

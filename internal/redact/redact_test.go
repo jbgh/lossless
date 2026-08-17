@@ -56,6 +56,10 @@ func TestFilterPaths(t *testing.T) {
 	if len(got) != 2 || got[0] != "src/auth.ts" || got[1] != "src/ok.go" {
 		t.Fatalf("%v", got)
 	}
+	got = FilterPaths([]string{"src/../../.ssh/id_rsa", "/etc/passwd", `C:\Windows\win.ini`, "foo/../../../etc/shadow", "pkg/foo.go", "~/.ssh/id_rsa"})
+	if len(got) != 1 || got[0] != "pkg/foo.go" {
+		t.Fatalf("traversal: %v", got)
+	}
 }
 
 func TestLineRedacts(t *testing.T) {

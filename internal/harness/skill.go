@@ -2,6 +2,7 @@ package harness
 
 import (
 	_ "embed"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,22 +112,90 @@ func InstallRules(home string) ([]string, error) {
 }
 
 func upsertMarkedFile(path string, body []byte) error {
-	dest := path
-	if fi, err := os.Lstat(path); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		target, err := os.Readlink(path)
-		if err != nil {
-			return err
-		}
-		if !filepath.IsAbs(target) {
-			target = filepath.Join(filepath.Dir(path), target)
-		}
-		dest = target
+	dest, err := resolveMarkedTarget(path)
+	if err != nil {
+		return err
 	}
 	var existing []byte
 	if b, err := os.ReadFile(dest); err == nil {
 		existing = b
 	}
 	return writeUserConfig(dest, upsertMarkedSection(existing, ruleBegin, ruleEnd, body), 0o644)
+}
+
+// resolveMarkedTarget follows a symlink only when the target is a regular
+// file under $HOME and not a secret path. Dedicated skill/hook files use
+// writeUserConfig, which replaces a symlink instead of writing through it.
+func resolveMarkedTarget(path string) (string, error) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return path, nil
+		}
+		return "", err
+	}
+	if fi.Mode()&os.ModeSymlink == 0 {
+		if !fi.Mode().IsRegular() {
+			return "", fmt.Errorf("not a regular file: %s", path)
+		}
+		return path, nil
+	}
+	target, err := os.Readlink(path)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(path), target)
+	}
+	target = filepath.Clean(target)
+	if !underHome(target) {
+		return "", fmt.Errorf("refusing to write through symlink outside home")
+	}
+	if sensitiveConfigTarget(target) {
+		return "", fmt.Errorf("refusing to write through symlink to sensitive path")
+	}
+	tfi, err := os.Lstat(target)
+	if err != nil {
+		return "", fmt.Errorf("refusing to write through dangling symlink")
+	}
+	if tfi.Mode()&os.ModeSymlink != 0 || !tfi.Mode().IsRegular() {
+		return "", fmt.Errorf("refusing to write through symlink to non-file")
+	}
+	return target, nil
+}
+
+func underHome(path string) bool {
+	home := os.Getenv("HOME")
+	if home == "" {
+		return false
+	}
+	home, err := filepath.Abs(home)
+	if err != nil {
+		return false
+	}
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	home = filepath.Clean(home)
+	path = filepath.Clean(path)
+	sep := string(os.PathSeparator)
+	return path == home || strings.HasPrefix(path, home+sep)
+}
+
+func sensitiveConfigTarget(path string) bool {
+	n := strings.ToLower(strings.ReplaceAll(path, "\\", "/"))
+	for _, s := range []string{"/.ssh/", "/.gnupg/", "/.aws/", "/.netrc"} {
+		if strings.Contains(n, s) {
+			return true
+		}
+	}
+	base := filepath.Base(n)
+	switch base {
+	case "id_rsa", "id_ed25519", "authorized_keys", "known_hosts", "credentials", ".env":
+		return true
+	}
+	return strings.HasSuffix(base, ".pem")
 }
 
 func upsertMarkedSection(existing []byte, begin, end string, body []byte) []byte {

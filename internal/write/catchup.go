@@ -72,13 +72,11 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 	}
 	defer unlock()
 
-	if err := checkIngestFile(req.JSONL); err != nil {
-		return out, err
-	}
-	info, err := os.Stat(req.JSONL)
+	src, info, err := openIngestFile(req.JSONL)
 	if err != nil {
 		return out, err
 	}
+	defer src.Close()
 	srcOff := st.Cursor(req.JSONL)
 	if srcOff > info.Size() {
 		// Compact (or a rewrite) shrank the harness file. A cursor past
@@ -109,11 +107,6 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 		return out, nil
 	}
 
-	src, err := os.Open(req.JSONL)
-	if err != nil {
-		return out, err
-	}
-	defer src.Close()
 	if _, err := src.Seek(srcOff, io.SeekStart); err != nil {
 		return out, err
 	}
@@ -303,6 +296,9 @@ func writeVirtualJSONL(st *store.Store, session string, msgs []map[string]any) (
 	}
 	dest := filepath.Join(dir, "virtual-"+sanitizeName(session)+".jsonl")
 	var b strings.Builder
+	if len(msgs) > 20000 {
+		msgs = msgs[:20000]
+	}
 	for _, m := range msgs {
 		line, err := json.Marshal(virtualLine{
 			Type:    stringField(m, "type", "message"),
@@ -314,6 +310,9 @@ func writeVirtualJSONL(st *store.Store, session string, msgs []map[string]any) (
 		}
 		b.Write(line)
 		b.WriteByte('\n')
+	}
+	if b.Len() > 8<<20 {
+		return "", fmt.Errorf("virtual session too large")
 	}
 	if err := os.WriteFile(dest, []byte(b.String()), 0o600); err != nil {
 		return "", err
@@ -337,6 +336,11 @@ func dumpOpenCode(st *store.Store, req *CatchUpRequest) (string, error) {
 		}
 		db = filepath.Join(data, "opencode", "opencode.db")
 	}
+	if fi, err := os.Lstat(db); err != nil {
+		return "", err
+	} else if fi.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("opencode db must not be a symlink")
+	}
 	cwd, lines, err := ReadOpenCodeSession(db, req.SessionID)
 	if err != nil {
 		return "", err
@@ -359,6 +363,7 @@ func Remember(st *store.Store, rec claim.Record) (CatchUpResult, error) {
 		return out, fmt.Errorf("project or workspace_root required")
 	}
 	rec.ProjectKey = projectkey.Normalize(rec.ProjectKey)
+	rec.Paths = redact.FilterPaths(rec.Paths)
 	if rec.Harness == "" {
 		rec.Harness = "other"
 	}

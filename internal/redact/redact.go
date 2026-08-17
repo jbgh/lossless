@@ -50,11 +50,32 @@ func ShouldDropClaim(text string, paths []string) bool {
 func FilterPaths(paths []string) []string {
 	var out []string
 	for _, p := range paths {
-		if !sensitivePath.MatchString(p) {
-			out = append(out, p)
+		if traversalPath(p) || sensitivePath.MatchString(p) {
+			continue
 		}
+		out = append(out, p)
 	}
 	return out
+}
+
+func traversalPath(p string) bool {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return true
+	}
+	n := strings.ReplaceAll(p, "\\", "/")
+	if strings.HasPrefix(n, "/") || strings.HasPrefix(n, "~") {
+		return true
+	}
+	if len(n) > 1 && n[1] == ':' {
+		return true
+	}
+	for _, part := range strings.Split(n, "/") {
+		if part == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 // Line returns the line to append to raw. Secret lines become {"_redacted":true}.

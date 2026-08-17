@@ -42,7 +42,7 @@ func WriteGrokHooks(home, exe string) (string, error) {
 		return "", err
 	}
 	dest := filepath.Join(destDir, "lossless.json")
-	if err := os.WriteFile(dest, GrokHookFile(exe), 0o644); err != nil {
+	if err := writeUserConfig(dest, GrokHookFile(exe), 0o644); err != nil {
 		return "", err
 	}
 	return dest, nil
@@ -234,7 +234,7 @@ func WritePiExtension(home, exe string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(dest, []byte(PiExtensionSource(exe)), 0o644); err != nil {
+	if err := writeUserConfig(dest, []byte(PiExtensionSource(exe)), 0o644); err != nil {
 		return "", err
 	}
 	return dest, nil
@@ -291,7 +291,7 @@ func WriteOpenCodePlugin(home string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(dest, []byte(OpenCodePluginSource()), 0o644); err != nil {
+	if err := writeUserConfig(dest, []byte(OpenCodePluginSource()), 0o644); err != nil {
 		return "", err
 	}
 	return dest, nil

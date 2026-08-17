@@ -57,4 +57,7 @@ func TestCheckIngestFileRejectsSymlink(t *testing.T) {
 	if _, err := CatchUp(st, CatchUpRequest{JSONL: link, Project: "acme/api", SessionID: "x"}); err == nil {
 		t.Fatal("catch-up must refuse symlink")
 	}
+	if _, _, err := openIngestFile(link); err == nil {
+		t.Fatal("openIngestFile must refuse symlink")
+	}
 }

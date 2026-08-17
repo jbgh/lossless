@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 const maxCatchUpBytes = 64 << 20
@@ -41,6 +42,36 @@ func checkIngestFile(path string) error {
 		return fmt.Errorf("ingest file too large (%d bytes)", fi.Size())
 	}
 	return nil
+}
+
+// openIngestFile Lstats then opens with O_NOFOLLOW so a symlink cannot
+// be swapped in between the check and the read.
+func openIngestFile(path string) (*os.File, os.FileInfo, error) {
+	if err := checkIngestFile(path); err != nil {
+		return nil, nil, err
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	f, err := os.OpenFile(abs, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		_ = f.Close()
+		return nil, nil, fmt.Errorf("ingest path is not a regular file")
+	}
+	if fi.Size() > maxCatchUpBytes {
+		_ = f.Close()
+		return nil, nil, fmt.Errorf("ingest file too large (%d bytes)", fi.Size())
+	}
+	return f, fi, nil
 }
 
 func readCatchUpBytes(src *os.File, from int64, size int64) ([]byte, error) {

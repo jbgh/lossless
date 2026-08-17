@@ -298,16 +298,18 @@ func ProbeHealth(base string) (string, error) {
 	}
 	raw, _ := io.ReadAll(io.LimitReader(res.Body, 4<<10))
 	var body struct {
-		OK       bool   `json:"ok"`
-		Records  int    `json:"records"`
+		OK       *bool  `json:"ok"`
+		Records  *int   `json:"records"`
 		Embedder string `json:"embedder"`
 	}
-	_ = json.Unmarshal(raw, &body)
+	if json.Unmarshal(raw, &body) != nil || body.OK == nil || !*body.OK || body.Records == nil {
+		return "", fmt.Errorf("not a lossless daemon")
+	}
 	emb := body.Embedder
 	if emb == "" {
 		emb = "none"
 	}
-	return fmt.Sprintf("%s records=%d embedder=%s", base, body.Records, emb), nil
+	return fmt.Sprintf("%s records=%d embedder=%s", base, *body.Records, emb), nil
 }
 
 func EnsureDaemon(exe, home, base string) error {

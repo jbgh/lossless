@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -259,13 +260,44 @@ func alreadyServing(addr string) bool {
 	if host == "" || host == "0.0.0.0" || host == "::" {
 		host = "127.0.0.1"
 	}
-	client := &http.Client{Timeout: 300 * time.Millisecond}
+	client := &http.Client{
+		Timeout: 300 * time.Millisecond,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	res, err := client.Get("http://" + net.JoinHostPort(host, port) + "/health")
 	if err != nil {
 		return false
 	}
 	defer res.Body.Close()
-	return res.StatusCode == http.StatusOK
+	if res.StatusCode != http.StatusOK {
+		return false
+	}
+	raw, err := io.ReadAll(io.LimitReader(res.Body, 4<<10))
+	if err != nil {
+		return false
+	}
+	return decodeHealth(raw)
+}
+
+// decodeHealth is true only for our /health JSON: {"ok":true,"records":N}.
+// A bare {"ok":true} or a plain 200 is not enough to treat a port as ours.
+func decodeHealth(raw []byte) bool {
+	var body struct {
+		OK      *bool `json:"ok"`
+		Records *int  `json:"records"`
+	}
+	if json.Unmarshal(raw, &body) != nil {
+		return false
+	}
+	return body.OK != nil && *body.OK && body.Records != nil
+}
+
+func bearerMatch(got, want string) bool {
+	gh := sha256.Sum256([]byte(got))
+	wh := sha256.Sum256([]byte(want))
+	return subtle.ConstantTimeCompare(gh[:], wh[:]) == 1
 }
 
 func withBearer(next http.Handler, token string) http.Handler {
@@ -276,7 +308,7 @@ func withBearer(next http.Handler, token string) http.Handler {
 			return
 		}
 		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if subtle.ConstantTimeCompare([]byte(got), want) != 1 {
+		if !bearerMatch(got, string(want)) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
 		}

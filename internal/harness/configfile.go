@@ -13,9 +13,14 @@ func writeUserConfig(path string, body []byte, createMode os.FileMode) error {
 		createMode = 0o600
 	}
 	mode := createMode
-	if fi, err := os.Stat(path); err == nil {
-		if p := fi.Mode().Perm(); p != 0 {
-			mode = p
+	if fi, err := os.Lstat(path); err == nil {
+		if fi.IsDir() {
+			return fmt.Errorf("refusing to overwrite directory %s", path)
+		}
+		if fi.Mode()&os.ModeSymlink == 0 {
+			if p := fi.Mode().Perm(); p != 0 {
+				mode = p
+			}
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

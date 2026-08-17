@@ -145,6 +145,7 @@ func TestUpsertMarkedSection(t *testing.T) {
 
 func TestUpsertMarkedFileFollowsSymlink(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("HOME", dir)
 	target := filepath.Join(dir, "AGENTS.md")
 	link := filepath.Join(dir, "CLAUDE.md")
 	if err := os.WriteFile(target, []byte("# shared\n"), 0o644); err != nil {
@@ -169,5 +170,55 @@ func TestUpsertMarkedFileFollowsSymlink(t *testing.T) {
 	}
 	if !strings.Contains(string(got), "shared") || !strings.Contains(string(got), "ask") {
 		t.Fatal(string(got))
+	}
+}
+
+func TestUpsertMarkedFileRefusesSymlinkOutsideHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	outside := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(outside, []byte("keep\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, "CLAUDE.md")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := upsertMarkedFile(link, []byte("# lossless\nask\n")); err == nil {
+		t.Fatal("expected refuse")
+	}
+	got, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "ask") {
+		t.Fatal("wrote through symlink")
+	}
+}
+
+func TestUpsertMarkedFileRefusesSensitiveTarget(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	ssh := filepath.Join(home, ".ssh")
+	if err := os.MkdirAll(ssh, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(ssh, "authorized_keys")
+	if err := os.WriteFile(target, []byte("ssh-ed25519 AAAA\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, "CLAUDE.md")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := upsertMarkedFile(link, []byte("# lossless\nask\n")); err == nil {
+		t.Fatal("expected refuse")
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "ask") {
+		t.Fatal("wrote through sensitive symlink")
 	}
 }

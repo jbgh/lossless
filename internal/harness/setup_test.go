@@ -211,6 +211,32 @@ func TestDoctorServiceOkWhenDaemonUp(t *testing.T) {
 	}
 }
 
+func TestProbeHealthRequiresLosslessJSON(t *testing.T) {
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(plain.Close)
+	if _, err := ProbeHealth(plain.URL); err == nil {
+		t.Fatal("plain 200 must not count")
+	}
+	okOnly := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(okOnly.Close)
+	if _, err := ProbeHealth(okOnly.URL); err == nil {
+		t.Fatal("ok without records must not count")
+	}
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"records":3,"embedder":"none"}`))
+	}))
+	t.Cleanup(good.Close)
+	st, err := ProbeHealth(good.URL)
+	if err != nil || !strings.Contains(st, "records=3") {
+		t.Fatalf("got %q %v", st, err)
+	}
+}
+
 func TestProbeHealthNoRedirect(t *testing.T) {
 	var hit bool
 	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -227,6 +253,36 @@ func TestProbeHealthNoRedirect(t *testing.T) {
 	}
 	if hit {
 		t.Fatal("followed redirect")
+	}
+}
+
+func TestWriteUserConfigReplacesSymlink(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "secret")
+	if err := os.WriteFile(outside, []byte("keep\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(dir, "lossless.json")
+	if err := os.Symlink(outside, dest); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeUserConfig(dest, []byte(`{"hooks":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Lstat(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("must replace symlink")
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil || !strings.Contains(string(got), "hooks") {
+		t.Fatal(string(got), err)
+	}
+	keep, err := os.ReadFile(outside)
+	if err != nil || string(keep) != "keep\n" {
+		t.Fatal("wrote through symlink")
 	}
 }
 

@@ -486,6 +486,38 @@ func TestListenAndServe(t *testing.T) {
 	t.Fatalf("never healthy: %v", last)
 }
 
+func TestAlreadyServingRequiresLosslessHealth(t *testing.T) {
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(plain.Close)
+	if alreadyServing(plain.Listener.Addr().String()) {
+		t.Fatal("plain 200 must not count as lossless")
+	}
+	redir := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://127.0.0.1:1/health", http.StatusFound)
+	}))
+	t.Cleanup(redir.Close)
+	if alreadyServing(redir.Listener.Addr().String()) {
+		t.Fatal("redirect must not count")
+	}
+	okOnly := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(okOnly.Close)
+	if alreadyServing(okOnly.Listener.Addr().String()) {
+		t.Fatal("ok without records must not count")
+	}
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"records":0,"embedder":"none"}`))
+	}))
+	t.Cleanup(good.Close)
+	if !alreadyServing(good.Listener.Addr().String()) {
+		t.Fatal("lossless health must count")
+	}
+}
+
 func TestListenAlreadyServingIsOK(t *testing.T) {
 	st, err := store.Open(t.TempDir())
 	if err != nil {
