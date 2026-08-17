@@ -45,7 +45,7 @@ Universal fallback, every harness: a **directory watch** on that harness's sessi
 | Cleanup risk | sessions kept | **`cleanupPeriodDays` default 30** | kept under `~/.pi` | kept under XDG share | kept under `~/.codex` |
 | Adapter risk | Low. We already know this. | Low. Best `transcript_path`. | Medium. Tree JSONL, not linear. Tail the file; do not walk the tree in v1. | Medium-high. May need to serialize from the plugin API if storage is not JSONL. | Medium. Desktop may store threads in sqlite; watcher is still load-bearing. |
 
-Install: `lossless setup`. That is hooks + MCP for all five, a launchd/systemd user unit, and a health check. `install-hooks` / `install-mcp` are the pieces if you need only one.
+Install: `lossless setup`. That is hooks + MCP for all five and a health check. On macOS/Linux it can also write a *user* launchd/systemd unit so `serve` stays up on this login — not a cloud image. `install-hooks` / `install-mcp` are the pieces if you need only one. Any other harness: point MCP at `/mcp` or call REST ([deploy.md](deploy.md)).
 
 | | Grok | Claude Code | Pi | OpenCode | Codex |
 |--|------|-------------|----|----------|-------|

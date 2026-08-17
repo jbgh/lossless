@@ -287,7 +287,7 @@ Budgets as in the trigger table. Fail-open. If the daemon is down, write a spool
 
 Do not retrieve from hooks. Do not inject context. Write only.
 
-The hook only talks to a **local sidecar**. Bytes reach a remote home via incremental `POST /v1/append` in the background (`docs/deploy.md`). The hook never POSTs to a VPS.
+The hook only talks to a **local sidecar**. Bytes reach a remote home via incremental `POST /v1/append` in the background ([deploy.md](deploy.md)). The hook never POSTs off-box.
 
 ---
 

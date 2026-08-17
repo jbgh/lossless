@@ -33,6 +33,39 @@ func HomeURL() string {
 	return env.BaseURL()
 }
 
+// ProbeHome checks that a home answers /v1/ask. Used by doctor, not by setup.
+func ProbeHome(base, token string) error {
+	base = env.CanonicalURL(base)
+	if base == "" {
+		return fmt.Errorf("no home URL")
+	}
+	if err := CheckRemoteURL(base); err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]string{"project": "lossless/health", "question": "ping"})
+	req, err := http.NewRequest(http.MethodPost, base+"/v1/ask", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	res, err := outboundClient(5 * time.Second).Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 1<<20))
+	if res.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("unauthorized — check LOSSLESS_TOKEN")
+	}
+	if res.StatusCode >= 500 {
+		return fmt.Errorf("home status %d", res.StatusCode)
+	}
+	return nil
+}
+
 func HomeIsRemote() bool {
 	u := HomeURL()
 	if u == "" {

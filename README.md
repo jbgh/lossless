@@ -13,7 +13,7 @@ ask({ question, project, paths, goal })
   → packed context + warnings
 ```
 
-See [docs/architecture.html](docs/architecture.html) for a one-page map of the loop, store, and retrieve algorithm. [docs/pipeline.md](docs/pipeline.md) is the loop in prose, [docs/deploy.md](docs/deploy.md) is local-first (optional later migrate). Then [docs/write.md](docs/write.md), [docs/ask.md](docs/ask.md), [docs/retrieval.md](docs/retrieval.md), [docs/harnesses.md](docs/harnesses.md), [docs/stack.md](docs/stack.md).
+See [docs/architecture.html](docs/architecture.html) for a one-page map of the loop, store, and retrieve algorithm. [docs/pipeline.md](docs/pipeline.md) is the loop in prose, [docs/deploy.md](docs/deploy.md) is the portable REST + MCP contract (local by default; a remote home is manual). Then [docs/write.md](docs/write.md), [docs/ask.md](docs/ask.md), [docs/retrieval.md](docs/retrieval.md), [docs/harnesses.md](docs/harnesses.md), [docs/stack.md](docs/stack.md).
 
 ## Why
 
@@ -48,7 +48,7 @@ One-time install (any supported harness):
 
 That writes hooks, MCP, a skill, and a short always-on home rule for Grok, Claude, Codex, Pi, and OpenCode so the model calls `ask` on real work without you typing `/lossless`. Then start a new agent session (Grok: `/hooks` then `r`; `/skills` then `r` if the session is already open). Everything stays on this machine.
 
-If you later run your own home somewhere and want this laptop to use it: `lossless migrate --url https://…` (see [docs/deploy.md](docs/deploy.md)). Setup never does that for you.
+A remote home is optional and manual: run `serve` on any box, put TLS in front, set `LOSSLESS_URL` + `LOSSLESS_TOKEN`, point MCP at `/mcp`. We do not provision a cloud or ship your store for you. See [docs/deploy.md](docs/deploy.md).
 
 Data dir: `~/.lossless/` (`LOSSLESS_HOME` to override).
 

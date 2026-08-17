@@ -1,67 +1,57 @@
-# Deploy: one brain, many harnesses
+# Deploy: one binary, any box
 
-Two first-class ways to run it. Same binary, same APIs, same hooks.
+lossless is a process with two surfaces:
 
-| Mode | Who it is for | Where bytes live |
-|------|----------------|------------------|
-| **Local** | One machine, nothing leaves disk | Home + sidecar in one process on `127.0.0.1` |
-| **Home** | Many laptops / worker VPS, one brain | Canonical store on a box you run; sidecars push increments and `ask` it |
+| Surface | Where | What it is |
+|---------|-------|------------|
+| **REST** | `/v1/ask`, `/v1/remember`, `/v1/catch-up`, `/v1/append`, `/v1/records/:id` | The store |
+| **MCP** | `/mcp` (HTTP) or `lossless mcp` (stdio client of that daemon) | How an agent calls the store |
 
-Neither is a fallback of the other. Pick at install. You can start local and point sidecars at a home later without rewriting data (`raw/` + `export/` are the same layout).
+Any agent harness that can call an authenticated HTTP MCP server or those REST endpoints can use lossless. Grok, Claude, Codex, Pi, and OpenCode get a one-command installer. Everything else is the same URL and the same token.
 
-**Still not a vendor SaaS.** You run the home (a VPS you control, or Tailscale, or localhost). The corpus does not go to our cloud or Mem0. One bearer token = one brain = one person (or one team that accepts a shared past). Multi-tenant ACL is out of scope.
+We do not provision AWS, GCP, Hetzner, Tailscale, systemd on a VPS, or TLS. Those are yours. The binary is OS-agnostic: run `lossless serve` wherever Go runs.
 
----
-
-## Shape
-
-```
-  laptop A   Grok, Claude  ──hooks──► sidecar (this machine)
-  laptop B   Codex         ──hooks──► sidecar
-  VPS worker OpenCode      ──hooks──► sidecar
-                                      │
-                                      │  incremental append (async, reliable)
-                                      ▼
-                                 HOME (your VPS)
-                                 raw/ + export/ + ask
-                                      ▲
-                                      │  POST /v1/ask
-                                 any sidecar / skill
-```
-
-| Process | Where | Job |
-|---------|-------|-----|
-| **Home** | The long-lived box | Canonical `raw/` + `export/`. Derives claims, serves `ask`. |
-| **Sidecar** | Every machine that runs a harness | Hooks, spool, incremental push. May proxy `ask`. |
-
-Same Go binary. Default install is one local process (hooks + store + ask). A remote home is optional and only happens if you run `lossless migrate`.
+Default install is **this machine only**. Setup never reads `LOSSLESS_URL`. Pointing a laptop at a remote home is a documented, manual step.
 
 ---
 
-## Why the hook never talks to the VPS directly
+## Local (the complete product)
 
-PreCompact has **< 1s**. A new session can have **megabytes** not yet shipped. A worker in `us-east` talking to a home in `eu` cannot make that the critical path.
-
-```
-hook (fail-open, <200ms)
-  → append new harness bytes to local spool
-  → return
-
-sidecar (background)
-  → POST incremental chunks to home
-  → home appends raw, derives claims
-  → ack offset; sidecar drops spool prefix
+```bash
+lossless setup          # hooks + MCP + skill for known harnesses
+lossless serve          # REST + /mcp on 127.0.0.1:7432
 ```
 
-If the home is down, spool grows on the laptop. Compact still succeeds. Memory is **eventually** on the home, not instantly. That is the honest contract.
-
-`ask` is a small JSON round trip. Skills talk to **home** (`LOSSLESS_URL`). If home is unreachable, sidecar can answer from whatever it has already shipped *and* still has in spool (best-effort, v1.1). v1: ask fails soft and the agent continues.
+No token. Nothing listens off loopback. Nothing is uploaded. You can skip `setup` and only run `serve` if you will configure the client yourself.
 
 ---
 
-## Write protocol (home)
+## The contract
 
-Hooks do not send filesystem paths from another OS. The home never sees `/Users/you/.grok/sessions/...`.
+### Auth
+
+- Loopback (`127.0.0.1`, `localhost`) may be open. That is by design.
+- A non-loopback `--listen` **requires** `--token` (or `LOSSLESS_TOKEN`). No token + public bind = refuse to start.
+- Remote clients must use `https`. Loopback `http://127.0.0.1` is fine.
+- Outbound clients do not follow redirects (a 302 cannot bounce a bearer to another host).
+- Send the token as `Authorization: Bearer <token>`.
+
+Generate one if you need it: `lossless token`. Put it in the environment of the process that serves and the process that calls. We do not write it into harness config files; those reference `${LOSSLESS_TOKEN}`.
+
+### REST
+
+```
+POST /v1/ask          Authorization: Bearer <token>
+POST /v1/remember
+POST /v1/catch-up     # local sidecar: copy a session file we can read
+POST /v1/append       # remote home: receive already-redacted JSONL
+GET  /v1/records/:id
+GET  /health
+```
+
+`ask` / `remember` bodies match the MCP tools. See [ask.md](ask.md).
+
+`POST /v1/append` is how a sidecar ships new bytes to a home on another machine. The home never sees `/Users/you/.grok/sessions/...`.
 
 ```
 POST /v1/append
@@ -71,29 +61,101 @@ X-Project: acme/api
 X-Harness: grok
 X-Session: 01a002a6-…
 X-Client: <install id>
-X-Prev-Offset: 4096          # bytes already acked for this session+client
+X-Prev-Offset: 4096
 
 <body: complete JSONL lines only>
 ```
 
 ```
 200 { "accepted_through": 8192, "extracted": 2 }
-409 { "accepted_through": 4096 }   # client was behind; retry from 4096
+409 { "accepted_through": 4096 }   # retry from 4096
 ```
 
 Idempotent: same `X-Prev-Offset` + same bytes → no-op, 200.
 
-Home writes `raw/<project>/<yyyy-mm>/<session>.jsonl` (and `.partN` if a seal already exists). Then the same derive as local catch-up (redact already applied on the sidecar **and** again on home; defense in depth).
+### MCP
 
-Sidecar tracks `accepted_through` per `(session_id)`. Harness file cursors stay local (how much of the *harness* file we have spooled). Two numbers, two jobs.
+HTTP (any client that speaks MCP-over-HTTP):
+
+```
+POST https://home.example/mcp
+Authorization: Bearer <token>
+```
+
+stdio (any client that can spawn a command):
+
+```
+command: lossless
+args:    ["mcp"]
+env:
+  LOSSLESS_URL:   https://home.example
+  LOSSLESS_TOKEN: <token>
+```
+
+`lossless mcp` is an HTTP client of the daemon. It does not hold the store.
 
 ---
 
-## Read protocol
+## Point a harness at it
 
-Unchanged: `POST /v1/ask` on the **home**. Every laptop and worker uses the same URL. That is how “I compacted on the Mac this morning and the Codex box tonight knows we rejected Redis” works.
+**Known harnesses** (optional helper — does not move data):
 
-Skill / MCP: `LOSSLESS_URL` + `LOSSLESS_TOKEN`. No per-harness memory URL.
+```bash
+export LOSSLESS_URL=https://home.example
+export LOSSLESS_TOKEN=...
+lossless install-mcp --url "$LOSSLESS_URL"
+```
+
+That writes the five configs we know (`~/.grok/config.toml`, `~/.claude.json`, `~/.codex/config.toml`, `~/.pi/agent/mcp.json`, `~/.config/opencode/opencode.json`). Restart the harness so MCP attaches.
+
+**Any other harness:** add an MCP server named `lossless` with one of the two shapes above, or call REST directly. The skill and home rule are markdown; copy `internal/harness/skill.md` and `internal/harness/rule.md` into whatever always-on / skill directory that harness loads.
+
+Hooks (write path) still talk to a **local** sidecar. Compact cannot wait on a transatlantic `append`. Local `lossless serve --watch` stays, even when `ask` goes to a remote home. If `LOSSLESS_URL` is remote, the sidecar pushes new raw in the background.
+
+---
+
+## Run a home on another machine (manual)
+
+Whatever box you pick — a second laptop, a VM, a container, a machine behind Tailscale — do the same three things. We do not have an AWS script, a GCP script, or a Hetzner script.
+
+1. **Process.** Same binary.
+
+   ```bash
+   export LOSSLESS_TOKEN=$(lossless token)
+   lossless serve --listen 0.0.0.0:7432 --token "$LOSSLESS_TOKEN" --watch
+   ```
+
+   Keep it up with whatever you already use: systemd, launchd, a container restart policy, a process supervisor. `lossless setup` only writes a *user* unit on this login (macOS launchd / Linux systemd --user). It does not touch a cloud VM.
+
+2. **Expose it.** Put TLS in front if it is not loopback: Caddy, nginx, Tailscale Serve, a cloud load balancer. The binary does not terminate Let's Encrypt.
+
+3. **Point clients.** `LOSSLESS_URL=https://…` and `LOSSLESS_TOKEN=…` on every machine that should `ask` that home. Then `install-mcp` or edit the harness yourself.
+
+### Move existing tapes (optional)
+
+lossless does not upload your store for you. If you want history on the new box, copy the data directory:
+
+```bash
+rsync -a ~/.lossless/raw/ user@home:~/.lossless/raw/
+rsync -a ~/.lossless/export/ user@home:~/.lossless/export/
+```
+
+Or start empty. New catch-up on the sidecars will `append` going forward.
+
+Local `raw/` layout is the same on every OS. The home never needs the original harness session paths.
+
+---
+
+## Security (the parts we own)
+
+- Public listen requires a bearer. Loopback does not.
+- Remote URL must be `https`. No redirect following.
+- Sidecar redacts before bytes leave the machine. Home redacts again.
+- Store dirs `0700`; `export/`, `raw/`, `spool/`, sqlite `0600`.
+- Catch-up refuses symlinks and non-`.jsonl`. Claim IDs are a single path-safe token.
+- Disk encryption, firewall, and TLS certs are yours.
+
+This is your process on your machine. It is not us hosting your transcripts.
 
 ---
 
@@ -103,66 +165,15 @@ Skill / MCP: `LOSSLESS_URL` + `LOSSLESS_TOKEN`. No per-harness memory URL.
 |----|---------|
 | Bearer token | Which brain. One token, one `raw/` tree. |
 | `project_key` | `owner/repo`. Shared across machines. |
-| `session_id` | Harness session. Globally unique. Never reused across machines. |
-| `client_id` | This install. For acks and debugging. Not a security boundary. |
-
-Two Codex workers on the same repo = two session ids, one project. Claims collide only via `claim_hash` (same fact twice → supersede). That is how many writers stay safe without a distributed lock.
+| `session_id` | Harness session. Globally unique. |
+| `client_id` | This install. For append acks. Not a security boundary. |
 
 ---
 
-## Security
+## Out of scope
 
-- Home binds `127.0.0.1` unless `--listen` is set. Public listen **requires** a token. No token + `0.0.0.0` = refuse to start.
-- Remote `LOSSLESS_URL` / sidecar URL must be `https`. Loopback `http://127.0.0.1` is fine. Outbound clients do not follow redirects (so a 302 cannot bounce a bearer token to another host).
-- TLS via Tailscale Serve or Caddy. The binary does not terminate Let’s Encrypt in v1.
-- Token is a high-entropy bearer, stored in env / `0600` `service.env`. `lossless setup` does not create one. `lossless migrate` / `lossless token --write` do. The systemd unit uses `EnvironmentFile` and never inlines the token. Harness MCP configs only reference `${LOSSLESS_TOKEN}`. Existing `~/.claude.json` / `config.toml` modes are preserved so setup cannot make a `0600` file world-readable.
-- Sidecar redacts **before** the bytes leave the machine. Home redacts again.
-- Store dirs are `0700`. `export/`, `raw/`, `spool/`, and sqlite files are `0600`. Catch-up refuses symlinks and anything that is not a `.jsonl`. Claim IDs must be a single path-safe token.
-- Disk on the VPS: your LUKS / provider volume encryption. App-level at-rest encryption is not v1.
-
-This is “in the cloud” as **your** process on **your** VM. It is not us hosting your transcripts.
-
----
-
-## Local mode (first-class)
-
-```
-# no LOSSLESS_URL, or http://127.0.0.1:7432
-# no token
-# one process: hooks, raw/, ask
-lossless serve
-```
-
-Catch-up writes `raw/` on this disk. `ask` reads this disk. Nothing listens off loopback. Nothing is uploaded. Tests run this way.
-
-If you later stand up a home yourself (your VPS, your TLS, your process manager) and want this laptop to use it:
-
-```bash
-export LOSSLESS_URL=https://home.example
-export LOSSLESS_TOKEN=...
-lossless migrate
-lossless doctor
-```
-
-`migrate` uploads `raw/` through `POST /v1/append` (resume-safe), rewrites MCP, and updates `service.env`. Local `lossless serve` stays for hooks. We do not install systemd, open ports, or terminate TLS on the box — that is yours.
-
-If you never want that: stay on local forever. That is the complete product.
-
----
-
-## What we build, in order
-
-1. Local process that is already home+sidecar (catch-up as now).
-2. Split: `POST /v1/append` + spool + `LOSSLESS_URL` for ask.
-3. `lossless setup` is local only. `lossless migrate` is how a laptop opts into a home you already run.
-
-Do not skip (1). Do not make Grok’s PreCompact call the VPS in step (1).
-
----
-
-## Out of scope until someone is paying for a team brain
-
-- Per-user ACL inside one home
-- Invite links, orgs, billing
+- Provisioning a cloud, a VPS image, or a TLS certificate
+- An automatic `migrate` that rewrites your machine and ships the store
+- Per-user ACL, invite links, orgs, billing
 - S3 as the raw store
-- Clients without a sidecar (pure HTTP from the hook)
+- Hooks that POST straight to a remote home (they stay local and fail-open)

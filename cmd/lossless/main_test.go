@@ -127,9 +127,6 @@ func TestRunServe(t *testing.T) {
 	if runDoctor([]string{"-bogus"}) != 2 {
 		t.Fatal("doctor parse")
 	}
-	if runMigrate([]string{"-bogus"}) != 2 {
-		t.Fatal("migrate parse")
-	}
 	if runToken([]string{"-bogus"}) != 2 {
 		t.Fatal("token parse")
 	}

@@ -213,3 +213,20 @@ func TestFlushPushDoesNotFollowRedirect(t *testing.T) {
 		t.Fatal("bearer followed redirect")
 	}
 }
+
+func TestProbeHomeUnauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(srv.Close)
+	if err := ProbeHome(srv.URL, "bad"); err == nil {
+		t.Fatal("expected unauthorized")
+	}
+}
+
+func TestHomeURLStripsMCP(t *testing.T) {
+	t.Setenv("LOSSLESS_URL", "https://home.example/mcp")
+	if HomeURL() != "https://home.example" {
+		t.Fatal(HomeURL())
+	}
+}

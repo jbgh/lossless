@@ -65,8 +65,6 @@ func main() {
 		os.Exit(runSetup(args))
 	case "doctor":
 		os.Exit(runDoctor(args))
-	case "migrate":
-		os.Exit(runMigrate(args))
 	case "token":
 		os.Exit(runToken(args))
 	case "ensure":
@@ -101,12 +99,11 @@ func usage() {
   lossless hook-grok          # stdin: Grok hook JSON; fail-open
   lossless hook-claude        # stdin: Claude hook JSON; fail-open
   lossless hook-codex         # stdin: Codex hook JSON; fail-open
-  lossless setup              # local hooks + MCP + skill + user service
+  lossless setup              # local hooks + MCP + skill + optional user service
   lossless doctor             # daemon, hooks, MCP, service
-  lossless migrate --url https://home [--token TOKEN]   # optional: ship local tapes to a home you already run
   lossless token              # optional: print a random bearer
   lossless install-hooks      # Grok + Claude + Codex + Pi + OpenCode
-  lossless install-mcp        # MCP for every supported harness
+  lossless install-mcp        # MCP for every supported harness (or point any MCP client at /mcp)
   lossless ensure             # replay spool after sidecar was down
   lossless embed-backfill     # embed active claims if an on-box model is configured
   lossless hook-pi            # stdin: Pi extension JSON; fail-open
@@ -469,67 +466,6 @@ func runToken(args []string) int {
 	}
 	fmt.Println(tok)
 	return 0
-}
-
-func runMigrate(args []string) int {
-	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
-	home := homeFlag(fs)
-	url := fs.String("url", env.URL(), "remote home URL")
-	token := fs.String("token", env.Token(), "bearer token")
-	noPush := fs.Bool("no-push", false, "rewire MCP only; do not upload tapes")
-	noMCP := fs.Bool("no-mcp", false, "do not rewrite harness MCP configs")
-	if err := fs.Parse(args); err != nil {
-		return 2
-	}
-	res, err := write.Migrate(write.MigrateOpts{
-		DataHome: *home, URL: *url, Token: *token, Push: !*noPush,
-	})
-	fmt.Print(res.Format())
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	}
-	if !*noMCP {
-		exe, e := resolveExe()
-		if e != nil {
-			fmt.Fprintln(os.Stderr, e)
-			return 1
-		}
-		paths, e := harness.InstallMCP(harness.MCPConfig{
-			Home: os.Getenv("HOME"), Exe: exe, URL: *url, Token: *token,
-		})
-		if e != nil && len(paths) == 0 {
-			fmt.Fprintln(os.Stderr, e)
-			return 1
-		}
-		for _, p := range paths {
-			fmt.Println("wrote", p)
-		}
-		if e != nil {
-			fmt.Fprintln(os.Stderr, "mcp:", e)
-		}
-	}
-	if err := harness.WriteServiceEnv(*home, *url, *token); err != nil {
-		fmt.Fprintln(os.Stderr, "service.env:", err)
-	} else {
-		fmt.Println("wrote", filepath.Join(*home, "service.env"))
-	}
-	if dest := harness.ServicePath(os.Getenv("HOME")); dest != "" {
-		if _, err := harness.InstallUserService(mustExe(), os.Getenv("HOME"), *home, *url, *token); err == nil {
-			_ = harness.StartUserService(dest)
-			fmt.Println("service", dest)
-		}
-	}
-	fmt.Println("local serve stays for hooks. start a new agent session so MCP talks to the home.")
-	return 0
-}
-
-func mustExe() string {
-	exe, err := resolveExe()
-	if err != nil {
-		return "lossless"
-	}
-	return exe
 }
 
 const hookStdinLimit = 1 << 20

@@ -8,7 +8,7 @@ MCP tools: `ask`, `remember`, `get_record` (same JSON as the REST bodies).
 - HTTP MCP: `http://127.0.0.1:7432/mcp` (same process as `serve`)
 - stdio MCP: `lossless mcp` (HTTP client of the local daemon)
 
-`lossless setup` is the one command: local hooks + MCP + a **skill** and a short **home rule** for every supported harness (Grok, Claude, Codex, Pi, OpenCode) so the model calls `ask` on real work without the user typing `/lossless`. The rule is always in session context (`~/.grok/rules`, `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md`, `~/.config/opencode/AGENTS.md`); the skill is the full procedure when the turn matches. `lossless doctor` checks both. Default is this machine only. `lossless migrate` is optional, later, if you already have a home URL.
+`lossless setup` is the one command: local hooks + MCP + a **skill** and a short **home rule** for every supported harness (Grok, Claude, Codex, Pi, OpenCode) so the model calls `ask` on real work without the user typing `/lossless`. The rule is always in session context (`~/.grok/rules`, `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.pi/agent/AGENTS.md`, `~/.config/opencode/AGENTS.md`); the skill is the full procedure when the turn matches. `lossless doctor` checks both. Default is this machine only. Any other harness talks to the same authenticated `/mcp` or `/v1/ask`. A remote home is documented, not automatic ([deploy.md](deploy.md)).
 
 No other read verbs in v1. Full record + excerpt: `GET /v1/records/:id`.
 
