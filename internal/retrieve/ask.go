@@ -86,6 +86,9 @@ func (e Engine) Ask(req Request) (Response, error) {
 		if dropFix && claim.FixtureSession(rec.SessionID) {
 			continue
 		}
+		if extractNoise(rec) {
+			continue
+		}
 		if prev, ok := seenHash[rec.ClaimHash]; ok {
 			if rec.CreatedAt >= cand[prev].rec.CreatedAt {
 				cand[prev] = e.features(rec, q, ftsBM25, knn)
@@ -383,7 +386,7 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64)
 	}
 	s.agree = float64(nAgree) / 3
 	overlapTokens := append(append([]string{}, q.QuestionTokens...), q.GoalTokens...)
-	hits := contentOverlap(overlapTokens, rec.Text)
+	hits := contentOverlap(overlapTokens, jobOverlapText(rec.Text))
 	strong := s.path > 0 || s.symbol > 0 || hits >= OverlapStrongMin || s.vector >= VectorGate
 	weak := !strong && hits >= 1
 	switch rec.Type {

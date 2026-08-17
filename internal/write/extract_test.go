@@ -106,6 +106,30 @@ func TestExtractErrorHandlingIsNotFailed(t *testing.T) {
 	}
 }
 
+func TestExtractSkipsTablesAndMetaFailedTalk(t *testing.T) {
+	got := Extract([]Message{
+		{Role: "assistant", Offset: 1, Text: "| **Claims** | `owner/repo` | A Grok `failed` on `acme/api` is what Claude’s ask is supposed to see."},
+		{Role: "assistant", Offset: 2, Text: "Force in the best failed-overlap (don't repeat burned work)."},
+		{Role: "assistant", Offset: 3, Text: "Raising to 8 or 10 would make recall look better without making ranking better — and this live project already fills 5 with extract noise (markdown table rows classified as `failed`)."},
+		{Role: "assistant", Offset: 4, Text: "Next I'll check whether this session is actually on tape."},
+		{Role: "assistant", Offset: 5, Text: "Redis token bucket failed in src/middleware/auth.ts staging."},
+	}, ExtractOpts{ProjectKey: "jbgh/lossless", SessionID: "s"})
+	for _, r := range got {
+		if strings.Contains(r.Text, "Claims") || strings.Contains(r.Text, "failed-overlap") || strings.Contains(r.Text, "extract noise") || strings.Contains(r.Text, "Next I'll") {
+			t.Fatalf("meta extracted: %+v", r)
+		}
+	}
+	ok := false
+	for _, r := range got {
+		if r.Type == "failed" && strings.Contains(r.Text, "Redis") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("real failed missed: %+v", got)
+	}
+}
+
 func TestExtractSkipsHeadingsAndQuotedFixtures(t *testing.T) {
 	got := Extract([]Message{
 		{Role: "assistant", Offset: 1, Text: "**What you do next**"},

@@ -93,3 +93,28 @@ func TestMustJSONAndToHit(t *testing.T) {
 		t.Fatal("nil paths")
 	}
 }
+
+func TestExtractNoiseAndJobOverlap(t *testing.T) {
+	if !extractNoise(claim.Record{Text: "| **Claims** | owner/repo | A Grok failed |"}) {
+		t.Fatal("table")
+	}
+	if !extractNoise(claim.Record{Text: "Force in the best failed-overlap now."}) {
+		t.Fatal("failed-overlap")
+	}
+	if !extractNoise(claim.Record{Type: "state", Text: "Next I'll check the tape after compact."}) {
+		t.Fatal("next I'll")
+	}
+	if extractNoise(claim.Record{Type: "failed", Text: "Redis token bucket failed in staging.", Paths: []string{"src/middleware/auth.ts"}}) {
+		t.Fatal("real failed")
+	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "The live ask just returned five `failed`s, and four look like extract noise."}) {
+		t.Fatal("backticked type mention")
+	}
+	qtoks := []string{"retrieve", "extract", "failed", "noise", "pack"}
+	if contentOverlap(qtoks, jobOverlapText("Raising to 8 would make recall look better — extract noise classified as `failed`.")) >= OverlapStrongMin {
+		t.Fatal("meta should not be strong job overlap")
+	}
+	if contentOverlap([]string{"redis", "limiter", "auth"}, jobOverlapText("Redis token bucket failed in src/middleware/auth.ts staging.")) < 1 {
+		t.Fatal("real failed should still overlap redis")
+	}
+}

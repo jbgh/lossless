@@ -334,3 +334,53 @@ func TestGetManyMissInAsk(t *testing.T) {
 		t.Fatal(out)
 	}
 }
+
+func TestAskDropsExtractNoiseAndKeepsRealWork(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "REALFAIL", Type: "failed", SessionID: "live",
+		Text: "If a harness rewrites chat_history.jsonl smaller, a cursor past EOF makes catch-up a no-op.",
+		Paths: []string{"internal/write/catchup.go"}, CreatedAt: "2026-08-17T05:12:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "REALDEC", Type: "decision", SessionID: "manual",
+		Text: "Keep the MCP/HTTP read verb as ask. Do not say ask pack; the result is context.",
+		Paths: []string{"internal/harness/skill.md"}, CreatedAt: "2026-08-17T06:20:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "NOISE1", Type: "failed", SessionID: "live",
+		Text: "| **Claims** | owner/repo | A Grok `failed` on acme/api is what Claude’s ask is supposed to see.",
+		CreatedAt: "2026-08-17T05:47:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "NOISE2", Type: "failed", SessionID: "live",
+		Text: "Force in the best failed-overlap (do not repeat burned work).",
+		CreatedAt: "2026-08-17T06:21:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "NOISE3", Type: "failed", SessionID: "live",
+		Text: "Raising to 8 or 10 would make recall look better with extract noise classified as `failed`.",
+		CreatedAt: "2026-08-17T06:17:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project: "acme/api", SessionID: "live",
+		Goal:     "observe ask context and improve retrieve",
+		Question: "what must I not forget about retrieve, extract noise, and catch-up",
+		Paths:    []string{"internal/retrieve/ask.go", "internal/write/catchup.go", "internal/write/extract.go"},
+	})
+	if containsID(out, "NOISE1") || containsID(out, "NOISE2") || containsID(out, "NOISE3") {
+		t.Fatalf("noise in context: %+v", out.Context)
+	}
+	if !containsID(out, "REALFAIL") {
+		t.Fatalf("real catch-up failed missing: %+v", out.Context)
+	}
+	nFail := 0
+	for _, h := range out.Context {
+		if h.Type == "failed" {
+			nFail++
+		}
+	}
+	if nFail > PackTypeCap {
+		t.Fatalf("faileds=%d %+v", nFail, out.Context)
+	}
+}

@@ -96,7 +96,7 @@ func classify(sentence string, msg Message) string {
 	if isQuestion(sentence) {
 		return ""
 	}
-	if msg.Error || failedRE.MatchString(sentence) {
+	if msg.Error || (failedRE.MatchString(stripTypeTalk(sentence)) && !metaFailedTalk(sentence)) {
 		return "failed"
 	}
 	if decisionRE.MatchString(sentence) {
@@ -111,12 +111,43 @@ func classify(sentence string, msg Message) string {
 	return ""
 }
 
+var (
+	backtickSpan = regexp.MustCompile("`[^`]*`")
+	typeTalkRE   = regexp.MustCompile(`(?i)\b(failed-overlap|shipped-overlap|type-cap|packtypecap|classified as|claim type|as a failed|as failed)\b`)
+)
+
+func stripTypeTalk(s string) string {
+	s = backtickSpan.ReplaceAllString(s, " ")
+	s = typeTalkRE.ReplaceAllString(s, " ")
+	return s
+}
+
+func metaFailedTalk(s string) bool {
+	low := strings.ToLower(s)
+	for _, n := range []string{
+		"failed-overlap", "classified as", "type-cap", "packtype",
+		"extract noise", "ask pack", "in context", "blocking warning",
+	} {
+		if strings.Contains(low, n) {
+			return true
+		}
+	}
+	return false
+}
+
 func skipSentence(s string) bool {
 	t := strings.TrimSpace(s)
 	if t == "" {
 		return true
 	}
-	if strings.HasPrefix(t, "#") || strings.HasPrefix(t, ">") {
+	t = strings.TrimLeft(t, "\"“”'`")
+	if t == "" {
+		return true
+	}
+	if strings.HasPrefix(t, "#") || strings.HasPrefix(t, ">") || strings.HasPrefix(t, "|") {
+		return true
+	}
+	if strings.Contains(t, " | ") {
 		return true
 	}
 	if strings.HasPrefix(t, "**") && strings.HasSuffix(t, "**") && !strings.Contains(t, ".") {
@@ -128,7 +159,13 @@ func skipSentence(s string) bool {
 		}
 	}
 	low := strings.ToLower(t)
-	if strings.Contains(low, "fixture") || strings.Contains(low, "quoted the") {
+	if strings.Contains(low, "fixture") || strings.Contains(low, "quoted the") || strings.Contains(low, "quoting the") {
+		return true
+	}
+	if strings.HasPrefix(low, "next i ") || strings.HasPrefix(low, "next i'") || strings.HasPrefix(low, "next i’ll") || strings.HasPrefix(low, "next i'll") {
+		return true
+	}
+	if metaFailedTalk(t) {
 		return true
 	}
 	return false

@@ -1,6 +1,7 @@
 package retrieve
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -249,6 +250,81 @@ func contentOverlap(queryTokens []string, text string) int {
 		}
 	}
 	return n
+}
+
+// jobOverlapText strips claim-type jargon so "classified as failed"
+// does not count as a job-1 overlap with an ask about retrieve.
+func jobOverlapText(s string) string {
+	var b strings.Builder
+	inTick := false
+	for _, r := range s {
+		if r == '`' {
+			inTick = !inTick
+			b.WriteByte(' ')
+			continue
+		}
+		if !inTick {
+			b.WriteRune(r)
+		}
+	}
+	out := b.String()
+	for _, w := range jobOverlapStop {
+		out = strings.ReplaceAll(strings.ToLower(out), w, " ")
+	}
+	return out
+}
+
+var jobOverlapStop = []string{
+	"failed-overlap", "shipped-overlap", "type-cap", "packtypecap",
+	"classified as", "extract noise", "ask pack",
+	"failed", "failure",
+}
+
+func extractNoise(rec claim.Record) bool {
+	t := strings.TrimSpace(rec.Text)
+	if t == "" {
+		return true
+	}
+	if strings.HasPrefix(t, "|") || strings.Contains(t, " | ") {
+		return true
+	}
+	if strings.HasPrefix(t, "**") && !strings.Contains(t, ".") {
+		return true
+	}
+	if (strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ")) && strings.Contains(t, "**") {
+		return true
+	}
+	low := strings.ToLower(t)
+	if strings.Contains(low, "failed-overlap") || strings.Contains(low, "classified as") {
+		return true
+	}
+	if rec.Type == "state" && (strings.HasPrefix(low, "next i ") || strings.HasPrefix(low, "next i'") || strings.HasPrefix(low, "next i’ll") || strings.HasPrefix(low, "next i'll")) {
+		return true
+	}
+	if rec.Type == "failed" && len(rec.Paths) == 0 && failedOnlyInTicks(t) {
+		return true
+	}
+	return false
+}
+
+var failedWord = regexp.MustCompile(`(?i)\bfailed\b`)
+
+func failedOnlyInTicks(s string) bool {
+	if !failedWord.MatchString(s) {
+		return false
+	}
+	var b strings.Builder
+	inTick := false
+	for _, r := range s {
+		if r == '`' {
+			inTick = !inTick
+			continue
+		}
+		if !inTick {
+			b.WriteRune(r)
+		}
+	}
+	return !failedWord.MatchString(b.String())
 }
 
 func isContentToken(t string) bool {
