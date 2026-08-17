@@ -21,7 +21,7 @@ func dropInvalidatedByNewerFailed(cand []scored) []scored {
 			if !sharePathCluster(f, d) || f.rec.CreatedAt <= d.rec.CreatedAt {
 				continue
 			}
-			if jaccard(claim.Tokens(f.rec.Text), claim.Tokens(d.rec.Text)) < InvalidateJac {
+			if jaccard(topicTokens(f.rec), topicTokens(d.rec)) < InvalidateJac {
 				continue
 			}
 			drop[d.rec.ID] = true
@@ -71,6 +71,27 @@ func dropOlderConflicts(cand []scored) []scored {
 		}
 	}
 	return out
+}
+
+// topicTokens drops file paths so a newer failed on the same
+// file does not look like it invalidated an unrelated decision.
+func topicTokens(rec claim.Record) []string {
+	text := rec.Text
+	for _, p := range rec.Paths {
+		n := strings.ReplaceAll(p, "\\", "/")
+		text = strings.ReplaceAll(text, p, " ")
+		text = strings.ReplaceAll(text, n, " ")
+		if i := strings.LastIndex(n, "/"); i >= 0 {
+			n = n[i+1:]
+		}
+		if n != "" {
+			text = strings.ReplaceAll(text, n, " ")
+		}
+		if i := strings.LastIndex(n, "."); i > 0 {
+			text = strings.ReplaceAll(text, n[:i], " ")
+		}
+	}
+	return claim.Tokens(text)
 }
 
 func typeCount(out []scored, typ string) int {

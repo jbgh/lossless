@@ -95,6 +95,32 @@ func TestRetryThenFailAgainDropsDeadDecision(t *testing.T) {
 	}
 }
 
+func TestSameFileFailedDoesNotKillOtherDecision(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "HERO", Type: "decision",
+		Text:      "We decided to use a same-window hero overlay instead of a hard cut in ios/LightboxView.swift.",
+		Paths:     []string{"ios/LightboxView.swift"},
+		CreatedAt: "2025-08-22T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "WHO", Type: "failed",
+		Text:      "Who-reacted failed in preview in ios/LightboxView.swift.",
+		Paths:     []string{"ios/LightboxView.swift"},
+		CreatedAt: "2025-11-12T00:00:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project: "acme/api", Goal: "how does lightbox open",
+		Paths: []string{"ios/LightboxView.swift"},
+	})
+	if !strings.Contains(textsOf(out), "same-window hero") {
+		t.Fatalf("unrelated same-file decision dropped: %+v", out)
+	}
+	if !strings.Contains(textsOf(out), "Who-reacted") {
+		t.Fatalf("newer failed missed: %+v", out)
+	}
+}
+
 func TestNewerDecisionBeatsOlderConflictOnSamePath(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{

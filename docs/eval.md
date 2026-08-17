@@ -24,6 +24,8 @@ Stress (`eval/stress_test.go`): 10k decoy claims + gold failed (p50 < 500ms, p95
 
 Year corpus (`eval/year_sim_test.go`): weekday chatter for 365 days (~630 claims) plus five golds from Aug 2025 through Aug 2026. Asks check that a year-old jose decision, a Nov Redis failure, a Feb constraint, a May postgres pick, and an Aug warehouse timeout still pack, and that auth work does not leak invoices. Also catch-up of 120 generated sessions (~60/s) and a cross-project isolation check.
 
+Multi-discipline year (`eval/year_disciplines_test.go`): ~260 weekday Grok/Claude/Codex JSONL sessions across mobile, kernel, frontend, backend, game, and infra (~290 extracted claims). Golds are planted in the tape, ingested via CatchUp, then backdated. Asks check year-later recall and no cross-discipline bleed. A newer failed on the same file must not drop an unrelated older decision (invalidation jaccard ignores path tokens).
+
 Add a case by dropping a JSONL in `sessions/` and a JSON file in `cases/`. Gold is substrings and types, not claim ids, because extract assigns ids at ingest.
 
 Algorithm notes the suite forced:
