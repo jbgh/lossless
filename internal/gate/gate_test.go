@@ -45,6 +45,18 @@ func TestYAMLAndList(t *testing.T) {
 	}
 }
 
+func TestLivePackLeftovers(t *testing.T) {
+	if !MetaFailedTalk(`- Off-topic but real memora "Sendable tests failed" — ranking/topic, next only if you want that slice`) {
+		t.Fatal("off-topic bullet")
+	}
+	if !ConstraintFragment("so the prompt you store must stand on its own.") {
+		t.Fatal("so-fragment")
+	}
+	if !ProcessState("Writing the design spec and the deck script next.") {
+		t.Fatal("writing next")
+	}
+}
+
 func TestSkipProse(t *testing.T) {
 	if !SkipProse("I'll check what we already decided.") {
 		t.Fatal("planning")

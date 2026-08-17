@@ -71,7 +71,18 @@ func MetaFailedTalk(s string) bool {
 }
 
 func ProcessState(s string) bool {
-	return containsAny(s, processState)
+	if containsAny(s, processState) {
+		return true
+	}
+	low := Fold(strings.TrimSpace(s))
+	return strings.HasSuffix(low, " next.") || strings.HasSuffix(low, " next")
+}
+
+// ConstraintFragment is a continuation clause, not a standing rule.
+func ConstraintFragment(s string) bool {
+	low := Fold(strings.TrimSpace(s))
+	return strings.HasPrefix(low, "so ") || strings.HasPrefix(low, "and ") ||
+		strings.HasPrefix(low, "but ")
 }
 
 func RememberedProse(s string) bool {
@@ -227,6 +238,9 @@ var (
 		"failed-overlap", "classified as", "type-cap", "packtype",
 		"extract noise", "ask pack", "in context", "blocking warning",
 		"failure mode", "failed eviction",
+		"off-topic", "ranking/topic",
+		"failed/decision", "classify now", "curly apostrophe",
+		"forced failed", "counts as a",
 	}
 	processState = []string{
 		"in this session", "the next stop", "next test that matters",

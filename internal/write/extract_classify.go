@@ -38,7 +38,7 @@ func classify(sentence string, msg Message) string {
 	if (msg.Error || (soft && !gate.MetaFailedTalk(sentence))) && !(decisionRE.MatchString(folded) && !gate.Planning(sentence)) {
 		return "failed"
 	}
-	if constraintRE.MatchString(folded) && msg.Role == "user" && !hedgeRE.MatchString(folded) && !gate.SessionOp(sentence) && !gate.AgentPrompt(sentence) {
+	if constraintRE.MatchString(folded) && msg.Role == "user" && !hedgeRE.MatchString(folded) && !gate.SessionOp(sentence) && !gate.AgentPrompt(sentence) && !gate.ConstraintFragment(sentence) {
 		return "constraint"
 	}
 	if stateRE.MatchString(folded) {

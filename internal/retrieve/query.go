@@ -285,7 +285,7 @@ func extractNoise(rec claim.Record) bool {
 			return true
 		}
 	case "constraint":
-		if gate.SessionOp(t) || gate.AgentPrompt(t) {
+		if gate.SessionOp(t) || gate.AgentPrompt(t) || gate.ConstraintFragment(t) {
 			return true
 		}
 	case "failed":

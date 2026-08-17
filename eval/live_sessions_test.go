@@ -114,8 +114,13 @@ func liveNoise(h retrieve.Hit) string {
 	if strings.HasPrefix(t, "- ") && len(t) < 80 {
 		return "short-bullet"
 	}
-	if h.Type == "constraint" && (strings.Contains(low, "why don't you") || strings.Contains(low, "don't ask") || strings.Contains(low, "don't change source")) {
+	if h.Type == "constraint" && (strings.Contains(low, "why don't you") || strings.Contains(low, "don't ask") || strings.Contains(low, "don't change source") || strings.HasPrefix(low, "so ")) {
 		return "session-op"
+	}
+	if strings.Contains(low, "off-topic") || strings.Contains(low, "ranking/topic") ||
+		strings.Contains(low, "failed/decision") || strings.Contains(low, "classify now") ||
+		strings.Contains(low, "forced failed") {
+		return "meta"
 	}
 	if h.Type == "decision" && (strings.Contains(low, "i'll start") || strings.Contains(low, "i’ll start") || strings.Contains(low, "i'll check") || strings.Contains(low, "i’ll check") || strings.Contains(low, "i'll fix") || strings.Contains(low, "i’ll fix")) {
 		return "planning"
@@ -123,7 +128,7 @@ func liveNoise(h retrieve.Hit) string {
 	if strings.Contains(low, "failure mode") {
 		return "meta"
 	}
-	if strings.HasSuffix(t, "(") || strings.HasSuffix(t, "`." ) || strings.HasSuffix(t, "do not") {
+	if strings.HasSuffix(t, "(") || strings.HasSuffix(t, "`.") || strings.HasSuffix(t, "do not") {
 		return "truncated"
 	}
 	if strings.Contains(low, "failed-overlap") || strings.Contains(low, "classified as") {
