@@ -65,6 +65,8 @@ func main() {
 		os.Exit(runSetup(args))
 	case "doctor":
 		os.Exit(runDoctor(args))
+	case "inspect":
+		os.Exit(runInspect(args))
 	case "token":
 		os.Exit(runToken(args))
 	case "ensure":
@@ -101,6 +103,7 @@ func usage() {
   lossless hook-codex         # stdin: Codex hook JSON; fail-open
   lossless setup              # local hooks + MCP + skill + optional user service
   lossless doctor             # daemon, hooks, MCP, service
+  lossless inspect            # tape vs claims vs last packs; --project KEY; --ask
   lossless token              # optional: print a random bearer
   lossless install-hooks      # Grok + Claude + Codex + Pi + OpenCode
   lossless install-mcp        # MCP for every supported harness (or point any MCP client at /mcp)

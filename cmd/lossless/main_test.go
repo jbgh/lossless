@@ -93,6 +93,12 @@ func TestRunCatchUpRememberAsk(t *testing.T) {
 	if runAsk([]string{"--home", home, "--project", "acme/api", "--question", "jose", "--goal", "pick lib", "--path", "src/auth.ts", "--limit-tokens", "400"}) != 0 {
 		t.Fatal("ask")
 	}
+	if runInspect([]string{"--home", home}) != 0 {
+		t.Fatal("inspect")
+	}
+	if runInspect([]string{"--home", home, "--project", "acme/api", "--ask", "--question", "jose", "--path", "src/auth.ts"}) != 0 {
+		t.Fatal("inspect ask")
+	}
 }
 
 func TestRunServe(t *testing.T) {
@@ -126,6 +132,9 @@ func TestRunServe(t *testing.T) {
 	}
 	if runDoctor([]string{"-bogus"}) != 2 {
 		t.Fatal("doctor parse")
+	}
+	if runInspect([]string{"-bogus"}) != 2 {
+		t.Fatal("inspect parse")
 	}
 	if runToken([]string{"-bogus"}) != 2 {
 		t.Fatal("token parse")
