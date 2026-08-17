@@ -74,7 +74,21 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 		return out, err
 	}
 	srcOff := st.Cursor(req.JSONL)
-	if srcOff >= info.Size() {
+	if srcOff > info.Size() {
+		// Compact (or a rewrite) shrank the harness file. A cursor past
+		// EOF would no-op forever and drop every turn after the rewrite.
+		live := st.LiveRawPath(project, session, info.ModTime())
+		if _, err := os.Stat(live); err == nil {
+			if z, err := SealRaw(live); err == nil {
+				out.Sealed = z
+			}
+		}
+		if err := st.SetCursor(req.JSONL, 0); err != nil {
+			return out, err
+		}
+		srcOff = 0
+	}
+	if srcOff == info.Size() {
 		out.Noop = true
 		out.RawPath = st.LiveRawPath(project, session, info.ModTime())
 		_ = st.UpsertSession(store.Session{

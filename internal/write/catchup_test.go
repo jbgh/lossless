@@ -97,6 +97,43 @@ func TestCatchUpTwoTurns(t *testing.T) {
 	}
 }
 
+func TestCatchUpResetsWhenHarnessFileShrinks(t *testing.T) {
+	st := tmpStore(t)
+	p := filepath.Join(t.TempDir(), "chat.jsonl")
+	old := `{"type":"user","content":"Always use jose."}` + "\n" +
+		`{"type":"assistant","content":"ok we will use jose for Edge."}` + "\n" +
+		`{"type":"user","content":"also never log Authorization headers."}` + "\n"
+	if err := os.WriteFile(p, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	first, err := CatchUp(st, CatchUpRequest{JSONL: p, Project: "acme/api", SessionID: "s-shrink"})
+	if err != nil || first.Copied == 0 {
+		t.Fatalf("first %+v %v", first, err)
+	}
+	rewritten := `{"type":"user","content":"continue after compact"}` + "\n" +
+		`{"type":"assistant","content":"We decided to keep the limiter in-process."}` + "\n"
+	if err := os.WriteFile(p, []byte(rewritten), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second, err := CatchUp(st, CatchUpRequest{JSONL: p, Project: "acme/api", SessionID: "s-shrink", Source: "compact"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Noop || second.Copied == 0 {
+		t.Fatalf("shrink must recopy, got %+v", second)
+	}
+	raw, err := os.ReadFile(second.RawPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "continue after compact") {
+		t.Fatalf("missing rewritten tail: %s", raw)
+	}
+	if st.Cursor(p) != int64(len(rewritten)) {
+		t.Fatalf("cursor %d want %d", st.Cursor(p), len(rewritten))
+	}
+}
+
 func TestCatchUpSurvivesHarnessDelete(t *testing.T) {
 	st := tmpStore(t)
 	src := writeJSONL(t, t.TempDir(), "chat.jsonl",
