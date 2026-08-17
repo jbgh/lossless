@@ -95,12 +95,20 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 
 func capExtract(in []claim.Record, total, perType int) []claim.Record {
 	sortByPri(in)
+	var pathful, pathless []claim.Record
+	for _, r := range in {
+		if len(r.Paths) > 0 {
+			pathful = append(pathful, r)
+		} else {
+			pathless = append(pathless, r)
+		}
+	}
 	counts := map[string]int{}
 	dirN := map[string]int{}
 	var kept []claim.Record
-	for _, r := range in {
+	take := func(r claim.Record) bool {
 		if counts[r.Type] >= perType {
-			continue
+			return false
 		}
 		d := primaryDir(r.Paths)
 		dk := r.Type + "|" + d
@@ -109,14 +117,22 @@ func capExtract(in []claim.Record, total, perType int) []claim.Record {
 			dirCap = 5
 		}
 		if d != "" && dirN[dk] >= dirCap {
-			continue
+			return false
 		}
 		kept = append(kept, r)
 		counts[r.Type]++
 		if d != "" {
 			dirN[dk]++
 		}
-		if len(kept) >= total {
+		return len(kept) >= total
+	}
+	for _, r := range pathful {
+		if take(r) {
+			return kept
+		}
+	}
+	for _, r := range pathless {
+		if take(r) {
 			return kept
 		}
 	}
@@ -138,7 +154,7 @@ func classify(sentence string, msg Message) string {
 	if isQuestion(sentence) {
 		return ""
 	}
-	if msg.Error || (failedRE.MatchString(stripTypeTalk(sentence)) && !metaFailedTalk(sentence)) {
+	if msg.Error || (failedRE.MatchString(stripTypeTalk(pathRE.ReplaceAllString(sentence, " "))) && !metaFailedTalk(sentence)) {
 		return "failed"
 	}
 	if decisionRE.MatchString(sentence) && !planningDecision(sentence) {
@@ -398,6 +414,9 @@ func nearby(msg Message, all []Message) []string {
 		}
 	}
 	if idx < 0 {
+		return nil
+	}
+	if msg.Role == "user" {
 		return nil
 	}
 	// Preceding user turns only (not other assistant lines). Look

@@ -214,6 +214,7 @@ func normalize(o map[string]any, offset int64, ownIDs map[string]bool) (Message,
 	}
 	if strings.HasPrefix(strings.TrimSpace(text), "<system-reminder>") ||
 		strings.HasPrefix(strings.TrimSpace(text), "<user_info>") ||
+		looksLikeOwnPayload(text) ||
 		len(text) > 8000 {
 		return Message{Skip: true, Offset: offset}, true
 	}

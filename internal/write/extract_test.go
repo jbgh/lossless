@@ -71,6 +71,27 @@ func TestExtractKeepsDurableFromEarlyInLongSession(t *testing.T) {
 	}
 }
 
+func TestExtractFailureInPathIsNotFailed(t *testing.T) {
+	got := Extract([]Message{{
+		Role: "assistant", Offset: 1,
+		Text: "We decided to keep src/failure/handler.ts instead of Redis.",
+	}}, ExtractOpts{ProjectKey: "acme/api"})
+	for _, r := range got {
+		if r.Type == "failed" {
+			t.Fatalf("path word failure: %+v", r)
+		}
+	}
+	ok := false
+	for _, r := range got {
+		if r.Type == "decision" && strings.Contains(r.Text, "handler.ts") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("wanted decision: %+v", got)
+	}
+}
+
 func TestExtractKeepsDecisionAmongManyFaileds(t *testing.T) {
 	var msgs []Message
 	msgs = append(msgs, Message{
