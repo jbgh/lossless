@@ -24,7 +24,7 @@ var secrets = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?)://[^:\s]+:[^@\s]+@`),
 }
 
-var sensitivePath = regexp.MustCompile(`(?:^|/)(?:\.env(?:\..+)?|.*\.pem|id_rsa|id_rsa\.pub|id_ed25519|id_ed25519\.pub|id_ecdsa|id_dsa|authorized_keys|credentials)$`)
+var sensitivePath = regexp.MustCompile(`(?:^|/)(?:\.env(?:\..+)?|\.envrc|.*\.pem|id_rsa|id_rsa\.pub|id_ed25519|id_ed25519\.pub|id_ecdsa|id_dsa|authorized_keys|credentials(?:\.json)?|aws-exports\.js)$`)
 
 func ContainsSecret(text string) bool {
 	for _, re := range secrets {
@@ -50,12 +50,26 @@ func ShouldDropClaim(text string, paths []string) bool {
 func FilterPaths(paths []string) []string {
 	var out []string
 	for _, p := range paths {
-		if traversalPath(p) || remotePath(p) || gitDirPath(p) || depDirPath(p) || sensitivePath.MatchString(p) {
+		p = normalizeRelPath(p)
+		if p == "" || traversalPath(p) || remotePath(p) || gitDirPath(p) || depDirPath(p) || sensitivePath.MatchString(p) {
 			continue
 		}
 		out = append(out, p)
 	}
 	return out
+}
+
+func normalizeRelPath(p string) string {
+	p = strings.TrimSpace(p)
+	p = strings.ReplaceAll(p, "\\", "/")
+	for strings.HasPrefix(p, "./") {
+		p = strings.TrimPrefix(p, "./")
+	}
+	p = strings.TrimSuffix(p, "/")
+	if p == "." || p == ".." {
+		return ""
+	}
+	return p
 }
 
 func traversalPath(p string) bool {
@@ -103,7 +117,8 @@ func depDirPath(p string) bool {
 	n := strings.ReplaceAll(strings.TrimSpace(p), "\\", "/")
 	for _, part := range strings.Split(n, "/") {
 		switch part {
-		case "node_modules", "bower_components", "dist", ".next", "coverage", "__pycache__":
+		case "node_modules", "bower_components", "dist", ".next", "coverage", "__pycache__",
+			"target", "Pods", "Carthage", "DerivedData", ".venv", "venv", "site-packages":
 			return true
 		}
 	}

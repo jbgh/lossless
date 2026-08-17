@@ -13,7 +13,7 @@ import (
 
 var (
 	pathRE       = regexp.MustCompile(`(?:[\w.-]+/)+[\w.-]+\.[A-Za-z0-9]+`)
-	hardFailedRE = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|failed|failure|didn't compile|does not work|threw)\b`)
+	hardFailedRE = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|doesn't work|doesn’t work|doesn't compile|doesn’t compile|won't compile|won’t compile|failed|failure|didn't compile|does not work|threw)\b`)
 	softFailedRE = regexp.MustCompile(`(?i)\b(revert|abort)\b`)
 	exceptionTo  = regexp.MustCompile(`(?i)exception to`)
 	numberedItem = regexp.MustCompile(`^\d+[.)]\s+`)
@@ -51,11 +51,12 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 		if msg.Role == "tool" {
 			continue
 		}
-		paths := redact.FilterPaths(uniq(append(pathRE.FindAllString(msg.Text, -1), nearby(msg, usable)...)))
+		near := nearby(msg, usable)
 		for _, sent := range splitSentences(msg.Text) {
 			if skipSentence(sent) {
 				continue
 			}
+			paths := redact.FilterPaths(uniq(append(findPaths(sent), near...)))
 			typ := classify(sent, msg)
 			if typ == "failed" && (statusFailed(sent) || failedAsObject(sent) || !groundedFailed(sent, paths)) {
 				continue
@@ -157,13 +158,13 @@ func classify(sentence string, msg Message) string {
 	if isQuestion(sentence) {
 		return ""
 	}
-	probe := stripFailedNoise(pathRE.ReplaceAllString(sentence, " "))
+	probe := stripFailedNoise(stripPaths(sentence))
 	hard := hardFailedRE.MatchString(probe)
 	soft := softFailedRE.MatchString(probe)
 	if hard && !metaFailedTalk(sentence) {
 		return "failed"
 	}
-	if decisionRE.MatchString(sentence) && !planningDecision(sentence) {
+	if decisionRE.MatchString(sentence) && !planningDecision(sentence) && !narrativeDecision(sentence) {
 		return "decision"
 	}
 	if (msg.Error || (soft && !metaFailedTalk(sentence))) && !(decisionRE.MatchString(sentence) && !planningDecision(sentence)) {
@@ -218,7 +219,9 @@ func skipSentence(s string) bool {
 	if t == "" {
 		return true
 	}
-	if strings.HasPrefix(t, "#") || strings.HasPrefix(t, ">") || strings.HasPrefix(t, "|") {
+	if strings.HasPrefix(t, "#") || strings.HasPrefix(t, ">") || strings.HasPrefix(t, "|") || strings.HasPrefix(t, "<!--") ||
+		strings.HasPrefix(t, "---") || strings.HasPrefix(t, "+++") || strings.HasPrefix(t, "<<<<<<") ||
+		strings.HasPrefix(t, ">>>>>>") || strings.HasPrefix(t, "======") {
 		return true
 	}
 	if strings.Contains(t, " | ") {
@@ -234,7 +237,7 @@ func skipSentence(s string) bool {
 		} else {
 			rest = strings.TrimSpace(numberedItem.ReplaceAllString(t, ""))
 		}
-		if strings.Contains(t, "**") || strings.HasPrefix(rest, "`") || strings.HasPrefix(rest, ">") || (len(t) < 80 && pathRE.FindString(t) == "") {
+		if strings.Contains(t, "**") || strings.HasPrefix(rest, "`") || strings.HasPrefix(rest, ">") || (len(t) < 80 && len(findPaths(t)) == 0) {
 			return true
 		}
 	}
@@ -245,10 +248,13 @@ func skipSentence(s string) bool {
 	if strings.HasPrefix(low, "next i ") || strings.HasPrefix(low, "next i'") || strings.HasPrefix(low, "next i’ll") || strings.HasPrefix(low, "next i'll") {
 		return true
 	}
-	if metaFailedTalk(t) || sessionOpConstraint(t) || agentPromptConstraint(t) || planningDecision(t) || statusFailed(t) || failedAsObject(t) || quotedAttribution(t) {
+	if metaFailedTalk(t) || sessionOpConstraint(t) || agentPromptConstraint(t) || planningDecision(t) || narrativeDecision(t) || statusFailed(t) || failedAsObject(t) || quotedAttribution(t) {
 		return true
 	}
 	if strings.HasPrefix(low, "remembered:") || strings.HasPrefix(low, "remembered ") {
+		return true
+	}
+	if yamlClaimChrome(t) {
 		return true
 	}
 	if strings.HasSuffix(t, "(") || strings.HasSuffix(t, "`." ) || strings.HasSuffix(t, "do not") {
@@ -269,6 +275,9 @@ func planningDecision(s string) bool {
 		"i'll try", "i’ll try",
 		"i'll implement", "i’ll implement", "i will implement",
 		"i'll replace", "i’ll replace", "i'll swap", "i’ll swap",
+		"i'll rewrite", "i’ll rewrite", "i will rewrite",
+		"i'll migrate", "i’ll migrate", "i'll refactor", "i’ll refactor",
+		"the next hour", "we will use the next", "we'll use the next",
 	} {
 		if strings.Contains(low, p) {
 			return true
@@ -286,6 +295,37 @@ func sessionOpConstraint(s string) bool {
 		"don't merge yet", "do not merge yet",
 		"don't commit yet", "do not commit yet",
 		"don't wait", "do not wait",
+		"don't have time", "do not have time", "we don't have time", "we do not have time",
+		"must be a bug", "must be a typo",
+	} {
+		if strings.Contains(low, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func yamlClaimChrome(s string) bool {
+	low := strings.ToLower(strings.TrimSpace(s))
+	low = strings.TrimPrefix(low, "- ")
+	for _, p := range []string{
+		"text: ", "text = ", "text=", "type: failed", "type: decision", "type: constraint",
+		"type: state", "type: thread", "type = ", "type=", "warnings:", "context:", "tokens:",
+		"[[context]]", "[context]",
+	} {
+		if strings.HasPrefix(low, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func narrativeDecision(s string) bool {
+	low := strings.ToLower(s)
+	for _, p := range []string{
+		"chose the wrong", "picked the wrong", "wrong approach",
+		"chose poorly", "picked poorly",
+		"almost picked", "almost chose", "almost going",
 	} {
 		if strings.Contains(low, p) {
 			return true
@@ -334,7 +374,7 @@ func groundedFailed(s string, paths []string) bool {
 	if len(paths) > 0 {
 		return true
 	}
-	if raw := pathRE.FindAllString(s, -1); len(redact.FilterPaths(raw)) > 0 {
+	if raw := findPaths(s); len(redact.FilterPaths(raw)) > 0 {
 		return true
 	}
 	if statusFailed(s) || failedAsObject(s) {
@@ -441,10 +481,22 @@ func tail(msgs []Message, maxN, maxChars int) []Message {
 	return out
 }
 
+func slashNorm(s string) string {
+	return strings.ReplaceAll(s, "\\", "/")
+}
+
+func findPaths(s string) []string {
+	return pathRE.FindAllString(slashNorm(s), -1)
+}
+
+func stripPaths(s string) string {
+	return pathRE.ReplaceAllString(slashNorm(s), " ")
+}
+
 func collectPaths(msgs []Message) []string {
 	var found []string
 	for _, m := range msgs {
-		found = append(found, pathRE.FindAllString(m.Text, -1)...)
+		found = append(found, findPaths(m.Text)...)
 	}
 	return uniq(found)
 }

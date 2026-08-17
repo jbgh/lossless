@@ -164,7 +164,7 @@ func stripEmbeddedOwnPayload(text string) string {
 
 func stripHarnessChrome(text string) string {
 	low := strings.ToLower(text)
-	for _, tag := range []string{"system-reminder", "user_info"} {
+	for _, tag := range []string{"system-reminder", "user_info", "agent-reminder", "claude-user-context"} {
 		open, close := "<"+tag+">", "</"+tag+">"
 		for {
 			low = strings.ToLower(text)
@@ -180,7 +180,47 @@ func stripHarnessChrome(text string) string {
 			break
 		}
 	}
+	for {
+		i := strings.Index(text, "<!--")
+		if i < 0 {
+			break
+		}
+		if j := strings.Index(text[i:], "-->"); j >= 0 {
+			text = text[:i] + text[i+j+3:]
+			continue
+		}
+		text = text[:i]
+		break
+	}
+	if strings.Contains(text, "<<<<<<<") {
+		text = dropConflictHEAD(text)
+	}
 	return strings.TrimSpace(text)
+}
+
+func dropConflictHEAD(s string) string {
+	var b strings.Builder
+	inHead := false
+	for _, line := range strings.Split(s, "\n") {
+		t := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(t, "<<<<<<<"):
+			inHead = true
+			continue
+		case strings.HasPrefix(t, "======="):
+			inHead = false
+			continue
+		case strings.HasPrefix(t, ">>>>>>>"):
+			inHead = false
+			continue
+		}
+		if inHead {
+			continue
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
 
 func noteOwnTools(o map[string]any, ownIDs map[string]bool) {
@@ -329,6 +369,12 @@ func finishMessage(m Message) (Message, bool) {
 	if m.Skip {
 		return m, true
 	}
+	switch m.Role {
+	case "system", "developer":
+		m.Skip = true
+		m.Text = ""
+		return m, true
+	}
 	m.Text = stripHarnessChrome(m.Text)
 	if stripped := stripEmbeddedOwnPayload(m.Text); stripped != m.Text {
 		m.Text = stripped
@@ -426,15 +472,7 @@ func flattenSkippingOwn(v any, ownIDs map[string]bool) string {
 			continue
 		}
 		if typ == "tool_result" {
-			id, _ := m["tool_use_id"].(string)
-			body := flatten(m["content"])
-			if ownIDs[id] || looksLikeOwnPayload(body) {
-				continue
-			}
-			if body != "" {
-				b.WriteString(body)
-				b.WriteByte('\n')
-			}
+			// Tool output stays on the tape; it is not claim prose.
 			continue
 		}
 		if s, ok := m["text"].(string); ok {
@@ -446,18 +484,18 @@ func flattenSkippingOwn(v any, ownIDs map[string]bool) string {
 }
 
 func mapRole(role string) string {
-	switch role {
+	switch strings.ToLower(strings.TrimSpace(role)) {
 	case "user", "human":
 		return "user"
 	case "assistant", "model":
 		return "assistant"
-	case "tool", "tool_result", "toolResult", "bashExecution":
+	case "tool", "tool_result", "toolresult", "bashexecution":
 		return "tool"
 	default:
 		if role == "" {
 			return "other"
 		}
-		return role
+		return strings.ToLower(role)
 	}
 }
 
@@ -582,16 +620,33 @@ func flatten(v any) string {
 			case string:
 				b.WriteString(x)
 			case map[string]any:
-				if s, ok := x["text"].(string); ok {
+				if s := flattenMapText(x); s != "" {
 					b.WriteString(s)
 				}
 			}
 			b.WriteByte('\n')
 		}
 		return b.String()
+	case map[string]any:
+		return flattenMapText(t)
 	default:
 		return ""
 	}
+}
+
+func flattenMapText(m map[string]any) string {
+	for _, k := range []string{"text", "content", "output_text", "input_text"} {
+		if s, ok := m[k].(string); ok && strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	if parts, ok := m["parts"].([]any); ok {
+		return flatten(parts)
+	}
+	if parts, ok := m["content"].([]any); ok {
+		return flatten(parts)
+	}
+	return ""
 }
 
 func clip(text string) string {

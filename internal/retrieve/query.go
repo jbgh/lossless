@@ -309,7 +309,7 @@ func extractNoise(rec claim.Record) bool {
 	if rec.Type == "state" && (strings.HasPrefix(low, "next i ") || strings.HasPrefix(low, "next i'") || strings.HasPrefix(low, "next i’ll") || strings.HasPrefix(low, "next i'll")) {
 		return true
 	}
-	if rec.Type == "decision" && (planningDecision(low) || quotedAttribution(rec.Text)) {
+	if rec.Type == "decision" && (planningDecision(low) || quotedAttribution(rec.Text) || narrativeDecision(low)) {
 		return true
 	}
 	if strings.HasPrefix(low, "remembered:") || strings.HasPrefix(low, "remembered ") {
@@ -326,6 +326,13 @@ func extractNoise(rec claim.Record) bool {
 	}
 	if truncatedClaim(t) {
 		return true
+	}
+	low2 := strings.ToLower(strings.TrimSpace(t))
+	low2 = strings.TrimPrefix(low2, "- ")
+	for _, p := range []string{"text: ", "text = ", "text=", "type: failed", "type: decision", "warnings:", "context:"} {
+		if strings.HasPrefix(low2, p) {
+			return true
+		}
 	}
 	return false
 }
@@ -379,6 +386,9 @@ func planningDecision(low string) bool {
 		"i'll try", "i’ll try",
 		"i'll implement", "i’ll implement", "i will implement",
 		"i'll replace", "i’ll replace", "i'll swap", "i’ll swap",
+		"i'll rewrite", "i’ll rewrite", "i will rewrite",
+		"i'll migrate", "i’ll migrate", "i'll refactor", "i’ll refactor",
+		"the next hour", "we will use the next", "we'll use the next",
 	} {
 		if strings.Contains(low, p) {
 			return true
@@ -395,12 +405,22 @@ func sessionOpConstraint(low string) bool {
 		"don't merge yet", "do not merge yet",
 		"don't commit yet", "do not commit yet",
 		"don't wait", "do not wait",
+		"don't have time", "do not have time", "we don't have time", "we do not have time",
+		"must be a bug", "must be a typo",
 	} {
 		if strings.Contains(low, p) {
 			return true
 		}
 	}
 	return false
+}
+
+func narrativeDecision(s string) bool {
+	low := strings.ToLower(s)
+	return strings.Contains(low, "chose the wrong") || strings.Contains(low, "picked the wrong") ||
+		strings.Contains(low, "wrong approach") || strings.Contains(low, "chose poorly") ||
+		strings.Contains(low, "picked poorly") || strings.Contains(low, "almost picked") ||
+		strings.Contains(low, "almost chose") || strings.Contains(low, "almost going")
 }
 
 func quotedAttribution(s string) bool {
