@@ -50,6 +50,7 @@ const (
 	WAgree           = 0.4
 	WServed          = 0.9
 	WDwell           = 0.8
+	WOon             = 0.5
 	OverlapStrongMin = 2
 	PFailWeak        = 0.25
 	PRegressWeak     = 0.24

@@ -83,6 +83,46 @@ func TestServedDoesNotStickAcrossTopic(t *testing.T) {
 	if strings.Contains(bill.Context[0].Text, "Redis") {
 		t.Fatalf("served auth failed stuck as #1 on billing: %+v", bill.Context)
 	}
+	if strings.Contains(textsOf(bill), "Redis") {
+		t.Fatalf("auth failed rode into billing pack: %+v", bill.Context)
+	}
+	if hasWarn(bill, "failed") && hasWarn(bill, "01JFAIL") {
+		t.Fatalf("job-1 warn on redis after topic switch: %v", bill.Warnings)
+	}
+}
+
+func TestDwellDoesNotForceFailedOnNewPath(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "01JREDIS", Type: "failed",
+		Text:      "Redis token bucket failed in staging; connection pool exhausted.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2025-11-03T16:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "01JWARE", Type: "failed",
+		Text:      "Warehouse query failed in src/billing/export.ts because the cursor timed out.",
+		Paths:     []string{"src/billing/export.ts"},
+		CreatedAt: "2026-08-10T09:00:00Z",
+	})
+	askAt(t, st, Request{
+		Project: "acme/api", SessionID: "sess-shift",
+		Goal: "add rate limiting", Paths: []string{"src/middleware/auth.ts"},
+	})
+	st.RecordDwell("acme/api", "sess-shift", "01JREDIS")
+	bill := askAt(t, st, Request{
+		Project: "acme/api", SessionID: "sess-shift",
+		Goal: "export invoices", Paths: []string{"src/billing/export.ts"},
+	})
+	if !strings.Contains(textsOf(bill), "Warehouse") {
+		t.Fatalf("missing warehouse: %+v", bill)
+	}
+	if strings.Contains(textsOf(bill), "Redis") {
+		t.Fatalf("dwell leaked redis into billing: %+v", bill.Context)
+	}
+	if hasWarn(bill, "01JREDIS") {
+		t.Fatalf("redis warn after path switch: %v", bill.Warnings)
+	}
 }
 
 func TestWarnClaimID(t *testing.T) {

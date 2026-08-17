@@ -242,7 +242,9 @@ P_answer  = profile mix (type, path, symbol, bm25, vector, agree, recency)
 score     = 4.0*P_fail + 2.5*P_regress + P_answer + 0.8*dwell - 0.9*served
 ```
 
-`dwell` is a claim the agent `GET`/`remember`ed. `served` is last pack, cancelled by strong overlap so job 1/2 cannot lose to “we already showed you.”
+`dwell` is a claim the agent `GET`/`remember`ed, and only when this ask is still the same work (thin continue, same question, or same files). A rich ask on a new path does not inherit last GET’s symbols — that was leaking Redis into a billing packet. `served` is last pack, cancelled by strong overlap so job 1/2 cannot lose to “we already showed you.”
+
+When the caller named files, claims on other files get an out-of-network discount (`P_answer × 0.5`), same idea as X’s OON weight. Job 1/2 overlap is not discounted.
 
 Weak never outranks sacred overlap.
 

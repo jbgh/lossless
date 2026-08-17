@@ -87,4 +87,7 @@ var identStop = map[string]bool{
 	"would": true, "could": true, "library": true, "choice": true, "thing": true,
 	"idea": true, "work": true, "working": true, "limit": true, "limiting": true,
 	"rate": true, "want": true, "need": true, "make": true, "keep": true,
+	"looking": true, "were": true, "here": true, "there": true, "last": true,
+	"next": true, "again": true, "still": true, "back": true, "stuff": true,
+	"going": true, "gone": true, "continue": true, "ok": true,
 }

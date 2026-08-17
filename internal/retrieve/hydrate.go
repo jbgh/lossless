@@ -39,6 +39,7 @@ func (e Engine) hydrateActions(req Request, q query) query {
 	var extraPaths []string
 	var lastAskAt string
 	var lastAskToks []string
+	var lastAskPaths []string
 	for _, a := range acts {
 		switch a.Kind {
 		case store.ActionAsk:
@@ -46,23 +47,38 @@ func (e Engine) hydrateActions(req Request, q query) query {
 				lastAskAt = a.At
 				lastAskToks = a.Tokens
 			}
-			if a.At == lastAskAt && a.ClaimID != "" {
-				q.Served[a.ClaimID] = true
-			}
-			extraToks = append(extraToks, a.Tokens...)
-			if fillPaths {
-				extraPaths = append(extraPaths, a.Paths...)
+			if a.At == lastAskAt {
+				if a.ClaimID != "" {
+					q.Served[a.ClaimID] = true
+				}
+				lastAskPaths = append(lastAskPaths, a.Paths...)
 			}
 		case store.ActionGet, store.ActionRemember:
 			if a.ClaimID != "" {
 				q.Dwell[a.ClaimID] = true
 			}
-			if fillPaths {
-				extraPaths = append(extraPaths, a.Paths...)
-			}
 		case store.ActionWarn:
 			if a.ClaimID != "" {
 				q.Warned[a.ClaimID] = true
+			}
+		}
+	}
+
+	// Thin continue / same question: mix last-ask tokens and dwell text.
+	// A rich ask on a new file must not inherit Redis symbols from a GET.
+	useTapeRecall := continueTape(q, lastAskToks, lastAskPaths)
+	if useTapeRecall {
+		for _, a := range acts {
+			switch a.Kind {
+			case store.ActionAsk:
+				extraToks = append(extraToks, a.Tokens...)
+				if fillPaths {
+					extraPaths = append(extraPaths, a.Paths...)
+				}
+			case store.ActionGet, store.ActionRemember:
+				if fillPaths {
+					extraPaths = append(extraPaths, a.Paths...)
+				}
 			}
 		}
 	}
@@ -77,10 +93,12 @@ func (e Engine) hydrateActions(req Request, q query) query {
 		}
 	}
 
-	if ids := dwellOrWarned(q); len(ids) > 0 {
-		if recs, err := e.Store.GetMany(ids); err == nil {
-			for _, rec := range recs {
-				extraToks = append(extraToks, claim.Tokens(rec.Text)...)
+	if useTapeRecall {
+		if ids := dwellOrWarned(q); len(ids) > 0 {
+			if recs, err := e.Store.GetMany(ids); err == nil {
+				for _, rec := range recs {
+					extraToks = append(extraToks, claim.Tokens(rec.Text)...)
+				}
 			}
 		}
 	}
@@ -92,6 +110,7 @@ func (e Engine) hydrateActions(req Request, q query) query {
 	}
 	q.LookupTokens = uniq(q.LookupTokens)
 	q.Symbols = addSymbols(q.Symbols, extraToks)
+	q.Continue = useTapeRecall
 	cur := uniq(append(append([]string{}, q.QuestionTokens...), q.GoalTokens...))
 	if sameTokenSet(cur, lastAskToks) {
 		q.Served = map[string]bool{}
@@ -99,6 +118,22 @@ func (e Engine) hydrateActions(req Request, q query) query {
 	q.Head = isHead(q)
 	q.Cold = len(q.QuestionTokens) == 0 && len(q.GoalTokens) == 0
 	return q
+}
+
+// continueTape is true when this ask is still the same work: same
+// question, or a thin/anaphoric follow-up, or the same files.
+func continueTape(q query, lastToks, lastPaths []string) bool {
+	cur := uniq(append(append([]string{}, q.QuestionTokens...), q.GoalTokens...))
+	if sameTokenSet(cur, lastToks) {
+		return true
+	}
+	if len(q.PathKeys) == 0 && !hasStrongIdent(q) {
+		return true
+	}
+	if len(q.PathKeys) > 0 && len(lastPaths) > 0 {
+		return jaccard(q.PathKeys, claim.PathKeys(lastPaths)) > 0
+	}
+	return false
 }
 
 func sameTokenSet(a, b []string) bool {

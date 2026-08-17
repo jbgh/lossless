@@ -41,3 +41,4 @@ Algorithm notes the suite forced:
 - With an embedder, "add throttling" / "the cache idea we tried" finds the Redis failed that shares no tokens. Without one, that ask misses. Cosine still cannot beat a failed-on-path record.
 - Thin ask after a rich JWT ask on the same session still packs jose (action tape).
 - GET on a claim (dwell) then “what were we looking at” packs that claim.
+- Same session, new path (auth → billing): warehouse only. Redis is not packed and does not warn.

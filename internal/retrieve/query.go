@@ -46,6 +46,7 @@ type query struct {
 	Served         map[string]bool
 	Dwell          map[string]bool
 	Warned         map[string]bool
+	Continue       bool
 	Cold           bool
 	Head           bool
 	WorkspaceRoot  string

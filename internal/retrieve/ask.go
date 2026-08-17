@@ -126,6 +126,7 @@ type scored struct {
 	shippedWeak    float64
 	served         float64
 	dwell          float64
+	oon            float64
 	stale          float64
 	score          float64
 	ftsRaw         float64
@@ -142,13 +143,17 @@ func (s scored) pRegress() float64 {
 
 func (s scored) pAnswer(p Profile) float64 {
 	w := mixFor(p)
-	return w.typeW*(s.typeRank/5) +
+	ans := w.typeW*(s.typeRank/5) +
 		w.path*s.path +
 		w.symbol*s.symbol +
 		w.bm25*s.bm25 +
 		w.vector*s.vector +
 		w.agree*s.agree +
 		w.recency*s.recency
+	if s.oon == 1 {
+		ans *= 1 - WOon
+	}
+	return ans
 }
 
 func (s scored) preStale(p Profile) float64 {
@@ -391,11 +396,16 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64)
 			s.shippedWeak = 1
 		}
 	}
-	if q.Dwell[rec.ID] {
+	callerToks := append(append([]string{}, q.QuestionTokens...), q.GoalTokens...)
+	onTopic := s.path > 0 || s.symbol > 0 || contentOverlap(callerToks, rec.Text) > 0
+	if q.Dwell[rec.ID] && (q.Continue || onTopic) {
 		s.dwell = 1
 	}
 	if q.Served[rec.ID] && s.dwell == 0 && s.failedOverlap == 0 && s.shippedOverlap == 0 {
 		s.served = 1
+	}
+	if len(q.PathKeys) > 0 && s.path == 0 {
+		s.oon = 1
 	}
 	return s
 }

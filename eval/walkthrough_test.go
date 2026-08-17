@@ -92,6 +92,14 @@ func TestActionTapeWalkthrough(t *testing.T) {
 	if !containsText(bill, "Warehouse") {
 		t.Fatal("billing missed warehouse")
 	}
+	if containsText(bill, "Redis") {
+		t.Fatalf("redis rode into billing pack: %+v", bill.Context)
+	}
+	for _, w := range bill.Warnings {
+		if strings.Contains(w, "Y-REDIS") {
+			t.Fatalf("redis warn after topic switch: %v", bill.Warnings)
+		}
+	}
 
 	none := ask("7 pathless throttling, no embedder", retrieve.Request{
 		Goal: "add throttling", SessionID: "thr-none",
