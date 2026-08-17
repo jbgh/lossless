@@ -13,7 +13,7 @@ ask({ question, project, paths, goal })
   → packed context + warnings
 ```
 
-See [docs/architecture.html](docs/architecture.html) for a one-page map of the loop, store, and retrieve algorithm. [docs/pipeline.md](docs/pipeline.md) is the loop in prose, [docs/deploy.md](docs/deploy.md) is **local-only or one home / many sidecars**. Then [docs/write.md](docs/write.md), [docs/ask.md](docs/ask.md), [docs/retrieval.md](docs/retrieval.md), [docs/harnesses.md](docs/harnesses.md), [docs/stack.md](docs/stack.md).
+See [docs/architecture.html](docs/architecture.html) for a one-page map of the loop, store, and retrieve algorithm. [docs/pipeline.md](docs/pipeline.md) is the loop in prose, [docs/deploy.md](docs/deploy.md) is local-first (optional later migrate). Then [docs/write.md](docs/write.md), [docs/ask.md](docs/ask.md), [docs/retrieval.md](docs/retrieval.md), [docs/harnesses.md](docs/harnesses.md), [docs/stack.md](docs/stack.md).
 
 ## Why
 
@@ -46,7 +46,9 @@ One-time install (any supported harness):
 ./lossless doctor
 ```
 
-That writes hooks + MCP for Grok, Claude, Codex, Pi, and OpenCode, and installs a user service so the daemon stays up. Then start a new agent session (Grok: `/hooks` then `r`). Remote home later: `lossless token --write` on the VPS, `lossless serve --home-mode` behind TLS, then `lossless migrate --url https://…` on the laptop. The token is never written into a harness config file.
+That writes hooks + MCP for Grok, Claude, Codex, Pi, and OpenCode, and installs a user service so the daemon stays up. Then start a new agent session (Grok: `/hooks` then `r`). Everything stays on this machine.
+
+If you later run your own home somewhere and want this laptop to use it: `lossless migrate --url https://…` (see [docs/deploy.md](docs/deploy.md)). Setup never does that for you.
 
 Data dir: `~/.lossless/` (`LOSSLESS_HOME` to override).
 

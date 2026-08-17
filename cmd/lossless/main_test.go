@@ -133,8 +133,28 @@ func TestRunServe(t *testing.T) {
 	if runToken([]string{"-bogus"}) != 2 {
 		t.Fatal("token parse")
 	}
-	if runServe([]string{"--home", t.TempDir(), "--home-mode"}) != 1 {
-		t.Fatal("home-mode requires token")
+}
+
+func TestSetupStaysLocalDespiteEnv(t *testing.T) {
+	user := t.TempDir()
+	data := filepath.Join(user, ".lossless")
+	t.Setenv("HOME", user)
+	t.Setenv("LOSSLESS_HOME", data)
+	t.Setenv("LOSSLESS_URL", "https://home.example")
+	t.Setenv("LOSSLESS_TOKEN", "sekrit")
+	if runSetup([]string{"--home", data, "--no-service", "--no-start"}) != 0 {
+		t.Fatal("setup")
+	}
+	b, err := os.ReadFile(filepath.Join(user, ".grok", "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	if strings.Contains(s, "home.example") || strings.Contains(s, "sekrit") || strings.Contains(s, "Authorization") {
+		t.Fatal(s)
+	}
+	if !strings.Contains(s, "127.0.0.1") {
+		t.Fatal(s)
 	}
 }
 

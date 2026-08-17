@@ -6,9 +6,9 @@ Default: `POST http://127.0.0.1:7432/v1/ask`
 MCP tools: `ask`, `remember`, `get_record` (same JSON as the REST bodies).
 
 - HTTP MCP: `http://127.0.0.1:7432/mcp` (same process as `serve`)
-- stdio MCP: `lossless mcp` (HTTP client of the daemon; set `LOSSLESS_URL` in home mode)
+- stdio MCP: `lossless mcp` (HTTP client of the local daemon)
 
-`lossless setup` is the one command: hooks + MCP for Grok, Claude, Codex, Pi, and OpenCode, plus a user service so `serve` stays up. `lossless doctor` checks it. To move a local corpus onto a VPS: `lossless serve --home-mode` on the box (behind TLS), then `lossless migrate --url https://…` on the laptop. Remote `LOSSLESS_URL` must be `https`; Grok gets `Authorization: Bearer ${LOSSLESS_TOKEN}` (the value stays in the environment). stdio harnesses inherit `LOSSLESS_TOKEN` and get `LOSSLESS_URL` only when the daemon is not loopback. After migrate, `lossless ask` / `remember` talk to the home, not the local store.
+`lossless setup` is the one command: local hooks + MCP for Grok, Claude, Codex, Pi, and OpenCode, plus a user service so `serve` stays up. `lossless doctor` checks it. Default is this machine only. `lossless migrate` is optional, later, if you already have a home URL.
 
 No other read verbs in v1. Full record + excerpt: `GET /v1/records/:id`.
 

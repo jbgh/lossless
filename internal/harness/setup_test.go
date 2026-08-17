@@ -41,6 +41,13 @@ func TestSetupWritesHooksAndMCP(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(data, ".grok")); err == nil {
 		t.Fatal("hooks must not land in data home")
 	}
+	g, err := os.ReadFile(filepath.Join(user, ".grok", "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(g), "127.0.0.1") || strings.Contains(string(g), "Authorization") {
+		t.Fatalf("setup must be local: %s", g)
+	}
 }
 
 func TestDoctorBeforeAndAfterSetup(t *testing.T) {

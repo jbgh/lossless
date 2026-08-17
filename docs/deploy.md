@@ -34,7 +34,7 @@ Neither is a fallback of the other. Pick at install. You can start local and poi
 | **Home** | The long-lived box | Canonical `raw/` + `export/`. Derives claims, serves `ask`. |
 | **Sidecar** | Every machine that runs a harness | Hooks, spool, incremental push. May proxy `ask`. |
 
-Same Go binary. `--home-mode` vs default sidecar. Local-only: one process does both.
+Same Go binary. Default install is one local process (hooks + store + ask). A remote home is optional and only happens if you run `lossless migrate`.
 
 ---
 
@@ -115,7 +115,7 @@ Two Codex workers on the same repo = two session ids, one project. Claims collid
 - Home binds `127.0.0.1` unless `--listen` is set. Public listen **requires** a token. No token + `0.0.0.0` = refuse to start.
 - Remote `LOSSLESS_URL` / sidecar URL must be `https`. Loopback `http://127.0.0.1` is fine. Outbound clients do not follow redirects (so a 302 cannot bounce a bearer token to another host).
 - TLS via Tailscale Serve or Caddy. The binary does not terminate Let’s Encrypt in v1.
-- Token is a high-entropy bearer, stored in env / `0600` `service.env`. Rotating it is a restart. `lossless setup` writes that file so the user service can start the daemon on login. The systemd unit uses `EnvironmentFile` and never inlines the token. Harness MCP configs only reference `${LOSSLESS_TOKEN}`. Existing `~/.claude.json` / `config.toml` modes are preserved so setup cannot make a `0600` file world-readable.
+- Token is a high-entropy bearer, stored in env / `0600` `service.env`. `lossless setup` does not create one. `lossless migrate` / `lossless token --write` do. The systemd unit uses `EnvironmentFile` and never inlines the token. Harness MCP configs only reference `${LOSSLESS_TOKEN}`. Existing `~/.claude.json` / `config.toml` modes are preserved so setup cannot make a `0600` file world-readable.
 - Sidecar redacts **before** the bytes leave the machine. Home redacts again.
 - Store dirs are `0700`. `export/`, `raw/`, `spool/`, and sqlite files are `0600`. Catch-up refuses symlinks and anything that is not a `.jsonl`. Claim IDs must be a single path-safe token.
 - Disk on the VPS: your LUKS / provider volume encryption. App-level at-rest encryption is not v1.
@@ -135,24 +135,18 @@ lossless serve
 
 Catch-up writes `raw/` on this disk. `ask` reads this disk. Nothing listens off loopback. Nothing is uploaded. Tests run this way.
 
-If you later want a shared brain:
+If you later stand up a home yourself (your VPS, your TLS, your process manager) and want this laptop to use it:
 
 ```bash
-# on the VPS (once)
-export LOSSLESS_TOKEN=$(lossless token --write)
-# TLS in front (Caddy / Tailscale Serve). Then:
-lossless serve --home-mode
-
-# on the laptop that already has local memory
 export LOSSLESS_URL=https://home.example
 export LOSSLESS_TOKEN=...
 lossless migrate
 lossless doctor
 ```
 
-`migrate` uploads `raw/` tapes through `POST /v1/append` (resume-safe), rewrites MCP to the home, and updates `service.env`. Local `lossless serve` stays for hooks. No scp of sqlite. No format change.
+`migrate` uploads `raw/` through `POST /v1/append` (resume-safe), rewrites MCP, and updates `service.env`. Local `lossless serve` stays for hooks. We do not install systemd, open ports, or terminate TLS on the box — that is yours.
 
-If you never want that: stay on local forever. That is a complete product.
+If you never want that: stay on local forever. That is the complete product.
 
 ---
 
@@ -160,8 +154,7 @@ If you never want that: stay on local forever. That is a complete product.
 
 1. Local process that is already home+sidecar (catch-up as now).
 2. Split: `POST /v1/append` + spool + `LOSSLESS_URL` for ask.
-3. `lossless setup` still talks to the **local** sidecar only for hooks. MCP on a remote home uses `LOSSLESS_URL` + `LOSSLESS_TOKEN` (never written into a committed config).
-4. Run home on a VPS, point every laptop’s sidecar at it.
+3. `lossless setup` is local only. `lossless migrate` is how a laptop opts into a home you already run.
 
 Do not skip (1). Do not make Grok’s PreCompact call the VPS in step (1).
 

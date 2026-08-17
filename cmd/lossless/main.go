@@ -101,11 +101,10 @@ func usage() {
   lossless hook-grok          # stdin: Grok hook JSON; fail-open
   lossless hook-claude        # stdin: Claude hook JSON; fail-open
   lossless hook-codex         # stdin: Codex hook JSON; fail-open
-  lossless setup              # hooks + MCP (all harnesses) + keep the daemon up
+  lossless setup              # local hooks + MCP + user service (default)
   lossless doctor             # daemon, hooks, MCP, service
-  lossless migrate --url https://home [--token TOKEN]   # ship local tapes to a VPS home
-  lossless token [--write]    # generate a bearer for --home-mode / migrate
-  lossless serve --home-mode  # public home: token required, listen 0.0.0.0:7432
+  lossless migrate --url https://home [--token TOKEN]   # optional: ship local tapes to a home you already run
+  lossless token              # optional: print a random bearer
   lossless install-hooks      # Grok + Claude + Codex + Pi + OpenCode
   lossless install-mcp        # MCP for every supported harness
   lossless ensure             # replay spool after sidecar was down
@@ -118,7 +117,8 @@ Env: LOSSLESS_HOME (default ~/.lossless)
      LOSSLESS_TOKEN (required if --listen is not loopback)
      LOSSLESS_EMBED_CMD (optional local embedder: stdin JSON texts, stdout JSON vectors)
      LOSSLESS_EMBED_MODEL (optional model dir; in-process MiniLM not required)
-Local serve binds 127.0.0.1. MCP is a façade over the same JSON as /v1/ask.
+Default install is local (127.0.0.1, no token, nothing leaves the machine).
+MCP is a façade over the same JSON as /v1/ask.
 `)
 }
 
@@ -300,21 +300,8 @@ func runServe(args []string) int {
 	listen := fs.String("listen", serve.DefaultAddr, "bind address")
 	token := fs.String("token", env.Token(), "bearer token (required if not loopback)")
 	doWatch := fs.Bool("watch", true, "poll harness session files while serving")
-	homeMode := fs.Bool("home-mode", false, "public home: require token, default 0.0.0.0:7432, no watch")
 	if err := fs.Parse(args); err != nil {
 		return 2
-	}
-	if *homeMode {
-		if !flagPassed(fs, "listen") {
-			*listen = "0.0.0.0:7432"
-		}
-		if !flagPassed(fs, "watch") {
-			*doWatch = false
-		}
-		if strings.TrimSpace(*token) == "" {
-			fmt.Fprintln(os.Stderr, "home-mode requires --token or LOSSLESS_TOKEN (lossless token --write)")
-			return 1
-		}
 	}
 	st, err := openStore(*home)
 	if err != nil {
@@ -380,16 +367,6 @@ func runMCP(args []string) int {
 	return 0
 }
 
-func flagPassed(fs *flag.FlagSet, name string) bool {
-	found := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			found = true
-		}
-	})
-	return found
-}
-
 func resolveExe() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -430,7 +407,6 @@ func runInstallMCP(args []string) int {
 func runSetup(args []string) int {
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	home := homeFlag(fs)
-	url := fs.String("url", env.URL(), "daemon URL")
 	noService := fs.Bool("no-service", false, "do not install launchd/systemd user service")
 	noStart := fs.Bool("no-start", false, "do not start the daemon")
 	if err := fs.Parse(args); err != nil {
@@ -442,7 +418,7 @@ func runSetup(args []string) int {
 		return 1
 	}
 	res, err := harness.Setup(harness.SetupOpts{
-		UserHome: os.Getenv("HOME"), DataHome: *home, Exe: exe, URL: *url, Token: env.Token(),
+		UserHome: os.Getenv("HOME"), DataHome: *home, Exe: exe,
 		Service: !*noService, Start: !*noStart,
 	})
 	fmt.Print(res.Format())
@@ -475,7 +451,7 @@ func runDoctor(args []string) int {
 func runToken(args []string) int {
 	fs := flag.NewFlagSet("token", flag.ContinueOnError)
 	home := homeFlag(fs)
-	writeEnv := fs.Bool("write", false, "write LOSSLESS_TOKEN into service.env (0600)")
+	writeEnv := fs.Bool("write", false, "also write LOSSLESS_TOKEN into service.env (0600)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -544,7 +520,7 @@ func runMigrate(args []string) int {
 			fmt.Println("service", dest)
 		}
 	}
-	fmt.Println("keep local lossless serve for hooks. start a new agent session so MCP talks to home.")
+	fmt.Println("local serve stays for hooks. start a new agent session so MCP talks to the home.")
 	return 0
 }
 
