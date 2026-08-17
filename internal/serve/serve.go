@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -79,7 +80,7 @@ func Handler(st *store.Store, token string) http.Handler {
 			return
 		}
 		var req retrieve.Request
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 			return
 		}
@@ -110,7 +111,7 @@ func Handler(st *store.Store, token string) http.Handler {
 			Source        string           `json:"source"`
 			Messages      []map[string]any `json:"messages"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(&body); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 			return
 		}
@@ -141,7 +142,7 @@ func Handler(st *store.Store, token string) http.Handler {
 			claim.Record
 			Project string `json:"project"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 			return
 		}
@@ -207,9 +208,12 @@ func Handler(st *store.Store, token string) http.Handler {
 		st.RecordDwell(r.URL.Query().Get("project"), r.URL.Query().Get("session"), id)
 		writeJSON(w, http.StatusOK, rec)
 	})
-	var h http.Handler = mux
+	var h http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+		mux.ServeHTTP(w, r)
+	})
 	if strings.TrimSpace(token) != "" {
-		h = withBearer(mux, token)
+		h = withBearer(h, token)
 	}
 	return h
 }
@@ -236,9 +240,14 @@ func Listen(opts Options, st *store.Store) error {
 }
 
 func withBearer(next http.Handler, token string) http.Handler {
+	want := []byte(token)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
 		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if got != token {
+		if subtle.ConstantTimeCompare([]byte(got), want) != 1 {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
 		}

@@ -539,6 +539,47 @@ func TestAppendHTTP(t *testing.T) {
 		t.Fatal(res.StatusCode)
 	}
 	res.Body.Close()
+
+	h, err := http.Get(srv.URL + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.StatusCode != 200 {
+		t.Fatalf("health behind token: %d", h.StatusCode)
+	}
+	h.Body.Close()
+
+	bad, err := http.Post(srv.URL+"/v1/ask", "application/json", strings.NewReader(`{"project":"acme/api"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bad.StatusCode != 401 {
+		t.Fatalf("ask without token: %d", bad.StatusCode)
+	}
+	bad.Body.Close()
+}
+
+func TestCatchUpHTTPRejectsNonJSONL(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	p := filepath.Join(t.TempDir(), "secrets.txt")
+	if err := os.WriteFile(p, []byte("AKIAIOSFODNN7EXAMPLE\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(Handler(st, ""))
+	t.Cleanup(srv.Close)
+	body, _ := json.Marshal(map[string]any{"path_to_jsonl": p, "project": "acme/api", "session_id": "x"})
+	res, err := http.Post(srv.URL+"/v1/catch-up", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 400 {
+		t.Fatalf("status %d", res.StatusCode)
+	}
 }
 
 func joinTexts(out retrieve.Response) string {

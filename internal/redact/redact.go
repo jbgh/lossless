@@ -11,7 +11,14 @@ var secrets = []*regexp.Regexp{
 	regexp.MustCompile(`-----BEGIN [A-Z ]+PRIVATE KEY-----`),
 	regexp.MustCompile(`Bearer [A-Za-z0-9._\-]{20,}`),
 	regexp.MustCompile(`\bghp_[A-Za-z0-9]{20,}`),
+	regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{20,}`),
 	regexp.MustCompile(`\bsk-[A-Za-z0-9]{20,}`),
+	regexp.MustCompile(`\bsk-ant-[A-Za-z0-9\-_]{20,}`),
+	regexp.MustCompile(`\bsk_(?:live|test)_[A-Za-z0-9]{20,}`),
+	regexp.MustCompile(`\bxox[baprs]-[A-Za-z0-9-]{10,}`),
+	regexp.MustCompile(`\bnpm_[A-Za-z0-9]{20,}`),
+	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`),
+	regexp.MustCompile(`(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?)://[^:\s]+:[^@\s]+@`),
 }
 
 var sensitivePath = regexp.MustCompile(`(?:^|/)(?:\.env(?:\..+)?|.*\.pem|id_rsa|credentials)$`)

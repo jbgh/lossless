@@ -66,6 +66,9 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 		session = strings.TrimSuffix(filepath.Base(req.JSONL), ".jsonl")
 	}
 
+	if err := checkIngestFile(req.JSONL); err != nil {
+		return out, err
+	}
 	info, err := os.Stat(req.JSONL)
 	if err != nil {
 		return out, err
@@ -94,7 +97,7 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 	if _, err := src.Seek(srcOff, io.SeekStart); err != nil {
 		return out, err
 	}
-	buf, err := io.ReadAll(src)
+	buf, err := readCatchUpBytes(src, srcOff, info.Size())
 	if err != nil {
 		return out, err
 	}

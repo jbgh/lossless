@@ -387,7 +387,9 @@ func serialize(rec claim.Record) string {
 func sanitize(id string) string {
 	id = strings.ReplaceAll(id, "/", "_")
 	id = strings.ReplaceAll(id, string(filepath.Separator), "_")
-	if id == "" {
+	id = strings.ReplaceAll(id, "..", "_")
+	id = strings.Trim(id, ". ")
+	if id == "" || id == "." || id == ".." {
 		return "unknown"
 	}
 	return id

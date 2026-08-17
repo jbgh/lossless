@@ -12,6 +12,13 @@ func TestContainsSecret(t *testing.T) {
 		"Authorization: Bearer " + strings.Repeat("a", 24),
 		"token ghp_" + strings.Repeat("b", 20),
 		"openai sk-" + strings.Repeat("c", 20),
+		"github_pat_" + strings.Repeat("d", 22),
+		"sk-ant-" + strings.Repeat("e", 22),
+		"sk_live_" + strings.Repeat("f", 24),
+		"xoxb-" + strings.Repeat("g", 12),
+		"npm_" + strings.Repeat("h", 20),
+		"eyJhbGciOiJIUzI1NiJ9." + strings.Repeat("a", 12) + "." + strings.Repeat("b", 12),
+		"postgres://user:hunter2@localhost/db",
 	}
 	for _, s := range yes {
 		if !ContainsSecret(s) {

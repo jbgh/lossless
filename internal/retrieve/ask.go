@@ -461,12 +461,21 @@ func isStale(rec claim.Record, workspace string) bool {
 	if workspace == "" || len(rec.PathMtime) == 0 {
 		return false
 	}
+	root := filepath.Clean(workspace)
 	for _, p := range rec.Paths {
 		stored, ok := rec.PathMtime[p]
 		if !ok {
 			continue
 		}
-		fi, err := os.Stat(filepath.Join(workspace, p))
+		rel := filepath.Clean(p)
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+			continue
+		}
+		full := filepath.Join(root, rel)
+		if !strings.HasPrefix(full, root+string(filepath.Separator)) && full != root {
+			continue
+		}
+		fi, err := os.Stat(full)
 		if err != nil {
 			continue
 		}

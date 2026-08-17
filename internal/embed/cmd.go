@@ -2,12 +2,16 @@ package embed
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
+
+const cmdTimeout = 15 * time.Second
 
 // cmdEmbedder shells out to LOSSLESS_EMBED_CMD.
 //
@@ -40,7 +44,9 @@ func (c *cmdEmbedder) Embed(texts []string) ([][]float32, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command("sh", "-c", c.line)
+	ctx, cancel := context.WithTimeout(context.Background(), cmdTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sh", "-c", c.line)
 	cmd.Stdin = bytes.NewReader(payload)
 	cmd.Env = os.Environ()
 	var stdout, stderr bytes.Buffer

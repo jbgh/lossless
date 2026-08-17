@@ -493,6 +493,9 @@ func TestSanitizeAndSerialize(t *testing.T) {
 	if sanitize("") != "unknown" {
 		t.Fatal(sanitize(""))
 	}
+	if sanitize("..") != "unknown" && strings.Contains(sanitize("../x"), "..") {
+		t.Fatal(sanitize("../x"))
+	}
 	body := serialize(claim.Record{
 		ID: "I", Type: "decision", ProjectKey: "acme/api", Harness: "grok",
 		SessionID: "s", CreatedAt: "t", Status: "active", Source: "import",
