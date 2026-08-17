@@ -102,7 +102,7 @@ func TestMergeCodexHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(dest)
-	if !strings.Contains(string(b), "PreCompact") {
+	if !strings.Contains(string(b), "PreCompact") || !strings.Contains(string(b), "PostCompact") {
 		t.Fatal(string(b))
 	}
 }

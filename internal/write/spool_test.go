@@ -107,6 +107,41 @@ func TestSubmitCatchUpLocal(t *testing.T) {
 	}
 }
 
+func TestCatchUpWait(t *testing.T) {
+	if catchUpWait("turn") != 400*time.Millisecond {
+		t.Fatal(catchUpWait("turn"))
+	}
+	if catchUpWait("compact") != 5*time.Second || catchUpWait("PreCompact") != 5*time.Second {
+		t.Fatal(catchUpWait("compact"))
+	}
+	if catchUpWait("session_end") != 3*time.Second {
+		t.Fatal(catchUpWait("session_end"))
+	}
+}
+
+func TestSubmitCatchUpCompactWaits(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("LOSSLESS_HOME", home)
+	t.Setenv("LOSSLESS_URL", "")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(800 * time.Millisecond)
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("LOSSLESS_SIDECAR", srv.URL)
+	src := writeJSONL(t, t.TempDir(), "chat.jsonl",
+		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}`+"\n")
+	SubmitCatchUp(CatchUpRequest{JSONL: src, Project: "acme/api", SessionID: "slow", Harness: "grok", Source: "compact"})
+	files, _ := ListSpool(home)
+	if len(files) != 0 {
+		t.Fatalf("compact must wait for sidecar, spool=%v", files)
+	}
+	raws, _ := filepath.Glob(filepath.Join(home, "raw", "*", "*", "*.jsonl"))
+	if len(raws) != 0 {
+		t.Fatal("sidecar success must not also write locally")
+	}
+}
+
 func TestSubmitCatchUpTimeoutSpoolsNotLocal(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("LOSSLESS_HOME", home)

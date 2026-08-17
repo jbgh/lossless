@@ -291,6 +291,16 @@ func TestRunHookGrok(t *testing.T) {
 	if runHookGrok() != 0 {
 		t.Fatal("default compact")
 	}
+	setStdin(`{"cwd":` + jsonStr(ws) + `,"hookEventName":"pre_compact"}`)
+	t.Setenv("GROK_SESSION_ID", sid)
+	if runHookGrok() != 0 {
+		t.Fatal("pre_compact env session")
+	}
+	t.Setenv("GROK_SESSION_ID", "")
+	setStdin(`{"sessionId":"` + sid + `","cwd":` + jsonStr(ws) + `,"hookEventName":"PostCompact"}`)
+	if runHookGrok() != 0 {
+		t.Fatal("post compact")
+	}
 
 	croot := t.TempDir()
 	t.Setenv("CLAUDE_HOME", croot)
@@ -337,6 +347,10 @@ func TestRunHookGrok(t *testing.T) {
 	setStdin(`{"session_id":"` + xsid + `","cwd":` + jsonStr(ws) + `,"hook_event_name":"SessionEnd"}`)
 	if runHookCodex() != 0 {
 		t.Fatal("codex end")
+	}
+	setStdin(`{"session_id":"` + xsid + `","transcript_path":` + jsonStr(xp) + `,"cwd":` + jsonStr(ws) + `,"hook_event_name":"PreCompact"}`)
+	if runHookCodex() != 0 {
+		t.Fatal("codex precompact")
 	}
 
 	t.Setenv("LOSSLESS_HOME", "")
@@ -393,6 +407,10 @@ func TestRunHookGrok(t *testing.T) {
 	if runHookPi() != 0 {
 		t.Fatal("pi end")
 	}
+	setStdin(`{"session_id":"` + psid + `","transcript_path":` + jsonStr(pp) + `,"cwd":` + jsonStr(ws) + `,"hook_event_name":"compact"}`)
+	if runHookPi() != 0 {
+		t.Fatal("pi compact")
+	}
 	setStdin("")
 	if runHookOpenCode() != 0 {
 		t.Fatal("oc empty")
@@ -410,6 +428,21 @@ func TestRunHookGrok(t *testing.T) {
 	}
 	if runEnsure([]string{"--home", mem}) != 0 {
 		t.Fatal("ensure")
+	}
+}
+
+func TestHookSource(t *testing.T) {
+	if hookSource("pre_compact", "turn") != "compact" || hookSource("PostCompact", "turn") != "compact" {
+		t.Fatal("compact")
+	}
+	if hookSource("stop", "compact") != "turn" || hookSource("session.idle", "compact") != "turn" {
+		t.Fatal("turn")
+	}
+	if hookSource("session_end", "turn") != "session_end" {
+		t.Fatal("end")
+	}
+	if hookSource("", "compact") != "compact" || hookSource("other", "") != "turn" {
+		t.Fatal("fallback")
 	}
 }
 

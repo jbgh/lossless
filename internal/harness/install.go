@@ -26,12 +26,13 @@ func GrokHookFile(exe string) []byte {
 	q, _ := json.Marshal(cmd)
 	body := fmt.Sprintf(`{
   "hooks": {
-    "PreCompact": [{ "hooks": [{ "type": "command", "command": %s, "timeout": 4 }] }],
+    "PreCompact": [{ "hooks": [{ "type": "command", "command": %s, "timeout": 6 }] }],
+    "PostCompact": [{ "hooks": [{ "type": "command", "command": %s, "timeout": 6 }] }],
     "Stop": [{ "hooks": [{ "type": "command", "command": %s, "timeout": 2 }] }],
     "SessionEnd": [{ "hooks": [{ "type": "command", "command": %s, "timeout": 4 }] }]
   }
 }
-`, q, q, q)
+`, q, q, q, q)
 	return []byte(body)
 }
 
@@ -61,7 +62,7 @@ func MergeClaudeSettings(existing []byte, exe string) ([]byte, error) {
 		root["hooks"] = hooks
 	}
 	cmd := ClaudeHookCommand(exe)
-	for ev, timeout := range map[string]int{"PreCompact": 4, "Stop": 2, "SessionEnd": 4} {
+	for ev, timeout := range map[string]int{"PreCompact": 6, "PostCompact": 6, "Stop": 2, "SessionEnd": 4} {
 		if err := ensureClaudeEvent(hooks, ev, cmd, timeout); err != nil {
 			return nil, err
 		}
@@ -151,7 +152,7 @@ func MergeCodexHooks(existing []byte, exe string) ([]byte, error) {
 		root["hooks"] = hooks
 	}
 	cmd := CodexHookCommand(exe)
-	for ev, timeout := range map[string]int{"PreCompact": 4, "Stop": 2, "SessionEnd": 3} {
+	for ev, timeout := range map[string]int{"PreCompact": 6, "PostCompact": 6, "Stop": 2, "SessionEnd": 3} {
 		if err := ensureClaudeEvent(hooks, ev, cmd, timeout); err != nil {
 			return nil, err
 		}
@@ -184,7 +185,7 @@ func WriteCodexHooks(home, exe string) (string, error) {
 
 func PiExtensionSource(exe string) string {
 	return `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 const exe = ` + jsonQuote(exe) + `;
 
@@ -198,6 +199,14 @@ function fire(ctx: { cwd: string; sessionManager: { getSessionFile(): string | u
     hook_event_name: source,
   });
   try {
+    if (source === "compact") {
+      spawnSync(exe, ["hook-pi"], {
+        input: payload,
+        timeout: 5000,
+        stdio: ["pipe", "ignore", "ignore"],
+      });
+      return;
+    }
     const child = spawn(exe, ["hook-pi"], { stdio: ["pipe", "ignore", "ignore"] });
     child.stdin?.end(payload);
     child.unref();
@@ -241,6 +250,7 @@ export const AgentMemory = async ({ directory }) => {
     try {
       const headers = { "Content-Type": "application/json" };
       if (token) headers.Authorization = "Bearer " + token;
+      const ms = source === "compact" ? 5000 : 800;
       await fetch(url + "/v1/catch-up", {
         method: "POST",
         headers,
@@ -250,7 +260,7 @@ export const AgentMemory = async ({ directory }) => {
           workspace_root: directory,
           source,
         }),
-        signal: AbortSignal.timeout(800),
+        signal: AbortSignal.timeout(ms),
       });
     } catch {
       // fail-open

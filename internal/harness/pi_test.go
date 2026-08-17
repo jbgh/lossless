@@ -66,6 +66,9 @@ func TestWritePiAndOpenCodeInstall(t *testing.T) {
 	if !strings.Contains(string(b), "hook-pi") || !strings.Contains(string(b), "turn_end") {
 		t.Fatal(string(b))
 	}
+	if !strings.Contains(string(b), "spawnSync") || !strings.Contains(string(b), "session_before_compact") {
+		t.Fatal("compact must wait: " + string(b))
+	}
 	o, err := WriteOpenCodePlugin(home)
 	if err != nil {
 		t.Fatal(err)
@@ -80,6 +83,9 @@ func TestWritePiAndOpenCodeInstall(t *testing.T) {
 	}
 	if !strings.Contains(src, "AbortSignal.timeout") {
 		t.Fatal("plugin fetch must time out")
+	}
+	if !strings.Contains(src, "5000") {
+		t.Fatal("compact fetch must wait longer than a turn")
 	}
 	if PiExtensionSource("/x") == "" {
 		t.Fatal("empty source")

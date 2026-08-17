@@ -29,7 +29,7 @@ adapter.on(native_event):
 
 Installers differ. Catch-up does not.
 
-Universal fallback, every harness: a **directory watch** on that harness's session root. If hooks miss (Codex has no PreCompact; a hook crashed), the watcher still copies new bytes. Hooks are the timely path. The watcher is how we still remember everything.
+Universal fallback, every harness: a **directory watch** on that harness's session root. If a compact hook misses or crashes, the watcher still copies new bytes. Hooks are the timely path — PreCompact must finish the raw copy before the window shrinks. The watcher is how we still remember everything.
 
 ---
 
@@ -39,11 +39,11 @@ Universal fallback, every harness: a **directory watch** on that harness's sessi
 |--|------|-------------|----|----------|-------|
 | Session file we can tail | `~/.grok/sessions/<enc-cwd>/<id>/chat_history.jsonl` | `~/.claude/projects/<slug>/<id>.jsonl` (`transcript_path` on hooks) | `~/.pi/agent/sessions/--<cwd / as ->--/<ts>_<uuid>.jsonl` | none — SQLite `opencode.db` (`session`/`message`/`part`) | CLI: `~/.codex/sessions/**/rollout-*.jsonl`. Desktop app (this machine: Codex.app 26.810, CLI 0.148.0-alpha.9): `state_5.sqlite` `threads.rollout_path`; `sessions/` may be empty |
 | As they go | `Stop` (`end_turn`) | `Stop` | extension `turn_end` / session events | plugin `session.idle` | plugin **Stop** |
-| Before compact | **`PreCompact`** | **`PreCompact`** | compaction is a JSONL entry; no separate hook required if we tail | `experimental.session.compacting` / `session.compacted` | **none** (open issue). Watcher + Stop only |
+| Before compact | **`PreCompact`** (+ `PostCompact`) | **`PreCompact`** (+ `PostCompact`) | `session_before_compact` (sync wait) | `experimental.session.compacting` (await) / `session.compacted` | **`PreCompact`** (+ `PostCompact`) |
 | Session end | `SessionEnd` | `SessionEnd` | `session_end` | `session.deleted` / idle | Stop + process exit |
 | Hook shape | JSON stdin, camelCase (Claude files also load) | JSON stdin, snake_case | in-process TS extension | in-process TS plugin | Codex plugin hooks (Stop) |
 | Cleanup risk | sessions kept | **`cleanupPeriodDays` default 30** | kept under `~/.pi` | kept under XDG share | kept under `~/.codex` |
-| Adapter risk | Low. We already know this. | Low. Best `transcript_path`. | Medium. Tree JSONL, not linear. Tail the file; do not walk the tree in v1. | Medium-high. May need to serialize from the plugin API if storage is not JSONL. | Medium. No compact hook. Watcher is load-bearing. |
+| Adapter risk | Low. We already know this. | Low. Best `transcript_path`. | Medium. Tree JSONL, not linear. Tail the file; do not walk the tree in v1. | Medium-high. May need to serialize from the plugin API if storage is not JSONL. | Medium. Desktop may store threads in sqlite; watcher is still load-bearing. |
 
 Install: `lossless setup`. That is hooks + MCP for all five, a launchd/systemd user unit, and a health check. `install-hooks` / `install-mcp` are the pieces if you need only one.
 

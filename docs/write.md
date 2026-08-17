@@ -59,7 +59,7 @@ Holds:
 
 - One catch-up core + thin adapters is right. The five harnesses differ in locate/event/parse only.
 - Owned raw is right. Claude deletes JSONL in 30 days. After 8 Grok compacts the file is 17 MB of originals we would lose if we only trusted the window.
-- PreCompact is a safety net, not the only writer. Turn-level catch-up + a session-dir watcher cover Codex (no compact hook) and crashed hooks.
+- PreCompact is a safety net, not the only writer. Turn-level catch-up + a session-dir watcher cover crashed hooks and any compact event we miss.
 - `updates.jsonl` is the wrong Grok file (2.5× larger, ACP). Primary is `chat_history.jsonl`.
 
 Fix in the write/harness specs:
@@ -162,7 +162,7 @@ Every trigger does the same thing: **catch up**. Copy new bytes, then derive. Tr
 |---------|-----|------|--------|
 | **Turn** | `Stop` / `UserPromptSubmit` (observe) | As they go, every completed turn | 200ms fail-open |
 | **Tool batch** | optional `PostToolUse` every N tools (default 8) | Long turns with no Stop yet | 200ms fail-open |
-| **PreCompact** | hook | Last chance before the window dies | **< 1s**, fail-open |
+| **PreCompact** | hook | Last chance before the window dies | **5s** sidecar wait (hook timeout 6s), fail-open |
 | **SessionEnd** | hook | Seal the session, compress raw | 2s fail-open |
 | **Remember** | `POST /v1/remember` | Agent or human says "keep this" | sync |
 | **Import** | CLI | Historical JSONL | unbounded, background |
@@ -279,9 +279,9 @@ Harness-specific locate / event / parse lives in [harnesses.md](harnesses.md). S
 
 | Harness | As they go | Before compact | End |
 |---------|------------|----------------|-----|
-| Grok | `Stop` (reason=end_turn only) | `PreCompact` | `SessionEnd` |
-| Claude | `Stop` | `PreCompact` | `SessionEnd` |
-| Codex | session-end + file mtime poll (no PreCompact today) | — | session-end |
+| Grok | `Stop` (reason=end_turn only) | `PreCompact` (+ `PostCompact`) | `SessionEnd` |
+| Claude | `Stop` | `PreCompact` (+ `PostCompact`) | `SessionEnd` |
+| Codex | `Stop` | `PreCompact` (+ `PostCompact`) | `SessionEnd` |
 
 Budgets as in the trigger table. Fail-open. If the daemon is down, write a spool file `{harness_path, offset, meta}` and let `--ensure` replay. Spool is durable; losing the hook process must not lose the fact that work happened — the harness JSONL is still there until cleanup, so replay from cursor 0 against raw is safe (append is idempotent by offset).
 

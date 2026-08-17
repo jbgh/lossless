@@ -84,7 +84,7 @@ func TestMergeClaudeSettingsPreservesExisting(t *testing.T) {
 
 func TestMergeClaudeSettingsEmptyAndInvalid(t *testing.T) {
 	got, err := MergeClaudeSettings(nil, "/bin/am")
-	if err != nil || !strings.Contains(string(got), "PreCompact") {
+	if err != nil || !strings.Contains(string(got), "PreCompact") || !strings.Contains(string(got), "PostCompact") {
 		t.Fatal(string(got), err)
 	}
 	if _, err := MergeClaudeSettings([]byte("{"), "/bin/am"); err == nil {
@@ -170,7 +170,7 @@ func TestWriteHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(g)
-	if !strings.Contains(string(b), "hook-grok") {
+	if !strings.Contains(string(b), "hook-grok") || !strings.Contains(string(b), "PreCompact") || !strings.Contains(string(b), "PostCompact") {
 		t.Fatal(string(b))
 	}
 	if err := os.WriteFile(filepath.Join(home, ".claude", "settings.json"), []byte(`{"model":"x"}`), 0o644); err != nil {

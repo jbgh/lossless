@@ -18,11 +18,24 @@ func SidecarURL() string { return env.Sidecar() }
 
 func MemoryHome() string { return env.Home() }
 
+// Compact must finish the raw copy before the harness shrinks the window.
+// Turn hooks stay short so they do not stall the UI.
+func catchUpWait(source string) time.Duration {
+	s := strings.ToLower(strings.TrimSpace(source))
+	if strings.Contains(s, "compact") {
+		return 5 * time.Second
+	}
+	if s == "session_end" || s == "sessionend" || s == "session_shutdown" {
+		return 3 * time.Second
+	}
+	return 400 * time.Millisecond
+}
+
 // SubmitCatchUp is the hook path: sidecar HTTP, then local store, then spool.
 // If the sidecar timed out it may already be writing — spool and let --ensure
 // replay (a no-op if the cursor moved). Never open the store in that case.
 func SubmitCatchUp(req CatchUpRequest) {
-	err := postCatchUp(SidecarURL(), req, 400*time.Millisecond)
+	err := postCatchUp(SidecarURL(), req, catchUpWait(req.Source))
 	if err == nil {
 		return
 	}

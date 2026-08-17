@@ -554,26 +554,28 @@ func runHookGrok() int {
 	if err := json.Unmarshal(raw, &ev); err != nil {
 		return 0
 	}
+	sid := ev.SessionID
+	if sid == "" {
+		sid = os.Getenv("GROK_SESSION_ID")
+	}
 	ws := ev.WorkspaceRoot
 	if ws == "" {
 		ws = ev.CWD
 	}
 	if ws == "" {
+		ws = os.Getenv("GROK_WORKSPACE_ROOT")
+	}
+	if ws == "" {
 		ws, _ = os.Getwd()
 	}
-	loc := harness.LocateGrok(ws, ev.SessionID)
+	loc := harness.LocateGrok(ws, sid)
 	if _, err := os.Stat(loc.JSONL); err != nil {
 		return 0
 	}
-	source := "compact"
-	if ev.HookEventName == "session_end" || ev.HookEventName == "SessionEnd" {
-		source = "session_end"
-	} else if ev.HookEventName == "stop" || ev.HookEventName == "Stop" {
-		source = "turn"
-	}
+	source := hookSource(ev.HookEventName, "compact")
 	write.SubmitCatchUp(write.CatchUpRequest{
 		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: "grok",
-		SessionID: ev.SessionID, Source: source,
+		SessionID: sid, Source: source,
 	})
 	return 0
 }
@@ -614,12 +616,7 @@ func runHookClaude() int {
 	if _, err := os.Stat(loc.JSONL); err != nil {
 		return 0
 	}
-	source := "compact"
-	if strings.EqualFold(name, "session_end") {
-		source = "session_end"
-	} else if strings.EqualFold(name, "stop") {
-		source = "turn"
-	}
+	source := hookSource(name, "compact")
 	write.SubmitCatchUp(write.CatchUpRequest{
 		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: "claude",
 		SessionID: loc.SessionID, Source: source,
@@ -667,12 +664,7 @@ func runHookCodex() int {
 	if ws == "" {
 		_, ws = harness.PeekCodexMeta(loc.JSONL)
 	}
-	source := "turn"
-	if strings.EqualFold(name, "session_end") {
-		source = "session_end"
-	} else if strings.EqualFold(name, "precompact") || strings.EqualFold(name, "pre_compact") {
-		source = "compact"
-	}
+	source := hookSource(name, "turn")
 	write.SubmitCatchUp(write.CatchUpRequest{
 		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: "codex",
 		SessionID: loc.SessionID, Source: source,
@@ -775,12 +767,7 @@ func runHookPi() int {
 	if _, err := os.Stat(loc.JSONL); err != nil {
 		return 0
 	}
-	source := "turn"
-	if strings.EqualFold(ev.HookEvent, "session_end") || strings.EqualFold(ev.HookEvent, "session_shutdown") {
-		source = "session_end"
-	} else if strings.EqualFold(ev.HookEvent, "compact") || strings.EqualFold(ev.HookEvent, "precompact") {
-		source = "compact"
-	}
+	source := hookSource(ev.HookEvent, "turn")
 	write.SubmitCatchUp(write.CatchUpRequest{
 		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: "pi",
 		SessionID: loc.SessionID, Source: source,
@@ -810,12 +797,7 @@ func runHookOpenCode() int {
 	}
 	source := ev.Source
 	if source == "" {
-		source = "turn"
-		if strings.EqualFold(ev.HookEvent, "session_end") || strings.EqualFold(ev.HookEvent, "session.deleted") {
-			source = "session_end"
-		} else if strings.Contains(strings.ToLower(ev.HookEvent), "compact") {
-			source = "compact"
-		}
+		source = hookSource(ev.HookEvent, "turn")
 	}
 	write.SubmitCatchUp(write.CatchUpRequest{
 		WorkspaceRoot: ws, Harness: "opencode",
@@ -827,4 +809,21 @@ func runHookOpenCode() int {
 func jsonQuote(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+func hookSource(name, fallback string) string {
+	n := strings.ToLower(strings.TrimSpace(name))
+	switch {
+	case n == "session_end" || n == "sessionend" || n == "session_shutdown" || n == "session.deleted":
+		return "session_end"
+	case n == "stop" || n == "turn" || n == "turn_end" || n == "agent_settled" || n == "session.idle":
+		return "turn"
+	case strings.Contains(n, "compact"):
+		return "compact"
+	default:
+		if fallback != "" {
+			return fallback
+		}
+		return "turn"
+	}
 }
