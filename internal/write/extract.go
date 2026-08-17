@@ -99,10 +99,10 @@ func classify(sentence string, msg Message) string {
 	if msg.Error || (failedRE.MatchString(stripTypeTalk(sentence)) && !metaFailedTalk(sentence)) {
 		return "failed"
 	}
-	if decisionRE.MatchString(sentence) {
+	if decisionRE.MatchString(sentence) && !planningDecision(sentence) {
 		return "decision"
 	}
-	if constraintRE.MatchString(sentence) && msg.Role == "user" && !hedgeRE.MatchString(sentence) {
+	if constraintRE.MatchString(sentence) && msg.Role == "user" && !hedgeRE.MatchString(sentence) && !sessionOpConstraint(sentence) && !agentPromptConstraint(sentence) {
 		return "constraint"
 	}
 	if stateRE.MatchString(sentence) {
@@ -127,6 +127,7 @@ func metaFailedTalk(s string) bool {
 	for _, n := range []string{
 		"failed-overlap", "classified as", "type-cap", "packtype",
 		"extract noise", "ask pack", "in context", "blocking warning",
+		"failure mode", "failed eviction",
 	} {
 		if strings.Contains(low, n) {
 			return true
@@ -154,7 +155,8 @@ func skipSentence(s string) bool {
 		return true
 	}
 	if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
-		if strings.Contains(t, "**") || strings.HasPrefix(strings.TrimSpace(t[2:]), "`") || strings.HasPrefix(strings.TrimSpace(t[2:]), ">") {
+		rest := strings.TrimSpace(t[2:])
+		if strings.Contains(t, "**") || strings.HasPrefix(rest, "`") || strings.HasPrefix(rest, ">") || (len(t) < 80 && pathRE.FindString(t) == "") {
 			return true
 		}
 	}
@@ -165,15 +167,55 @@ func skipSentence(s string) bool {
 	if strings.HasPrefix(low, "next i ") || strings.HasPrefix(low, "next i'") || strings.HasPrefix(low, "next i’ll") || strings.HasPrefix(low, "next i'll") {
 		return true
 	}
-	if metaFailedTalk(t) {
+	if metaFailedTalk(t) || sessionOpConstraint(t) || agentPromptConstraint(t) || planningDecision(t) {
+		return true
+	}
+	if strings.HasSuffix(t, "(") || strings.HasSuffix(t, "`." ) || strings.HasSuffix(t, "do not") {
 		return true
 	}
 	return false
 }
 
+func planningDecision(s string) bool {
+	low := strings.ToLower(strings.TrimSpace(s))
+	for _, p := range []string{
+		"i'll check", "i’ll check", "i will check", "i'll look", "i’ll look",
+		"i'll read", "i’ll read", "i'll audit", "i’ll audit",
+		"i'll fix", "i’ll fix", "i'll start", "i’ll start", "i'll add", "i’ll add",
+	} {
+		if strings.Contains(low, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func sessionOpConstraint(s string) bool {
+	low := strings.ToLower(s)
+	for _, p := range []string{
+		"don't ask", "do not ask", "don't change source", "don't delete data",
+		"do not open a pr", "do not redo", "don't flag", "do not start",
+	} {
+		if strings.Contains(low, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func agentPromptConstraint(s string) bool {
+	low := strings.ToLower(s)
+	return strings.Contains(low, "why don't you") || strings.Contains(low, "why dont you") ||
+		strings.HasPrefix(low, "can you ") || strings.HasPrefix(low, "could you ")
+}
+
 func isQuestion(s string) bool {
 	s = strings.TrimSpace(s)
 	if strings.HasSuffix(s, "?") {
+		return true
+	}
+	low := strings.ToLower(s)
+	if strings.Contains(low, "why don't you") || strings.Contains(low, "why dont you") {
 		return true
 	}
 	return questionRE.MatchString(s)

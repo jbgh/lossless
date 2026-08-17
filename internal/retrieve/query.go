@@ -285,26 +285,77 @@ func extractNoise(rec claim.Record) bool {
 	if t == "" {
 		return true
 	}
-	if strings.HasPrefix(t, "|") || strings.Contains(t, " | ") {
+	if strings.HasPrefix(t, "#") || strings.HasPrefix(t, "|") || strings.Contains(t, " | ") {
 		return true
 	}
 	if strings.HasPrefix(t, "**") && !strings.Contains(t, ".") {
 		return true
 	}
-	if (strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ")) && strings.Contains(t, "**") {
+	if (strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ")) && (strings.Contains(t, "**") || len(t) < 80) {
 		return true
 	}
 	low := strings.ToLower(t)
-	if strings.Contains(low, "failed-overlap") || strings.Contains(low, "classified as") {
+	if strings.Contains(low, "failed-overlap") || strings.Contains(low, "classified as") || strings.Contains(low, "failure mode") {
 		return true
 	}
 	if rec.Type == "state" && (strings.HasPrefix(low, "next i ") || strings.HasPrefix(low, "next i'") || strings.HasPrefix(low, "next i’ll") || strings.HasPrefix(low, "next i'll")) {
 		return true
 	}
+	if rec.Type == "decision" && planningDecision(low) {
+		return true
+	}
+	if rec.Type == "constraint" && (sessionOpConstraint(low) || agentPromptConstraint(low)) {
+		return true
+	}
 	if rec.Type == "failed" && len(rec.Paths) == 0 && failedOnlyInTicks(t) {
 		return true
 	}
+	if truncatedClaim(t) {
+		return true
+	}
 	return false
+}
+
+func truncatedClaim(t string) bool {
+	s := strings.TrimSpace(t)
+	if strings.HasSuffix(s, "(") || strings.HasSuffix(s, "`." ) || strings.HasSuffix(s, "do not") {
+		return true
+	}
+	if strings.HasSuffix(s, "path (`." ) || strings.Contains(s, "path (`." ) {
+		return true
+	}
+	return false
+}
+
+func planningDecision(low string) bool {
+	for _, p := range []string{
+		"i'll check", "i’ll check", "i will check", "i'll look", "i’ll look",
+		"i'll read", "i’ll read", "i'll audit", "i’ll audit",
+		"i'll fix", "i’ll fix", "i'll start", "i’ll start", "i'll add", "i’ll add",
+	} {
+		if strings.Contains(low, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func sessionOpConstraint(low string) bool {
+	for _, p := range []string{
+		"don't ask", "do not ask", "don't change source", "don't delete data",
+		"do not open a pr", "do not redo", "don't flag", "do not start",
+	} {
+		if strings.Contains(low, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func agentPromptConstraint(low string) bool {
+	return strings.Contains(low, "why don't you") || strings.Contains(low, "why do not you") ||
+		strings.Contains(low, "why dont you") || strings.HasPrefix(low, "can you ") ||
+		strings.HasPrefix(low, "could you ")
 }
 
 var failedWord = regexp.MustCompile(`(?i)\bfailed\b`)

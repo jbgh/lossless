@@ -106,6 +106,42 @@ func TestExtractErrorHandlingIsNotFailed(t *testing.T) {
 	}
 }
 
+func TestExtractSkipsLiveSessionNoise(t *testing.T) {
+	got := Extract([]Message{
+		{Role: "assistant", Offset: 1, Text: "## Investigation: why those uploads failed"},
+		{Role: "user", Offset: 2, Text: "why don't you pull up the simulator on an iphone 12 mini and see what it looks like"},
+		{Role: "user", Offset: 3, Text: "i'll be stepping away so don't ask any questions just do what you think is correct."},
+		{Role: "user", Offset: 4, Text: "- Don't change source"},
+		{Role: "user", Offset: 5, Text: "- Don't delete data"},
+		{Role: "assistant", Offset: 6, Text: "I'll check what we already decided, then install a real Grok/Claude skill as part of the product."},
+		{Role: "assistant", Offset: 7, Text: "Who-reacted failed in preview."},
+		{Role: "assistant", Offset: 8, Text: "Android Photos-like lightbox open uses a same-window hero overlay above NavHost instead of a hard cut."},
+	}, ExtractOpts{ProjectKey: "memora/memora", SessionID: "s"})
+	for _, r := range got {
+		if strings.HasPrefix(strings.TrimSpace(r.Text), "#") {
+			t.Fatalf("heading: %+v", r)
+		}
+		if strings.Contains(strings.ToLower(r.Text), "why don't you") {
+			t.Fatalf("agent prompt: %+v", r)
+		}
+		if strings.Contains(strings.ToLower(r.Text), "don't ask") || strings.Contains(r.Text, "Don't change source") {
+			t.Fatalf("session op: %+v", r)
+		}
+		if r.Type == "decision" && strings.HasPrefix(r.Text, "I'll check") {
+			t.Fatalf("planning: %+v", r)
+		}
+	}
+	ok := false
+	for _, r := range got {
+		if r.Type == "decision" && strings.Contains(r.Text, "lightbox") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("real lightbox decision missed: %+v", got)
+	}
+}
+
 func TestExtractSkipsTablesAndMetaFailedTalk(t *testing.T) {
 	got := Extract([]Message{
 		{Role: "assistant", Offset: 1, Text: "| **Claims** | `owner/repo` | A Grok `failed` on `acme/api` is what Claude’s ask is supposed to see."},

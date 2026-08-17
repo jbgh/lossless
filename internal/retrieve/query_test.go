@@ -110,6 +110,21 @@ func TestExtractNoiseAndJobOverlap(t *testing.T) {
 	if !extractNoise(claim.Record{Type: "failed", Text: "The live ask just returned five `failed`s, and four look like extract noise."}) {
 		t.Fatal("backticked type mention")
 	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "## Investigation: why those uploads failed"}) {
+		t.Fatal("heading")
+	}
+	if !extractNoise(claim.Record{Type: "constraint", Text: "the scrubbing video doesn't seem to work why don't you verify on the emulator"}) {
+		t.Fatal("why don't you")
+	}
+	if !extractNoise(claim.Record{Type: "constraint", Text: "- Don't change source"}) {
+		t.Fatal("short bullet")
+	}
+	if !extractNoise(claim.Record{Type: "decision", Text: "I'll check what we already decided, then install a skill."}) {
+		t.Fatal("planning")
+	}
+	if extractNoise(claim.Record{Type: "decision", Text: "I'll cold-start at game size × 2 instead of resizing mid-session."}) {
+		t.Fatal("real I'll decision")
+	}
 	qtoks := []string{"retrieve", "extract", "failed", "noise", "pack"}
 	if contentOverlap(qtoks, jobOverlapText("Raising to 8 would make recall look better — extract noise classified as `failed`.")) >= OverlapStrongMin {
 		t.Fatal("meta should not be strong job overlap")

@@ -86,7 +86,7 @@ func TestPackScoreCutoffDiversityAndEvict(t *testing.T) {
 			rec:   claim.Record{ID: "D" + itoa(i), Type: "decision", Text: "dec"},
 		})
 	}
-	fail := scored{score: 0.1, failedOverlap: 1, rec: claim.Record{ID: "FAIL", Type: "failed", Text: "failed"}}
+	fail := scored{score: 0.1, failedOverlap: 1, path: 1, rec: claim.Record{ID: "FAIL", Type: "failed", Text: "failed", Paths: []string{"a.ts"}}}
 	all := append(append([]scored{}, packed...), fail)
 	out := evictFailed(packed, all, 1200)
 	found := false
@@ -273,7 +273,7 @@ func TestEvictAppendsPastCapThenTrims(t *testing.T) {
 	var all []scored
 	all = append(all, packed...)
 	for i := 0; i < 5; i++ {
-		all = append(all, scored{score: 0.1, failedOverlap: 1, rec: claim.Record{ID: "F" + itoa(i), Type: "failed"}})
+		all = append(all, scored{score: 0.1, failedOverlap: 1, path: 1, rec: claim.Record{ID: "F" + itoa(i), Type: "failed", Paths: []string{"a.ts"}}})
 	}
 	out := evictFailed(packed, all, 1200)
 	if len(out) > PackCap {
@@ -285,7 +285,7 @@ func TestEvictAppendsPastCapThenTrims(t *testing.T) {
 			n++
 		}
 	}
-	if n < 3 {
+	if n == 0 || n > PackTypeCap {
 		t.Fatalf("failed packed=%d %+v", n, out)
 	}
 }
@@ -332,6 +332,58 @@ func TestGetManyMissInAsk(t *testing.T) {
 	out := askAt(t, st, Request{Project: "other/p", Question: "jose"})
 	if len(out.Context) != 0 {
 		t.Fatal(out)
+	}
+}
+
+func TestAskMemoraLikeDoesNotFloodFaileds(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "HEADING", Type: "failed", SessionID: "live",
+		Text: "## Investigation: why those uploads failed", CreatedAt: "2026-08-01T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "WHY", Type: "constraint", SessionID: "live",
+		Text: "the scrubbing video doesn't seem to work why don't you verify on the emulator and you'll see what i mean",
+		CreatedAt: "2026-08-02T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "REACT", Type: "failed", SessionID: "live",
+		Text: "Who-reacted failed in preview.", CreatedAt: "2026-08-03T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "CI", Type: "failed", SessionID: "live",
+		Text: "CI failed on PR #3088 — investigating and fixing before TestFlight.",
+		CreatedAt: "2026-08-04T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "LIGHTBOX", Type: "decision", SessionID: "live",
+		Text: "Android Photos-like lightbox open uses a same-window hero overlay above NavHost.",
+		CreatedAt: "2026-08-05T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "QA", Type: "constraint", SessionID: "live",
+		Text: "Android lightbox QA runs on memora-eu. Never mobile-down --full on the shared emulator.",
+		Paths: []string{"scripts/mobile/mobile-up.sh"}, CreatedAt: "2026-08-06T00:00:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project: "acme/api", SessionID: "live",
+		Goal:     "fix iOS lightbox swipe-down dismiss hero",
+		Question: "what already failed or what did we decide about lightbox",
+	})
+	if containsID(out, "HEADING") || containsID(out, "WHY") {
+		t.Fatalf("noise: %+v", out.Context)
+	}
+	if !containsID(out, "LIGHTBOX") && !containsID(out, "QA") {
+		t.Fatalf("real work missed: %+v", out.Context)
+	}
+	nFail := 0
+	for _, h := range out.Context {
+		if h.Type == "failed" {
+			nFail++
+		}
+	}
+	if nFail > PackTypeCap {
+		t.Fatalf("failed flood %d: %+v", nFail, out.Context)
 	}
 }
 

@@ -757,14 +757,26 @@ func evictFailed(packed, all []scored, limit int) []scored {
 	}
 	var missing []scored
 	for _, c := range all {
-		if c.failedOverlap == 1 && !in[c.rec.ID] {
-			missing = append(missing, c)
+		if c.failedOverlap != 1 || in[c.rec.ID] {
+			continue
 		}
+		// Job 1 is "don't repeat this file/symbol", not "every claim
+		// that mentioned failed". Lexical-only overlaps stay in rank.
+		if c.path == 0 && c.symbol == 0 {
+			continue
+		}
+		missing = append(missing, c)
 	}
 	if len(missing) == 0 {
 		return packed
 	}
+	sort.SliceStable(missing, func(i, j int) bool {
+		return missing[i].score > missing[j].score
+	})
 	for _, m := range missing {
+		if typeCount(packed, "failed") >= PackTypeCap {
+			break
+		}
 		if len(packed) < PackCap {
 			packed = append(packed, m)
 			in[m.rec.ID] = true
@@ -787,7 +799,6 @@ func evictFailed(packed, all []scored, limit int) []scored {
 		in[m.rec.ID] = true
 	}
 	sortScored(packed)
-	// drop extras if eviction appended past cap
 	if len(packed) > PackCap {
 		packed = packed[:PackCap]
 	}
