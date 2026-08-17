@@ -26,7 +26,8 @@ func TestMultiHarnessConcurrentReconcile(t *testing.T) {
 	}
 	jobs := []job{
 		{"grok.jsonl", "grok", "acme/api", "sess-grok",
-			`{"type":"assistant","content":"Redis token bucket failed in src/middleware/auth.ts staging."}` + "\n" +
+			`{"type":"user","content":"Add rate limiting to src/middleware/auth.ts."}` + "\n" +
+				`{"type":"assistant","content":"Redis token bucket failed in src/middleware/auth.ts staging."}` + "\n" +
 				`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}` + "\n"},
 		{"claude.jsonl", "claude", "acme/api", "sess-claude",
 			`{"type":"assistant","content":"We decided to keep the limiter in-process in src/middleware/auth.ts."}` + "\n"},

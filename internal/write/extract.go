@@ -88,11 +88,50 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 		out = append(out, r)
 	}
 	if len(out) > 12 {
-		// keep highest priority
-		sortByPri(out)
-		out = out[:12]
+		out = capExtract(out, 12, 5)
 	}
 	return out
+}
+
+func capExtract(in []claim.Record, total, perType int) []claim.Record {
+	sortByPri(in)
+	counts := map[string]int{}
+	dirN := map[string]int{}
+	var kept []claim.Record
+	for _, r := range in {
+		if counts[r.Type] >= perType {
+			continue
+		}
+		d := primaryDir(r.Paths)
+		dk := r.Type + "|" + d
+		dirCap := 2
+		if r.Type == "decision" || r.Type == "constraint" {
+			dirCap = 5
+		}
+		if d != "" && dirN[dk] >= dirCap {
+			continue
+		}
+		kept = append(kept, r)
+		counts[r.Type]++
+		if d != "" {
+			dirN[dk]++
+		}
+		if len(kept) >= total {
+			return kept
+		}
+	}
+	return kept
+}
+
+func primaryDir(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	p := paths[0]
+	if i := strings.LastIndex(p, "/"); i > 0 {
+		return p[:i]
+	}
+	return p
 }
 
 func classify(sentence string, msg Message) string {
@@ -361,14 +400,20 @@ func nearby(msg Message, all []Message) []string {
 	if idx < 0 {
 		return nil
 	}
-	lo, hi := idx-2, idx+3
-	if lo < 0 {
-		lo = 0
+	// Preceding user turns only (not other assistant lines). Look
+	// back a few users so "Picked jose..." still inherits auth.ts
+	// from "Add rate limiting to src/middleware/auth.ts" when the
+	// last user was "bigger pool?" with no path.
+	var paths []string
+	users := 0
+	for i := idx - 1; i >= 0 && users < 3; i-- {
+		if all[i].Role != "user" {
+			continue
+		}
+		users++
+		paths = append(paths, collectPaths(all[i:i+1])...)
 	}
-	if hi > len(all) {
-		hi = len(all)
-	}
-	return collectPaths(all[lo:hi])
+	return paths
 }
 
 func splitSentences(text string) []string {

@@ -637,6 +637,11 @@ func typeCount(out []scored, typ string) int {
 }
 
 func hasOtherType(remaining, packed []scored, typ string) bool {
+	for _, p := range packed {
+		if p.rec.Type != typ {
+			return true
+		}
+	}
 	seen := map[string]int{}
 	for _, p := range packed {
 		seen[p.rec.Type]++

@@ -1,6 +1,7 @@
 package write
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,6 +68,37 @@ func TestExtractKeepsDurableFromEarlyInLongSession(t *testing.T) {
 	}
 	if !ok {
 		t.Fatalf("early failed dropped from long session: %+v", got)
+	}
+}
+
+func TestExtractKeepsDecisionAmongManyFaileds(t *testing.T) {
+	var msgs []Message
+	msgs = append(msgs, Message{
+		Role: "assistant", Offset: 0,
+		Text: "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts.",
+	})
+	for i := 0; i < 20; i++ {
+		msgs = append(msgs, Message{
+			Role: "assistant", Offset: int64(i + 1),
+			Text: fmt.Sprintf("Helper decoy %d failed in src/other/file%d.ts during compile.", i, i),
+		})
+	}
+	got := Extract(msgs, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
+	ok := false
+	nFail := 0
+	for _, r := range got {
+		if r.Type == "failed" {
+			nFail++
+		}
+		if r.Type == "decision" && strings.Contains(r.Text, "jose") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("decision starved: %+v", got)
+	}
+	if nFail > 5 {
+		t.Fatalf("extract failed flood %d: %+v", nFail, got)
 	}
 }
 
@@ -321,8 +353,9 @@ func TestClassifyAndHelpers(t *testing.T) {
 	if nearby(Message{Offset: 99}, []Message{{Offset: 1}}) != nil {
 		t.Fatal("nearby miss")
 	}
-	paths := nearby(Message{Offset: 1}, []Message{
-		{Offset: 1, Text: "see src/a.ts please"},
+	paths := nearby(Message{Role: "assistant", Offset: 2}, []Message{
+		{Role: "user", Offset: 1, Text: "see src/a.ts please"},
+		{Role: "assistant", Offset: 2, Text: "Redis token bucket failed in staging."},
 	})
 	if len(paths) == 0 {
 		t.Fatal("nearby hit")
