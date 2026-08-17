@@ -13,7 +13,10 @@ import (
 
 var (
 	pathRE       = regexp.MustCompile(`(?:[\w.-]+/)+[\w.-]+\.[A-Za-z0-9]+`)
-	failedRE     = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|revert|abort|failed|failure|didn't compile|does not work|threw|exception)\b`)
+	hardFailedRE = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|failed|failure|didn't compile|does not work|threw)\b`)
+	softFailedRE = regexp.MustCompile(`(?i)\b(revert|abort)\b`)
+	exceptionTo  = regexp.MustCompile(`(?i)exception to`)
+	numberedItem = regexp.MustCompile(`^\d+[.)]\s+`)
 	constraintRE = regexp.MustCompile(`(?i)\b(always|never|don't|do not|must|we use|we don't)\b`)
 	hedgeRE      = regexp.MustCompile(`(?i)\b(i don't think|i do not think|not sure|maybe|probably|might|should we|could we|can we|do we)\b`)
 	questionRE   = regexp.MustCompile(`(?i)^\s*(should|could|can|may|do|did|is|are|will)\b`)
@@ -154,11 +157,17 @@ func classify(sentence string, msg Message) string {
 	if isQuestion(sentence) {
 		return ""
 	}
-	if msg.Error || (failedRE.MatchString(stripTypeTalk(pathRE.ReplaceAllString(sentence, " "))) && !metaFailedTalk(sentence)) {
+	probe := stripFailedNoise(pathRE.ReplaceAllString(sentence, " "))
+	hard := hardFailedRE.MatchString(probe)
+	soft := softFailedRE.MatchString(probe)
+	if hard && !metaFailedTalk(sentence) {
 		return "failed"
 	}
 	if decisionRE.MatchString(sentence) && !planningDecision(sentence) {
 		return "decision"
+	}
+	if (msg.Error || (soft && !metaFailedTalk(sentence))) && !(decisionRE.MatchString(sentence) && !planningDecision(sentence)) {
+		return "failed"
 	}
 	if constraintRE.MatchString(sentence) && msg.Role == "user" && !hedgeRE.MatchString(sentence) && !sessionOpConstraint(sentence) && !agentPromptConstraint(sentence) {
 		return "constraint"
@@ -177,6 +186,12 @@ var (
 func stripTypeTalk(s string) string {
 	s = backtickSpan.ReplaceAllString(s, " ")
 	s = typeTalkRE.ReplaceAllString(s, " ")
+	return s
+}
+
+func stripFailedNoise(s string) string {
+	s = stripTypeTalk(s)
+	s = exceptionTo.ReplaceAllString(s, " ")
 	return s
 }
 
@@ -212,8 +227,13 @@ func skipSentence(s string) bool {
 	if strings.HasPrefix(t, "**") && strings.HasSuffix(t, "**") && !strings.Contains(t, ".") {
 		return true
 	}
-	if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
-		rest := strings.TrimSpace(t[2:])
+	if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") || numberedItem.MatchString(t) {
+		rest := t
+		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
+			rest = strings.TrimSpace(t[2:])
+		} else {
+			rest = strings.TrimSpace(numberedItem.ReplaceAllString(t, ""))
+		}
 		if strings.Contains(t, "**") || strings.HasPrefix(rest, "`") || strings.HasPrefix(rest, ">") || (len(t) < 80 && pathRE.FindString(t) == "") {
 			return true
 		}
@@ -225,7 +245,10 @@ func skipSentence(s string) bool {
 	if strings.HasPrefix(low, "next i ") || strings.HasPrefix(low, "next i'") || strings.HasPrefix(low, "next i’ll") || strings.HasPrefix(low, "next i'll") {
 		return true
 	}
-	if metaFailedTalk(t) || sessionOpConstraint(t) || agentPromptConstraint(t) || planningDecision(t) || statusFailed(t) || failedAsObject(t) {
+	if metaFailedTalk(t) || sessionOpConstraint(t) || agentPromptConstraint(t) || planningDecision(t) || statusFailed(t) || failedAsObject(t) || quotedAttribution(t) {
+		return true
+	}
+	if strings.HasPrefix(low, "remembered:") || strings.HasPrefix(low, "remembered ") {
 		return true
 	}
 	if strings.HasSuffix(t, "(") || strings.HasSuffix(t, "`." ) || strings.HasSuffix(t, "do not") {
@@ -241,6 +264,11 @@ func planningDecision(s string) bool {
 		"i'll read", "i’ll read", "i'll audit", "i’ll audit",
 		"i'll fix", "i’ll fix", "i'll start", "i’ll start", "i'll add", "i’ll add",
 		"i'll inspect", "i’ll inspect", "i'll pull", "i’ll pull",
+		"i'll go with", "i’ll go with", "i will go with",
+		"let's go with", "lets go with", "i'll switch", "i’ll switch",
+		"i'll try", "i’ll try",
+		"i'll implement", "i’ll implement", "i will implement",
+		"i'll replace", "i’ll replace", "i'll swap", "i’ll swap",
 	} {
 		if strings.Contains(low, p) {
 			return true
@@ -254,12 +282,24 @@ func sessionOpConstraint(s string) bool {
 	for _, p := range []string{
 		"don't ask", "do not ask", "don't change source", "don't delete data",
 		"do not open a pr", "do not redo", "don't flag", "do not start",
+		"never mind", "don't push yet", "do not push yet",
+		"don't merge yet", "do not merge yet",
+		"don't commit yet", "do not commit yet",
+		"don't wait", "do not wait",
 	} {
 		if strings.Contains(low, p) {
 			return true
 		}
 	}
 	return false
+}
+
+func quotedAttribution(s string) bool {
+	low := strings.ToLower(s)
+	if !strings.Contains(low, "said") {
+		return false
+	}
+	return strings.Contains(low, "said:") || strings.Contains(s, `"`) || strings.Contains(s, "“") || strings.Contains(s, "”")
 }
 
 func agentPromptConstraint(s string) bool {
@@ -274,6 +314,7 @@ func statusFailed(s string) bool {
 		"ci unit-test", "unit-test failure", "unit test failure",
 		"background notification", "checking #", "pr #", "pr-size-check",
 		"which of those", "re-pushing", "exit 0",
+		"github actions", "actions workflow", "actions job",
 	} {
 		if strings.Contains(low, n) {
 			return true
@@ -290,7 +331,10 @@ func failedAsObject(s string) bool {
 }
 
 func groundedFailed(s string, paths []string) bool {
-	if len(paths) > 0 || pathRE.FindString(s) != "" {
+	if len(paths) > 0 {
+		return true
+	}
+	if raw := pathRE.FindAllString(s, -1); len(redact.FilterPaths(raw)) > 0 {
 		return true
 	}
 	if statusFailed(s) || failedAsObject(s) {
@@ -441,7 +485,7 @@ func splitSentences(text string) []string {
 	rs := []rune(text)
 	for i, r := range rs {
 		cur.WriteRune(r)
-		if r == '\n' || r == '!' || r == '?' || (r == '.' && !fileExtDot(rs, i)) {
+		if r == '\n' || r == '!' || r == '?' || (r == '.' && !fileExtDot(rs, i) && !listMarkerDot(rs, i)) {
 			if s := strings.TrimSpace(cur.String()); s != "" {
 				out = append(out, s)
 			}
@@ -452,6 +496,23 @@ func splitSentences(text string) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+func listMarkerDot(rs []rune, i int) bool {
+	if i == 0 || rs[i-1] < '0' || rs[i-1] > '9' {
+		return false
+	}
+	j := i - 1
+	for j > 0 && rs[j-1] >= '0' && rs[j-1] <= '9' {
+		j--
+	}
+	if j > 0 && rs[j-1] != '\n' {
+		return false
+	}
+	if i+1 < len(rs) && (rs[i+1] == ' ' || rs[i+1] == '\t') {
+		return true
+	}
+	return false
 }
 
 func fileExtDot(rs []rune, i int) bool {

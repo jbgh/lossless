@@ -60,6 +60,11 @@ func TestParseJSONLSkipsAndRoles(t *testing.T) {
 	if !strings.Contains(joined, "user") || !strings.Contains(joined, "assistant") || !strings.Contains(joined, "tool") {
 		t.Fatalf("roles %v", roles)
 	}
+	bom := "\ufeff" + `{"role":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}` + "\n"
+	msgs, _ = ParseJSONL(bom, 0)
+	if len(msgs) != 1 || msgs[0].Skip || !strings.Contains(msgs[0].Text, "jose") {
+		t.Fatalf("BOM: %+v", msgs)
+	}
 }
 
 func TestParseJSONLClipsLongAndHugeSkip(t *testing.T) {
@@ -70,8 +75,8 @@ func TestParseJSONLClipsLongAndHugeSkip(t *testing.T) {
 	}
 	huge := strings.Repeat("b", 8001)
 	msgs, _ = ParseJSONL(`{"role":"user","content":"`+huge+`"}`+"\n", 0)
-	if len(msgs) != 1 || !msgs[0].Skip {
-		t.Fatalf("huge: %+v", msgs)
+	if len(msgs) != 1 || msgs[0].Skip || !strings.Contains(msgs[0].Text, "…") {
+		t.Fatalf("huge should clip not skip: %+v", msgs)
 	}
 }
 
@@ -130,7 +135,7 @@ func TestCatchUpCodexExtractsClaims(t *testing.T) {
 
 func TestParseJSONLSkipsOwnAskIO(t *testing.T) {
 	chunk := strings.Join([]string{
-		`{"type":"assistant","content":"","tool_calls":[{"id":"c1","name":"ask","arguments":"{}"}]}`,
+		`{"type":"assistant","content":"","tool_calls":[{"id":"c1","name":"lossless__ask","arguments":"{}"}]}`,
 		`{"type":"tool_result","tool_call_id":"c1","content":"{\"context\":[],\"warnings\":[\"A prior attempt at this goal failed (see X).\"],\"tokens\":1,\"project\":\"acme/api\"}"}`,
 		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}`,
 		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"u1","name":"remember","input":{}},{"type":"text","text":"We decided to keep the limiter."}]}}`,

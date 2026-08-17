@@ -68,6 +68,10 @@ func TestFilterPaths(t *testing.T) {
 	if len(got) != 2 || got[0] != ".github/workflows/ci.yml" || got[1] != "src/ok.go" {
 		t.Fatalf("github vs stripped abs: %v", got)
 	}
+	got = FilterPaths([]string{".git/hooks/pre-commit.sh", "keys/id_rsa.pub", "..%2fetc/passwd", "src/ok.go", ".github/workflows/ci.yml", "node_modules/lodash/index.js", "dist/assets/index.js"})
+	if len(got) != 2 || got[0] != "src/ok.go" || got[1] != ".github/workflows/ci.yml" {
+		t.Fatalf("dotgit/pct/pub/nm/dist: %v", got)
+	}
 }
 
 func TestLineRedacts(t *testing.T) {

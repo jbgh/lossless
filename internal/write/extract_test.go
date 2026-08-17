@@ -355,6 +355,15 @@ func TestClassifyAndHelpers(t *testing.T) {
 	if classify("ok", Message{Error: true}) != "failed" {
 		t.Fatal("error flag")
 	}
+	if classify("We decided to revert the Redis limiter and keep jose.", Message{}) != "decision" {
+		t.Fatal("decided-to-revert")
+	}
+	if classify("That's an exception to the rule we always use jose.", Message{}) != "" {
+		t.Fatal("exception-to")
+	}
+	if classify("We decided to use jose, not jsonwebtoken, for Edge.", Message{Error: true}) != "decision" {
+		t.Fatal("error flag must not stomp decision")
+	}
 	if classify("we will use jose instead of x", Message{}) != "decision" {
 		t.Fatal("decision")
 	}
@@ -434,6 +443,14 @@ func TestSplitSentences(t *testing.T) {
 	}
 	if len(splitSentences("no terminator")) != 1 {
 		t.Fatal(splitSentences("no terminator"))
+	}
+	list := splitSentences("1. Redis limiter **failed** (twice) + warning: do not repeat")
+	if len(list) != 1 || !strings.HasPrefix(list[0], "1. ") {
+		t.Fatalf("numbered list split: %#v", list)
+	}
+	still := splitSentences("Stopped at 12. Then we kept going on src/a.ts.")
+	if len(still) < 2 {
+		t.Fatalf("mid-sentence number should still split: %#v", still)
 	}
 }
 

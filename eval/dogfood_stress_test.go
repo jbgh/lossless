@@ -52,6 +52,38 @@ func TestDogfoodStress(t *testing.T) {
 	t.Run("assistantQuoteIsNotConstraint", testAssistantQuoteConstraint)
 	t.Run("askTraversalPathsDoNotStatOut", testAskTraversalPaths)
 	t.Run("claudePartsStillExtract", testClaudeParts)
+	// Wave 3: leftover holes after waves 1–2 (MCP-prefixed tools,
+	// fenced/prefixed own packets, revert-as-failed, .git grounding,
+	// isError stomping decisions, numbered-list chrome).
+	t.Run("prefixedMCPToolNameDoesNotEcho", testPrefixedMCPTool)
+	t.Run("fencedAskPacketDoesNotEcho", testFencedAskPacket)
+	t.Run("prefixedAskJSONDoesNotEcho", testPrefixedAskJSON)
+	t.Run("decidedToRevertIsDecision", testDecidedToRevert)
+	t.Run("dotGitPathDoesNotGroundFailed", testDotGitPath)
+	t.Run("errorFlagDoesNotStompDecision", testErrorFlagDecision)
+	t.Run("numberedListChromeStaysOut", testNumberedList)
+	t.Run("neverMindIsNotConstraint", testNeverMind)
+	t.Run("hugeMessageStillExtractsTail", testHugeMessageTail)
+	t.Run("planningGoWithIsNotDecision", testPlanningGoWith)
+	t.Run("dontPushYetIsSessionOp", testDontPushYet)
+	t.Run("exceptionToTheRuleIsNotFailed", testExceptionTo)
+	t.Run("githubActionsJobIsStatus", testGitHubActionsStatus)
+	t.Run("systemReminderMidMessageDropped", testSystemReminderMid)
+	t.Run("percentEncodedTraversalDropped", testPercentEncodedPath)
+	// Wave 4: leftover holes after wave-3 (quoted old decisions,
+	// node_modules grounding, remember-prose echo, hyphenated MCP names).
+	t.Run("assistantQuoteIsNotDecision", testAssistantQuoteDecision)
+	t.Run("nodeModulesDoesNotGroundFailed", testNodeModulesPath)
+	t.Run("rememberProseDoesNotEcho", testRememberProse)
+	t.Run("hyphenatedMCPToolDoesNotEcho", testHyphenatedMCPTool)
+	t.Run("dontWaitIsSessionOp", testDontWait)
+	t.Run("piTypeMessageStillExtracts", testPiTypeMessage)
+	t.Run("claimJSONArrayDoesNotEcho", testClaimJSONArray)
+	// Wave 5: paste dumps, planning-as-decision leftovers, build dirs.
+	t.Run("pastedGoTestOutputIsStatus", testPastedGoTest)
+	t.Run("illImplementIsPlanning", testIllImplement)
+	t.Run("distPathDoesNotGroundFailed", testDistPath)
+	t.Run("bomJSONLStillExtracts", testBOMJSONL)
 }
 
 func dogfoodStore(t *testing.T) *store.Store {
@@ -826,6 +858,541 @@ func testClaudeParts(t *testing.T) {
 	}
 }
 
+func testPrefixedMCPTool(t *testing.T) {
+	st := dogfoodStore(t)
+	// Claude-style: tool_result is nested in a user content array, so
+	// extract sees it unless isOwnTool recognizes lossless__* names.
+	body := strings.Join([]string{
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"g1","name":"lossless__get_record","input":{"id":"01JFAIL"}}]}}`,
+		`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"g1","content":"{\"id\":\"01JFAIL\",\"type\":\"failed\",\"text\":\"Redis token bucket failed in src/middleware/auth.ts staging.\"}"}]}}`,
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"a1","name":"mcp__lossless__ask","input":{}}]}}`,
+		`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"a1","content":"{\"context\":[{\"id\":\"01JFAIL\",\"type\":\"failed\",\"text\":\"Redis token bucket failed in src/middleware/auth.ts staging.\"}],\"warnings\":[\"A prior attempt failed\"],\"tokens\":8,\"project\":\"acme/app\"}"}]}}`,
+		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."}`,
+	}, "\n") + "\n"
+	p := testdataWrite(t, t.TempDir(), "mcp.jsonl", body)
+	if _, err := write.CatchUp(st, write.CatchUpRequest{
+		JSONL: p, Project: "acme/app", Harness: "grok", SessionID: "mcp",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose", Paths: []string{"src/middleware/auth.ts"},
+	})
+	if contextHas(out, "Redis token bucket") {
+		t.Fatalf("prefixed MCP tool echoed: %+v", out.Context)
+	}
+	if !contextHas(out, "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
+	}
+}
+
+func testFencedAskPacket(t *testing.T) {
+	st := dogfoodStore(t)
+	packet := "```json\n" +
+		`{"context":[{"id":"x","type":"failed","text":"Redis token bucket failed in src/middleware/auth.ts staging."}],"warnings":["A prior attempt failed"],"tokens":12,"project":"acme/app"}` +
+		"\n```\nWe decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."
+	dogfoodCatch(t, st, "acme/app", "fence", grokLine("assistant", packet))
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose", Paths: []string{"src/middleware/auth.ts"},
+	})
+	if contextHas(out, "Redis token bucket") {
+		t.Fatalf("fenced ask packet echoed: %+v", out.Context)
+	}
+	if !contextHas(out, "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
+	}
+}
+
+func testPrefixedAskJSON(t *testing.T) {
+	st := dogfoodStore(t)
+	text := "lossless ask returned:\n" +
+		`{"context":[{"id":"x","type":"failed","text":"Redis token bucket failed in src/middleware/auth.ts staging."}],"warnings":["A prior attempt failed"],"tokens":12,"project":"acme/app"}`
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", text))
+	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
+	dogfoodCatch(t, st, "acme/app", "prefjson", b.String())
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose", Paths: []string{"src/middleware/auth.ts"},
+	})
+	if contextHas(out, "Redis token bucket") {
+		t.Fatalf("prefixed ask JSON echoed: %+v", out.Context)
+	}
+	if !contextHas(out, "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
+	}
+}
+
+func testDecidedToRevert(t *testing.T) {
+	st := dogfoodStore(t)
+	dogfoodCatch(t, st, "acme/app", "revert",
+		grokLine("assistant", "We decided to revert the Redis limiter and keep jose in src/middleware/auth.ts."))
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "why not Redis",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "jose") && !contextHas(out, "revert") {
+		t.Fatalf("revert decision missed: %+v", out.Context)
+	}
+	for _, h := range out.Context {
+		if h.Type == "failed" && strings.Contains(h.Text, "revert") {
+			t.Fatalf("decided-to-revert classified failed: %+v", h)
+		}
+	}
+}
+
+func testDotGitPath(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", "The pre-commit hook failed in .git/hooks/pre-commit.sh so rebase stopped."))
+	b.WriteString(grokLine("assistant", "Who-reacted failed in preview in ios/LightboxView.swift."))
+	dogfoodCatch(t, st, "acme/app", "dotgit", b.String())
+	claims, _ := st.ListActive("acme/app")
+	for _, c := range claims {
+		for _, p := range c.Paths {
+			if strings.Contains(p, ".git/") || strings.HasPrefix(p, ".git") {
+				t.Fatalf(".git path stored: %v in %s", c.Paths, c.Text)
+			}
+		}
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "what failed",
+		Paths: []string{"ios/LightboxView.swift"},
+	})
+	if contextHas(out, "pre-commit") {
+		t.Fatalf(".git-grounded failed packed: %+v", out.Context)
+	}
+	if !contextHas(out, "Who-reacted") {
+		t.Fatalf("product failed missed: %+v", out.Context)
+	}
+}
+
+func testErrorFlagDecision(t *testing.T) {
+	st := dogfoodStore(t)
+	body := `{"type":"assistant","error":true,"content":"We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."}` + "\n" +
+		`{"type":"assistant","message":{"role":"assistant","isError":true,"content":[{"type":"text","text":"We decided to keep the limiter in-process in src/middleware/auth.ts."}]}}` + "\n"
+	p := testdataWrite(t, t.TempDir(), "errflag.jsonl", body)
+	if _, err := write.CatchUp(st, write.CatchUpRequest{
+		JSONL: p, Project: "acme/app", Harness: "claude", SessionID: "errflag",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "jose") && !contextHas(out, "limiter") {
+		t.Fatalf("isError stomped decision: %+v", out.Context)
+	}
+	for _, h := range out.Context {
+		if h.Type == "failed" && (strings.Contains(h.Text, "jose") || strings.Contains(h.Text, "limiter")) {
+			t.Fatalf("decision reclassified failed via error flag: %+v", h)
+		}
+	}
+}
+
+func testNumberedList(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
+	b.WriteString(grokLine("assistant", "1. Redis limiter **failed** (twice) + warning: do not repeat"))
+	b.WriteString(grokLine("assistant", "2. The live pack returned five `failed`s from extract noise"))
+	dogfoodCatch(t, st, "acme/app", "num", b.String())
+	claims, _ := st.ListActive("acme/app")
+	for _, c := range claims {
+		if strings.Contains(c.Text, "Redis limiter") || strings.Contains(c.Text, "five `failed`") {
+			t.Fatalf("numbered list extracted: %+v", c)
+		}
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
+	}
+}
+
+func testNeverMind(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("user", "Always never log Authorization headers in src/middleware/auth.ts."))
+	b.WriteString(grokLine("user", "Never mind the lint on src/middleware/auth.ts, keep going."))
+	dogfoodCatch(t, st, "acme/app", "nvm", b.String())
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "Authorization headers",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "Authorization") {
+		t.Fatalf("real constraint missed: %+v", out.Context)
+	}
+	if contextHas(out, "Never mind") || contextHas(out, "lint") {
+		t.Fatalf("never-mind packed: %+v", out.Context)
+	}
+}
+
+func testHugeMessageTail(t *testing.T) {
+	st := dogfoodStore(t)
+	// parse currently Skip:true at >8000; gold lives in the last 200 chars.
+	dump := strings.Repeat("stack frame in vendor/lib/noise.go\n", 400)
+	text := dump + "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."
+	if len(text) <= 8000 {
+		t.Fatalf("fixture too short: %d", len(text))
+	}
+	dogfoodCatch(t, st, "acme/app", "huge", grokLine("assistant", text))
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "jose") {
+		t.Fatalf("huge-message tail gold missed: %+v", out.Context)
+	}
+}
+
+func testPlanningGoWith(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", "I'll go with postgres instead of mysql in src/db/client.ts."))
+	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
+	dogfoodCatch(t, st, "acme/app", "gowith", b.String())
+	claims, _ := st.ListActive("acme/app")
+	for _, c := range claims {
+		if strings.Contains(c.Text, "postgres") || strings.Contains(c.Text, "I'll go with") {
+			t.Fatalf("planning go-with extracted: %+v", c)
+		}
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "why not jsonwebtoken",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
+	}
+}
+
+func testDontPushYet(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("user", "Always never log Authorization headers in src/middleware/auth.ts."))
+	b.WriteString(grokLine("user", "Don't push yet I'll review src/middleware/auth.ts after lunch."))
+	b.WriteString(grokLine("user", "Don't merge yet until the limiter is in."))
+	dogfoodCatch(t, st, "acme/app", "pushyet", b.String())
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "Authorization headers",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "Authorization") {
+		t.Fatalf("real constraint missed: %+v", out.Context)
+	}
+	if contextHasAny(out, "Don't push", "Don't merge") {
+		t.Fatalf("session-op packed: %+v", out.Context)
+	}
+}
+
+func testExceptionTo(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", "That's an exception to the rule we always use jose in src/middleware/auth.ts."))
+	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
+	dogfoodCatch(t, st, "acme/app", "exto", b.String())
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if contextHas(out, "exception to") {
+		t.Fatalf("exception-to-the-rule packed as failed: %+v", out.Context)
+	}
+	if !contextHas(out, "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
+	}
+}
+
+func testGitHubActionsStatus(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", "The GitHub Actions workflow failed so the deploy did not start."))
+	b.WriteString(grokLine("assistant", "Who-reacted failed in preview in ios/LightboxView.swift."))
+	dogfoodCatch(t, st, "acme/app", "gha", b.String())
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "what failed",
+		Paths: []string{"ios/LightboxView.swift"},
+	})
+	if contextHas(out, "GitHub Actions") {
+		t.Fatalf("CI workflow status packed: %+v", out.Context)
+	}
+	if !contextHas(out, "Who-reacted") {
+		t.Fatalf("product failed missed: %+v", out.Context)
+	}
+}
+
+func testSystemReminderMid(t *testing.T) {
+	st := dogfoodStore(t)
+	text := "Always never log Authorization headers in src/middleware/auth.ts.\n" +
+		"<system-reminder>\nAlways never use the simulator. Don't change source. Don't delete data.\n</system-reminder>"
+	dogfoodCatch(t, st, "acme/app", "sysrem", grokLine("user", text))
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "Authorization headers",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "Authorization") {
+		t.Fatalf("real constraint missed: %+v", out.Context)
+	}
+	if contextHasAny(out, "simulator", "Don't change source", "Don't delete") {
+		t.Fatalf("system-reminder packed: %+v", out.Context)
+	}
+}
+
+func testAssistantQuoteDecision(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", `The previous session said: "We decided to use mongo, not postgres, in src/db/client.ts."`))
+	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
+	dogfoodCatch(t, st, "acme/app", "qdec", b.String())
+	claims, _ := st.ListActive("acme/app")
+	for _, c := range claims {
+		if strings.Contains(c.Text, "mongo") {
+			t.Fatalf("quoted old decision extracted: %+v", c)
+		}
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose", Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
+	}
+}
+
+func testNodeModulesPath(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", "The lodash suite failed in node_modules/lodash/index.js during install."))
+	b.WriteString(grokLine("assistant", "Who-reacted failed in preview in ios/LightboxView.swift."))
+	dogfoodCatch(t, st, "acme/app", "nm", b.String())
+	claims, _ := st.ListActive("acme/app")
+	for _, c := range claims {
+		for _, p := range c.Paths {
+			if strings.Contains(p, "node_modules") {
+				t.Fatalf("node_modules path stored: %v in %s", c.Paths, c.Text)
+			}
+		}
+		if strings.Contains(c.Text, "lodash") {
+			t.Fatalf("node_modules failed extracted: %+v", c)
+		}
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "what failed",
+		Paths: []string{"ios/LightboxView.swift"},
+	})
+	if contextHas(out, "lodash") {
+		t.Fatalf("node_modules failed packed: %+v", out.Context)
+	}
+	if !contextHas(out, "Who-reacted") {
+		t.Fatalf("product failed missed: %+v", out.Context)
+	}
+}
+
+func testRememberProse(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", "Remembered: Redis token bucket failed in src/middleware/auth.ts staging."))
+	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
+	dogfoodCatch(t, st, "acme/app", "remp", b.String())
+	claims, _ := st.ListActive("acme/app")
+	for _, c := range claims {
+		if strings.HasPrefix(c.Text, "Remembered:") || strings.Contains(c.Text, "Redis token bucket") {
+			t.Fatalf("remember prose extracted: %+v", c)
+		}
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose", Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
+	}
+}
+
+func testHyphenatedMCPTool(t *testing.T) {
+	st := dogfoodStore(t)
+	body := strings.Join([]string{
+		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"g1","name":"lossless-get-record","input":{"id":"01JFAIL"}}]}}`,
+		`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"g1","content":"{\"id\":\"01JFAIL\",\"type\":\"failed\",\"text\":\"Redis token bucket failed in src/middleware/auth.ts staging.\"}"}]}}`,
+		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."}`,
+	}, "\n") + "\n"
+	p := testdataWrite(t, t.TempDir(), "hyphen.jsonl", body)
+	if _, err := write.CatchUp(st, write.CatchUpRequest{
+		JSONL: p, Project: "acme/app", Harness: "claude", SessionID: "hyphen",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose", Paths: []string{"src/middleware/auth.ts"},
+	})
+	if contextHas(out, "Redis token bucket") {
+		t.Fatalf("hyphenated MCP tool echoed: %+v", out.Context)
+	}
+	if !contextHas(out, "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
+	}
+}
+
+func testDontWait(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("user", "Always never log Authorization headers in src/middleware/auth.ts."))
+	b.WriteString(grokLine("user", "Don't wait for me, just keep going on src/middleware/auth.ts."))
+	dogfoodCatch(t, st, "acme/app", "dwait", b.String())
+	claims, _ := st.ListActive("acme/app")
+	for _, c := range claims {
+		if strings.Contains(c.Text, "Don't wait") || strings.Contains(strings.ToLower(c.Text), "just keep going") {
+			t.Fatalf("session-op extracted: %+v", c)
+		}
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "Authorization headers",
+		Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "Authorization") {
+		t.Fatalf("real constraint missed: %+v", out.Context)
+	}
+}
+
+func testPiTypeMessage(t *testing.T) {
+	st := dogfoodStore(t)
+	body := strings.Join([]string{
+		`{"type":"session","version":3,"id":"u1","cwd":"/ws"}`,
+		`{"type":"message","id":"a1","message":{"role":"user","content":"Always never log Authorization headers in src/middleware/auth.ts."}}`,
+		`{"type":"message","id":"a2","message":{"role":"assistant","content":[{"type":"thinking","thinking":"hmm"},{"type":"text","text":"We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."}]}}`,
+	}, "\n") + "\n"
+	p := testdataWrite(t, t.TempDir(), "pi.jsonl", body)
+	if _, err := write.CatchUp(st, write.CatchUpRequest{
+		JSONL: p, Project: "acme/app", Harness: "pi", SessionID: "pi1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose", Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "jose") {
+		t.Fatalf("pi type=message missed: %+v", out.Context)
+	}
+	if !contextHas(out, "Authorization") {
+		t.Fatalf("pi user constraint missed: %+v", out.Context)
+	}
+}
+
+func testPastedGoTest(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", "--- FAIL: TestLightbox (0.12s)\n    lightbox_test.go:44: assertion failed"))
+	b.WriteString(grokLine("assistant", "ok  \tlossless/eval\t1.258s"))
+	b.WriteString(grokLine("assistant", "Who-reacted failed in preview in ios/LightboxView.swift."))
+	dogfoodCatch(t, st, "acme/app", "gotest", b.String())
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "what failed",
+		Paths: []string{"ios/LightboxView.swift"},
+	})
+	if contextHasAny(out, "FAIL: TestLightbox", "assertion failed", "ok  \tlossless") {
+		t.Fatalf("pasted go test packed: %+v", out.Context)
+	}
+	if !contextHas(out, "Who-reacted") {
+		t.Fatalf("product failed missed: %+v", out.Context)
+	}
+}
+
+func testIllImplement(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", "I'll implement postgres instead of mysql in src/db/client.ts."))
+	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
+	dogfoodCatch(t, st, "acme/app", "impl", b.String())
+	claims, _ := st.ListActive("acme/app")
+	for _, c := range claims {
+		if strings.Contains(c.Text, "postgres") || strings.Contains(c.Text, "I'll implement") {
+			t.Fatalf("planning implement extracted: %+v", c)
+		}
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose", Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
+	}
+}
+
+func testDistPath(t *testing.T) {
+	st := dogfoodStore(t)
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", "The bundle step failed in dist/assets/index.js after minify."))
+	b.WriteString(grokLine("assistant", "Who-reacted failed in preview in ios/LightboxView.swift."))
+	dogfoodCatch(t, st, "acme/app", "dist", b.String())
+	claims, _ := st.ListActive("acme/app")
+	for _, c := range claims {
+		for _, p := range c.Paths {
+			if strings.HasPrefix(p, "dist/") || strings.Contains(p, "/dist/") {
+				t.Fatalf("dist path stored: %v in %s", c.Paths, c.Text)
+			}
+		}
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "what failed",
+		Paths: []string{"ios/LightboxView.swift"},
+	})
+	if contextHas(out, "bundle step") {
+		t.Fatalf("dist failed packed: %+v", out.Context)
+	}
+	if !contextHas(out, "Who-reacted") {
+		t.Fatalf("product failed missed: %+v", out.Context)
+	}
+}
+
+func testBOMJSONL(t *testing.T) {
+	st := dogfoodStore(t)
+	body := "\ufeff" + grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts.")
+	p := testdataWrite(t, t.TempDir(), "bom.jsonl", body)
+	if _, err := write.CatchUp(st, write.CatchUpRequest{
+		JSONL: p, Project: "acme/app", Harness: "grok", SessionID: "bom",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose", Paths: []string{"src/middleware/auth.ts"},
+	})
+	if !contextHas(out, "jose") {
+		t.Fatalf("BOM jsonl missed gold: %+v", out.Context)
+	}
+}
+
+func testClaimJSONArray(t *testing.T) {
+	st := dogfoodStore(t)
+	arr := `[{"id":"01JFAIL","type":"failed","text":"Redis token bucket failed in src/middleware/auth.ts staging."}]`
+	var b strings.Builder
+	b.WriteString(grokLine("assistant", arr))
+	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
+	dogfoodCatch(t, st, "acme/app", "arr", b.String())
+	out := askAtNow(t, st, retrieve.Request{
+		Project: "acme/app", Question: "jose", Paths: []string{"src/middleware/auth.ts"},
+	})
+	if contextHas(out, "Redis token bucket") {
+		t.Fatalf("claim JSON array echoed: %+v", out.Context)
+	}
+	if !contextHas(out, "jose") {
+		t.Fatalf("jose missed: %+v", out.Context)
+	}
+}
+
+func testPercentEncodedPath(t *testing.T) {
+	got := redact.FilterPaths([]string{
+		"src/ok.go",
+		"..%2f..%2fetc/passwd",
+		"src/%2e%2e/etc/shadow",
+		".git/hooks/pre-commit.sh",
+		"keys/id_rsa.pub",
+		".github/workflows/ci.yml",
+	})
+	if len(got) != 2 || got[0] != "src/ok.go" || got[1] != ".github/workflows/ci.yml" {
+		t.Fatalf("%v", got)
+	}
+}
+
 func TestDogfoodRetryJoseStillPacks(t *testing.T) {
 	st := dogfoodStore(t)
 	src := testdataWrite(t, t.TempDir(), "grok-redis-retry.jsonl",
@@ -871,6 +1438,11 @@ func TestDogfoodFilterPathsAttackSurface(t *testing.T) {
 		"keys/id_ed25519",
 		"foo/authorized_keys",
 		"src/../../.ssh/id_rsa",
+		".git/hooks/pre-commit.sh",
+		"keys/id_rsa.pub",
+		"..%2fetc/passwd",
+		"node_modules/lodash/index.js",
+		"dist/assets/index.js",
 	})
 	if len(got) != 2 || got[0] != "src/ok.go" || got[1] != ".github/workflows/ci.yml" {
 		t.Fatalf("%v", got)

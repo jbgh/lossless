@@ -291,8 +291,13 @@ func extractNoise(rec claim.Record) bool {
 	if strings.HasPrefix(t, "**") && !strings.Contains(t, ".") {
 		return true
 	}
-	if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
-		rest := strings.TrimSpace(t[2:])
+	if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") || numberedItem.MatchString(t) {
+		rest := t
+		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
+			rest = strings.TrimSpace(t[2:])
+		} else {
+			rest = strings.TrimSpace(numberedItem.ReplaceAllString(t, ""))
+		}
 		if strings.Contains(t, "**") || strings.HasPrefix(rest, "`") || len(t) < 80 {
 			return true
 		}
@@ -304,7 +309,10 @@ func extractNoise(rec claim.Record) bool {
 	if rec.Type == "state" && (strings.HasPrefix(low, "next i ") || strings.HasPrefix(low, "next i'") || strings.HasPrefix(low, "next i’ll") || strings.HasPrefix(low, "next i'll")) {
 		return true
 	}
-	if rec.Type == "decision" && planningDecision(low) {
+	if rec.Type == "decision" && (planningDecision(low) || quotedAttribution(rec.Text)) {
+		return true
+	}
+	if strings.HasPrefix(low, "remembered:") || strings.HasPrefix(low, "remembered ") {
 		return true
 	}
 	if rec.Type == "constraint" && (sessionOpConstraint(low) || agentPromptConstraint(low)) {
@@ -327,6 +335,7 @@ func statusFailed(low string) bool {
 		"ci unit-test", "unit-test failure", "unit test failure",
 		"background notification", "checking #", "pr #", "pr-size-check",
 		"which of those", "re-pushing", "exit 0",
+		"github actions", "actions workflow", "actions job",
 	} {
 		if strings.Contains(low, n) {
 			return true
@@ -365,6 +374,11 @@ func planningDecision(low string) bool {
 		"i'll read", "i’ll read", "i'll audit", "i’ll audit",
 		"i'll fix", "i’ll fix", "i'll start", "i’ll start", "i'll add", "i’ll add",
 		"i'll inspect", "i’ll inspect", "i'll pull", "i’ll pull",
+		"i'll go with", "i’ll go with", "i will go with",
+		"let's go with", "lets go with", "i'll switch", "i’ll switch",
+		"i'll try", "i’ll try",
+		"i'll implement", "i’ll implement", "i will implement",
+		"i'll replace", "i’ll replace", "i'll swap", "i’ll swap",
 	} {
 		if strings.Contains(low, p) {
 			return true
@@ -377,6 +391,10 @@ func sessionOpConstraint(low string) bool {
 	for _, p := range []string{
 		"don't ask", "do not ask", "don't change source", "don't delete data",
 		"do not open a pr", "do not redo", "don't flag", "do not start",
+		"never mind", "don't push yet", "do not push yet",
+		"don't merge yet", "do not merge yet",
+		"don't commit yet", "do not commit yet",
+		"don't wait", "do not wait",
 	} {
 		if strings.Contains(low, p) {
 			return true
@@ -385,13 +403,24 @@ func sessionOpConstraint(low string) bool {
 	return false
 }
 
+func quotedAttribution(s string) bool {
+	low := strings.ToLower(s)
+	if !strings.Contains(low, "said") {
+		return false
+	}
+	return strings.Contains(low, "said:") || strings.Contains(s, `"`) || strings.Contains(s, "“") || strings.Contains(s, "”")
+}
+
 func agentPromptConstraint(low string) bool {
 	return strings.Contains(low, "why don't you") || strings.Contains(low, "why do not you") ||
 		strings.Contains(low, "why dont you") || strings.HasPrefix(low, "can you ") ||
 		strings.HasPrefix(low, "could you ")
 }
 
-var failedWord = regexp.MustCompile(`(?i)\bfailed\b`)
+var (
+	failedWord   = regexp.MustCompile(`(?i)\bfailed\b`)
+	numberedItem = regexp.MustCompile(`^\d+[.)]\s+`)
+)
 
 func failedOnlyInTicks(s string) bool {
 	if !failedWord.MatchString(s) {

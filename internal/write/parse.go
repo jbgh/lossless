@@ -31,7 +31,7 @@ func ParseJSONL(chunk string, base int64) (msgs []Message, consumed int64) {
 	lines := strings.Split(strings.TrimSuffix(complete, "\n"), "\n")
 	for _, line := range lines {
 		lineLen := int64(len(line) + 1)
-		trim := strings.TrimSpace(line)
+		trim := strings.TrimPrefix(strings.TrimSpace(line), "\uFEFF")
 		if trim == "" {
 			off += lineLen
 			continue
@@ -55,8 +55,13 @@ func ParseJSONL(chunk string, base int64) (msgs []Message, consumed int64) {
 }
 
 func isOwnTool(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "ask", "remember", "catch-up", "catch_up", "catchup", "get_record", "get-record":
+	n := strings.ToLower(strings.TrimSpace(name))
+	n = strings.ReplaceAll(n, "-", "_")
+	for _, p := range []string{"mcp__lossless__", "mcp_lossless_", "lossless__", "lossless_"} {
+		n = strings.TrimPrefix(n, p)
+	}
+	switch n {
+	case "ask", "remember", "catch_up", "catchup", "get_record", "getrecord":
 		return true
 	default:
 		return false
@@ -64,6 +69,18 @@ func isOwnTool(name string) bool {
 }
 
 func looksLikeOwnPayload(text string) bool {
+	if ownPayloadObject(strings.TrimSpace(text)) {
+		return true
+	}
+	for _, span := range jsonObjectSpans(text) {
+		if ownPayloadObject(text[span[0]:span[1]]) {
+			return true
+		}
+	}
+	return false
+}
+
+func ownPayloadObject(text string) bool {
 	var o map[string]any
 	if json.Unmarshal([]byte(strings.TrimSpace(text)), &o) != nil {
 		return false
@@ -81,7 +98,89 @@ func looksLikeOwnPayload(text string) bool {
 			return true
 		}
 	}
+	typ, _ := o["type"].(string)
+	_, hasText := o["text"]
+	_, hasID := o["id"]
+	switch typ {
+	case "failed", "decision", "constraint", "state", "thread":
+		if hasText && hasID {
+			return true
+		}
+	}
 	return false
+}
+
+func jsonObjectSpans(s string) [][2]int {
+	var spans [][2]int
+	depth, start := 0, -1
+	inStr, esc := false, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inStr {
+			if esc {
+				esc = false
+				continue
+			}
+			if c == '\\' {
+				esc = true
+				continue
+			}
+			if c == '"' {
+				inStr = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inStr = true
+		case '{':
+			if depth == 0 {
+				start = i
+			}
+			depth++
+		case '}':
+			if depth == 0 {
+				continue
+			}
+			depth--
+			if depth == 0 && start >= 0 {
+				spans = append(spans, [2]int{start, i + 1})
+			}
+		}
+	}
+	return spans
+}
+
+func stripEmbeddedOwnPayload(text string) string {
+	spans := jsonObjectSpans(text)
+	for i := len(spans) - 1; i >= 0; i-- {
+		a, b := spans[i][0], spans[i][1]
+		if ownPayloadObject(text[a:b]) {
+			text = strings.TrimSpace(text[:a] + " " + text[b:])
+		}
+	}
+	return strings.TrimSpace(text)
+}
+
+func stripHarnessChrome(text string) string {
+	low := strings.ToLower(text)
+	for _, tag := range []string{"system-reminder", "user_info"} {
+		open, close := "<"+tag+">", "</"+tag+">"
+		for {
+			low = strings.ToLower(text)
+			i := strings.Index(low, open)
+			if i < 0 {
+				break
+			}
+			if j := strings.Index(low[i:], close); j >= 0 {
+				text = text[:i] + text[i+j+len(close):]
+				continue
+			}
+			text = text[:i]
+			break
+		}
+	}
+	return strings.TrimSpace(text)
 }
 
 func noteOwnTools(o map[string]any, ownIDs map[string]bool) {
@@ -148,7 +247,7 @@ func normalize(o map[string]any, offset int64, ownIDs map[string]bool) (Message,
 		}
 	}
 	if m, ok := normalizeCodex(o, offset, ownIDs); ok {
-		return m, true
+		return finishMessage(m)
 	}
 	typ, _ := o["type"].(string)
 	switch typ {
@@ -212,15 +311,9 @@ func normalize(o map[string]any, offset int64, ownIDs map[string]bool) (Message,
 		}
 		return Message{}, false
 	}
-	if strings.HasPrefix(strings.TrimSpace(text), "<system-reminder>") ||
-		strings.HasPrefix(strings.TrimSpace(text), "<user_info>") ||
-		looksLikeOwnPayload(text) ||
-		len(text) > 8000 {
-		return Message{Skip: true, Offset: offset}, true
-	}
 	m := Message{
 		Role:   mapRole(role),
-		Text:   clip(text),
+		Text:   text,
 		Offset: offset,
 	}
 	if errv, _ := o["error"].(bool); errv {
@@ -229,6 +322,23 @@ func normalize(o map[string]any, offset int64, ownIDs map[string]bool) (Message,
 	if typ == "tool_result" {
 		m.Role = "tool"
 	}
+	return finishMessage(m)
+}
+
+func finishMessage(m Message) (Message, bool) {
+	if m.Skip {
+		return m, true
+	}
+	m.Text = stripHarnessChrome(m.Text)
+	if stripped := stripEmbeddedOwnPayload(m.Text); stripped != m.Text {
+		m.Text = stripped
+	}
+	if strings.TrimSpace(m.Text) == "" || looksLikeOwnPayload(m.Text) {
+		m.Skip = true
+		m.Text = ""
+		return m, true
+	}
+	m.Text = clip(m.Text)
 	return m, true
 }
 
