@@ -52,7 +52,7 @@ func TestShouldDropClaim(t *testing.T) {
 }
 
 func TestFilterPaths(t *testing.T) {
-	got := FilterPaths([]string{"src/auth.ts", ".env", "keys/id_rsa", "cert.pem", "src/ok.go"})
+	got := FilterPaths([]string{"src/auth.ts", ".env", "keys/id_rsa", "cert.pem", "src/ok.go", "keys/id_ed25519"})
 	if len(got) != 2 || got[0] != "src/auth.ts" || got[1] != "src/ok.go" {
 		t.Fatalf("%v", got)
 	}
@@ -63,6 +63,10 @@ func TestFilterPaths(t *testing.T) {
 	got = FilterPaths([]string{"git.memora.pics/memora/memora.git", "https://github.com/acme/api.git", "internal/write/catchup.go"})
 	if len(got) != 1 || got[0] != "internal/write/catchup.go" {
 		t.Fatalf("remote: %v", got)
+	}
+	got = FilterPaths([]string{".github/workflows/ci.yml", "Users/jaybyoun/developer/lossless/docs/stack.md", "etc/passwd", "src/ok.go"})
+	if len(got) != 2 || got[0] != ".github/workflows/ci.yml" || got[1] != "src/ok.go" {
+		t.Fatalf("github vs stripped abs: %v", got)
 	}
 }
 

@@ -185,7 +185,7 @@ func planningDecision(s string) bool {
 		"i'll check", "i’ll check", "i will check", "i'll look", "i’ll look",
 		"i'll read", "i’ll read", "i'll audit", "i’ll audit",
 		"i'll fix", "i’ll fix", "i'll start", "i’ll start", "i'll add", "i’ll add",
-		"i'll inspect", "i’ll inspect",
+		"i'll inspect", "i’ll inspect", "i'll pull", "i’ll pull",
 	} {
 		if strings.Contains(low, p) {
 			return true

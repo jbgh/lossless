@@ -73,12 +73,22 @@ func (e Engine) locateSession(project, workspace string) string {
 func newestJSONL(dir string) string {
 	var newest string
 	var newestMod int64
-	_ = filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
-		if err != nil || info == nil || info.IsDir() {
+	_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
 			return nil
 		}
-		name := info.Name()
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		name := d.Name()
 		if !strings.HasSuffix(name, ".jsonl") || strings.HasSuffix(name, ".jsonl.zst") {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
 			return nil
 		}
 		mt := info.ModTime().UnixNano()

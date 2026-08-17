@@ -24,7 +24,7 @@ var secrets = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?)://[^:\s]+:[^@\s]+@`),
 }
 
-var sensitivePath = regexp.MustCompile(`(?:^|/)(?:\.env(?:\..+)?|.*\.pem|id_rsa|credentials)$`)
+var sensitivePath = regexp.MustCompile(`(?:^|/)(?:\.env(?:\..+)?|.*\.pem|id_rsa|id_ed25519|id_ecdsa|id_dsa|authorized_keys|credentials)$`)
 
 func ContainsSecret(text string) bool {
 	for _, re := range secrets {
@@ -70,10 +70,22 @@ func traversalPath(p string) bool {
 	if len(n) > 1 && n[1] == ':' {
 		return true
 	}
-	for _, part := range strings.Split(n, "/") {
+	parts := strings.Split(n, "/")
+	if strippedAbs(parts[0]) {
+		return true
+	}
+	for _, part := range parts {
 		if part == ".." {
 			return true
 		}
+	}
+	return false
+}
+
+func strippedAbs(first string) bool {
+	switch strings.ToLower(first) {
+	case "users", "home", "etc", "var", "tmp", "private", "root", "windows", "proc", "dev":
+		return true
 	}
 	return false
 }
@@ -84,6 +96,10 @@ func remotePath(p string) bool {
 		return true
 	}
 	host := strings.Split(n, "/")[0]
+	// Hidden dirs (.github) are not hosts. git.memora.pics is.
+	if host == "" || strings.HasPrefix(host, ".") {
+		return false
+	}
 	return strings.Contains(host, ".")
 }
 
