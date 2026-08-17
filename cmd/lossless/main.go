@@ -19,6 +19,8 @@ import (
 	"lossless/internal/retrieve"
 	"lossless/internal/serve"
 	"lossless/internal/store"
+	"lossless/internal/update"
+	"lossless/internal/version"
 	"lossless/internal/watch"
 	"lossless/internal/write"
 )
@@ -67,6 +69,10 @@ func main() {
 		os.Exit(runDoctor(args))
 	case "inspect":
 		os.Exit(runInspect(args))
+	case "version", "-v", "--version":
+		os.Exit(runVersion(args))
+	case "update":
+		os.Exit(runUpdate(args))
 	case "token":
 		os.Exit(runToken(args))
 	case "ensure":
@@ -104,6 +110,8 @@ func usage() {
   lossless setup              # local hooks + MCP + skill + optional user service
   lossless doctor             # daemon, hooks, MCP, service
   lossless inspect            # tape vs claims vs last packs; --project KEY; --ask; --jsonl FILE; --prune
+  lossless update             # replace ~/.local/bin/lossless from GitHub Releases
+  lossless version            # printed semver (release channel is GitHub Releases)
   lossless token              # optional: print a random bearer
   lossless install-hooks      # Grok + Claude + Codex + Pi + OpenCode
   lossless install-mcp        # MCP for every supported harness (or point any MCP client at /mcp)
@@ -117,9 +125,90 @@ Env: LOSSLESS_HOME (default ~/.lossless)
      LOSSLESS_TOKEN (required if --listen is not loopback)
      LOSSLESS_EMBED_CMD (optional local embedder: stdin JSON texts, stdout JSON vectors)
      LOSSLESS_EMBED_MODEL (optional model dir; in-process MiniLM not required)
+     GITHUB_TOKEN / GH_TOKEN (optional; only lossless update, for a private release repo)
 Default install is local (127.0.0.1, no token, nothing leaves the machine).
+update is the only command that calls GitHub. doctor does not phone home.
 MCP is a façade over the same JSON as /v1/ask.
 `)
+}
+
+func runVersion(args []string) int {
+	fs := flag.NewFlagSet("version", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	fmt.Println("lossless", version.String())
+	return 0
+}
+
+func runUpdate(args []string) int {
+	fs := flag.NewFlagSet("update", flag.ContinueOnError)
+	check := fs.Bool("check", false, "report whether a newer release exists; do not install")
+	destFlag := fs.String("dest", "", "install path (default ~/.local/bin/lossless)")
+	tag := fs.String("version", "", "install this release instead of latest (0.1.0 or v0.1.0)")
+	noRetarget := fs.Bool("no-retarget", false, "do not rewrite hooks/service after replace")
+	home := homeFlag(fs)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	userHome := os.Getenv("HOME")
+	dest := *destFlag
+	if dest == "" {
+		dest = update.DefaultDest(userHome)
+	}
+	repo := os.Getenv("LOSSLESS_UPDATE_REPO")
+	if repo == "" {
+		repo = update.DefaultRepo
+	}
+	api := os.Getenv("LOSSLESS_UPDATE_API")
+	res, err := update.Apply(update.Options{
+		Repo:      repo,
+		API:       api,
+		Tag:       *tag,
+		Dest:      dest,
+		UserHome:  userHome,
+		Current:   version.Version,
+		CheckOnly: *check,
+		Token:     update.TokenFromEnv(),
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if *check {
+		if res.AlreadyLatest {
+			fmt.Printf("lossless %s is current (%s)\n", version.Version, dest)
+			return 0
+		}
+		why := "newer release"
+		if res.ChannelInstall {
+			why = "not on the release channel yet"
+		}
+		fmt.Printf("lossless %s → %s (%s)\n", version.Version, res.Tag, why)
+		return 1
+	}
+	if res.AlreadyLatest {
+		fmt.Printf("lossless %s is current (%s)\n", res.Version, dest)
+		return 0
+	}
+	if !res.Replaced {
+		fmt.Fprintf(os.Stderr, "update did not replace %s\n", dest)
+		return 1
+	}
+	fmt.Printf("installed lossless %s → %s\n", res.Version, dest)
+	if *noRetarget {
+		return 0
+	}
+	setupRes, setupErr := harness.Setup(harness.SetupOpts{
+		UserHome: userHome, DataHome: *home, Exe: dest,
+		Service: true, Start: true,
+	})
+	fmt.Print(setupRes.Format())
+	if setupErr != nil {
+		fmt.Fprintln(os.Stderr, "retarget:", setupErr)
+		return 1
+	}
+	return 0
 }
 
 func openStore(home string) (*store.Store, error) {

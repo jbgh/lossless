@@ -20,9 +20,25 @@ Default install is **this machine only**. Setup never reads `LOSSLESS_URL`. Poin
 ```bash
 lossless setup          # hooks + MCP + skill for known harnesses
 lossless serve          # REST + /mcp on 127.0.0.1:7432
+lossless update         # later: GitHub Releases → ~/.local/bin/lossless
 ```
 
 No token. Nothing listens off loopback. Nothing is uploaded. You can skip `setup` and only run `serve` if you will configure the client yourself.
+
+### Update channel
+
+The first public cut is **0.1.0**. Binaries live on GitHub Releases for `jbgh/lossless`.
+
+```bash
+curl -fsSL https://github.com/jbgh/lossless/releases/latest/download/install.sh | sh
+lossless setup
+lossless update          # existing install
+lossless update --check  # no write
+```
+
+`install.sh` and `lossless update` download `lossless-<os>-<arch>` plus `SHA256SUMS`, verify the digest, refuse non-https / off-host redirects, and rename over `~/.local/bin/lossless` so a dest symlink is replaced instead of followed. `update` then rewrites hooks and the user service to that path and restarts the daemon.
+
+This is opt-in. `doctor` and `serve` do not call GitHub. A private release repo needs `GITHUB_TOKEN` (or `GH_TOKEN`).
 
 ---
 

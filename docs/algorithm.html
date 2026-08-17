@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lossless — retrieve algorithm</title>
+<style>
+  :root {
+    --bg: #0e0d0b;
+    --paper: #161410;
+    --ink: #ece6d8;
+    --muted: #9a9284;
+    --line: #2c2923;
+    --write: #c9a227;
+    --read: #6ea8a0;
+    --warn: #d46a4c;
+    --ok: #8faf6a;
+    --tape: #c17a9a;
+    --vec: #7d8fd4;
+    --mono: "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, monospace;
+    --sans: "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.5;
+  }
+  a { color: var(--read); }
+  code, .mono { font-family: var(--mono); font-size: 0.86em; }
+  header {
+    padding: 48px 28px 28px;
+    max-width: 1180px;
+    margin: 0 auto;
+    border-bottom: 1px solid var(--line);
+  }
+  header .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--write);
+  }
+  h1 {
+    font-size: clamp(34px, 5.5vw, 58px);
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    margin: 8px 0 14px;
+    line-height: 0.98;
+  }
+  header p { max-width: 48rem; color: var(--muted); margin: 0; }
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin-top: 22px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  nav a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+  nav a:hover { border-color: var(--write); color: var(--write); }
+  main { max-width: 1180px; margin: 0 auto; padding: 36px 28px 80px; }
+  section { margin: 64px 0; scroll-margin-top: 20px; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  h2 {
+    font-size: 13px;
+    font-family: var(--mono);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 16px;
+    font-weight: 500;
+  }
+  h2 b { color: var(--ink); font-weight: 500; letter-spacing: 0.08em; }
+  h3 { font-size: 20px; font-weight: 600; margin: 0 0 10px; }
+  .lede { color: var(--muted); max-width: 48rem; margin: 0 0 22px; }
+  .card {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 16px;
+    min-width: 0;
+  }
+  .card ul { margin: 0; padding: 0 0 0 16px; color: var(--muted); }
+  .card li { margin: 3px 0; }
+  .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border: 1px solid var(--line);
+    margin-bottom: 8px;
+    color: var(--muted);
+  }
+  .tag.write { color: var(--write); border-color: #5a4a18; }
+  .tag.read { color: var(--read); border-color: #2d4d49; }
+  .tag.warn { color: var(--warn); border-color: #6a3226; }
+  .tag.tape { color: var(--tape); border-color: #5a3346; }
+  .tag.ok { color: var(--ok); border-color: #3d4a2c; }
+  .grid3, .grid2 { display: grid; gap: 12px; }
+  @media (min-width: 800px) {
+    .grid3 { grid-template-columns: 1fr 1fr 1fr; }
+    .grid2 { grid-template-columns: 1fr 1fr; }
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-top: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  td.k { font-family: var(--mono); font-size: 13px; }
+  .formula {
+    background: #100f0c;
+    border: 1px solid var(--line);
+    padding: 18px 20px;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 1.75;
+    overflow-x: auto;
+    margin: 14px 0;
+  }
+  .c-fail { color: var(--warn); }
+  .c-ship { color: var(--write); }
+  .c-ans { color: var(--read); }
+  .c-tape { color: var(--tape); }
+  .c-ok { color: var(--ok); }
+  .c-mut { color: var(--muted); }
+  .diagram {
+    background: #100f0c;
+    border: 1px solid var(--line);
+    padding: 18px 12px;
+    overflow-x: auto;
+    margin: 16px 0 8px;
+  }
+  .diagram svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  .caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin: 0 0 22px;
+  }
+  .pipe { display: flex; flex-direction: column; }
+  .step {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: 12px;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+  }
+  .step:first-child { border-top: 0; }
+  .n { font-family: var(--mono); font-size: 12px; color: var(--write); padding-top: 3px; }
+  .step h3 { margin: 0 0 4px; font-size: 17px; }
+  .step p { margin: 0; color: var(--muted); }
+  .pack {
+    display: grid;
+    gap: 8px;
+  }
+  .hit {
+    display: grid;
+    grid-template-columns: 92px 1fr;
+    gap: 10px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    padding: 10px 12px;
+  }
+  .hit .typ { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .hit.failed .typ { color: var(--warn); }
+  .hit.decision .typ { color: var(--write); }
+  .hit.constraint .typ { color: var(--read); }
+  .hit .meta { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; }
+  footer {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 28px 48px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  @media (max-width: 640px) {
+    .hit { grid-template-columns: 1fr; }
+  }
+  .wide-only { display: block; }
+  .narrow-only { display: none; }
+  @media (max-width: 799px) {
+    .wide-only { display: none; }
+    .narrow-only { display: grid; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">lossless · algorithm</div>
+  <h1>How retrieve<br>picks five records.</h1>
+  <p>
+    The chat window is lossy. The session tape is not. lossless copies that tape,
+    extracts a small index of durable claims, and on each <code>ask</code> checks out
+    at most five of them for <em>this</em> goal and these files.
+    No LLM on retrieve. Age never disqualifies a claim. Dense vectors are optional
+    and unused in the live store today.
+  </p>
+  <nav>
+    <a href="architecture.html">architecture</a>
+    <a href="#layers">1 layers</a>
+    <a href="#jobs">2 jobs</a>
+    <a href="#loop">3 loop</a>
+    <a href="#write">4 write</a>
+    <a href="#ask">5 ask</a>
+    <a href="#candidates">6 candidates</a>
+    <a href="#score">7 score</a>
+    <a href="#pack">8 pack</a>
+    <a href="#example">9 example</a>
+    <a href="#not">10 not this</a>
+  </nav>
+</header>
+
+<main>
+
+<section id="layers">
+  <h2><b>01</b> — Three layers</h2>
+  <p class="lede">Same shape as git or a log stream: keep the objects, build indexes, check out a few records. Do not paste the stream into the next prompt.</p>
+  <div class="diagram wide-only" aria-label="Tape, claims, and ask pack">
+    <svg viewBox="0 0 980 220" xmlns="http://www.w3.org/2000/svg" role="img">
+      <style>
+        .d-lab { font: 11px ui-monospace, Menlo, monospace; fill: #9a9284; letter-spacing: 0.12em; }
+        .d-t { font: 600 16px "Iowan Old Style", Palatino, serif; fill: #ece6d8; }
+        .d-s { font: 13px "Iowan Old Style", Palatino, serif; fill: #9a9284; }
+        .d-arr { stroke: #6ea8a0; fill: none; stroke-width: 1.4; }
+      </style>
+      <rect x="20" y="36" width="280" height="150" fill="#161410" stroke="#5a3346"/>
+      <text x="36" y="58" class="d-lab" fill="#c17a9a">TAPE</text>
+      <text x="36" y="88" class="d-t">Full JSONL</text>
+      <text x="36" y="112" class="d-s">~/.lossless/raw/…</text>
+      <text x="36" y="134" class="d-s">Every harness turn, forever.</text>
+      <text x="36" y="156" class="d-s">The model never reads this.</text>
+
+      <path d="M310 111 H358" class="d-arr" marker-end="url(#ah)"/>
+      <text x="318" y="102" class="d-lab">EXTRACT</text>
+
+      <rect x="368" y="36" width="260" height="150" fill="#161410" stroke="#5a4a18"/>
+      <text x="384" y="58" class="d-lab" fill="#c9a227">CLAIMS</text>
+      <text x="384" y="88" class="d-t">Index · cap 12</text>
+      <text x="384" y="112" class="d-s">failed · decision</text>
+      <text x="384" y="134" class="d-s">constraint · state</text>
+      <text x="384" y="156" class="d-s">Rebuildable HEAD.</text>
+
+      <path d="M638 111 H686" class="d-arr" marker-end="url(#ah)"/>
+      <text x="646" y="102" class="d-lab">ASK</text>
+
+      <rect x="696" y="36" width="264" height="150" fill="#161410" stroke="#2d4d49"/>
+      <text x="712" y="58" class="d-lab" fill="#6ea8a0">PACK</text>
+      <text x="712" y="88" class="d-t">Checkout ≤ 5</text>
+      <text x="712" y="112" class="d-s">context[] + warnings[]</text>
+      <text x="712" y="134" class="d-s">This goal. These files.</text>
+      <text x="712" y="156" class="d-s">This session’s tape only.</text>
+
+      <defs>
+        <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8" fill="none" stroke="#6ea8a0"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+  <div class="grid3 narrow-only">
+    <div class="card">
+      <span class="tag tape">tape</span>
+      <h3>Full JSONL</h3>
+      <ul>
+        <li>~/.lossless/raw/…</li>
+        <li>Every harness turn, forever</li>
+        <li>The model never reads this</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag write">claims</span>
+      <h3>Index · cap 12</h3>
+      <ul>
+        <li>failed · decision</li>
+        <li>constraint · state</li>
+        <li>Rebuildable HEAD</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag read">pack</span>
+      <h3>Checkout ≤ 5</h3>
+      <ul>
+        <li>context[] + warnings[]</li>
+        <li>This goal. These files.</li>
+        <li>This session’s tape only</li>
+      </ul>
+    </div>
+  </div>
+  <p class="caption">Hooks write the tape. Extract indexes. ask is the checkout, not grep, not a summary.</p>
+</section>
+
+<section id="jobs">
+  <h2><b>02</b> — Three jobs, in this order</h2>
+  <p class="lede">Fusion weights exist to express this order. They do not replace it. A prettier cosine hit in another file cannot beat a failed on the path you named.</p>
+  <div class="grid3">
+    <div class="card">
+      <span class="tag warn">job 1 · 4.0</span>
+      <h3>Do not repeat failed work</h3>
+      <ul>
+        <li>Redis limiter already burned in staging</li>
+        <li><code>failed_overlap = 1</code> forces pack + warning</li>
+        <li>Packed first, before the type cap can starve it</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag write">job 2 · 2.5</span>
+      <h3>Do not regress shipped work</h3>
+      <ul>
+        <li>jose, not jsonwebtoken, for Edge</li>
+        <li>Standing constraints (never log Authorization)</li>
+        <li><code>shipped_overlap = 1</code> warns</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag read">job 3 · mix</span>
+      <h3>Answer the question</h3>
+      <ul>
+        <li>Path, symbol, FTS, optional vectors</li>
+        <li>Profile mix: path / ident / prose / HEAD</li>
+        <li>Cannot outrank jobs 1–2</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="loop">
+  <h2><b>03</b> — The loop</h2>
+  <p class="lede">Write is push. Read is pull. The harness decides when to ask. lossless only packs. The agent obeys warnings.</p>
+  <div class="diagram wide-only">
+    <svg viewBox="0 0 980 280" xmlns="http://www.w3.org/2000/svg" role="img">
+      <style>
+        .b { fill: #161410; stroke: #2c2923; }
+        .t { font: 600 15px "Iowan Old Style", Palatino, serif; fill: #ece6d8; }
+        .s { font: 12px "Iowan Old Style", Palatino, serif; fill: #9a9284; }
+        .k { font: 10px ui-monospace, Menlo, monospace; fill: #9a9284; letter-spacing: 0.14em; }
+        .ln { stroke: #6ea8a0; fill: none; stroke-width: 1.3; }
+      </style>
+      <rect class="b" x="30" y="24" width="280" height="100"/>
+      <text x="46" y="44" class="k" fill="#c9a227">HARNESS</text>
+      <text x="46" y="70" class="t">Skill + hooks</text>
+      <text x="46" y="92" class="s">ask({ goal, paths, question })</text>
+      <text x="46" y="110" class="s">Stop / PreCompact copies JSONL</text>
+
+      <path class="ln" d="M320 74 H390" marker-end="url(#ah2)"/>
+
+      <rect class="b" x="400" y="24" width="280" height="100" stroke="#2d4d49"/>
+      <text x="416" y="44" class="k" fill="#6ea8a0">LOSSLESS</text>
+      <text x="416" y="70" class="t">Index + packer</text>
+      <text x="416" y="92" class="s">candidates → score → pack 5</text>
+      <text x="416" y="110" class="s">No LLM. Same packet every model.</text>
+
+      <path class="ln" d="M690 74 H760" marker-end="url(#ah2)"/>
+
+      <rect class="b" x="770" y="24" width="180" height="100" stroke="#6a3226"/>
+      <text x="786" y="44" class="k" fill="#d46a4c">AGENT</text>
+      <text x="786" y="70" class="t">Obey, then act</text>
+      <text x="786" y="92" class="s">warnings first</text>
+      <text x="786" y="110" class="s">then implement</text>
+
+      <path class="ln" d="M860 124 V168 H170 V124" marker-end="url(#ah2)"/>
+      <text x="430" y="158" class="s">later catch-up writes this turn, minus our own ask I/O</text>
+
+      <rect class="b" x="30" y="188" width="920" height="64" stroke="#5a3346"/>
+      <text x="46" y="214" class="k" fill="#c17a9a">TAPE  ·  SHARED CLAIMS BY PROJECT  ·  ACTION TAPE PER SESSION</text>
+      <text x="46" y="236" class="s">Claims are owner/repo across Grok, Claude, Codex. Served / dwell / continue is only the asking session.</text>
+      <defs>
+        <marker id="ah2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8" fill="none" stroke="#6ea8a0"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+  <div class="grid3 narrow-only">
+    <div class="card">
+      <span class="tag write">harness</span>
+      <h3>Skill + hooks</h3>
+      <ul>
+        <li>ask({ goal, paths, question })</li>
+        <li>Stop / PreCompact copies JSONL</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag read">lossless</span>
+      <h3>Index + packer</h3>
+      <ul>
+        <li>candidates → score → pack 5</li>
+        <li>No LLM. Same packet every model.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag warn">agent</span>
+      <h3>Obey, then act</h3>
+      <ul>
+        <li>warnings first</li>
+        <li>then implement</li>
+      </ul>
+    </div>
+  </div>
+  <p class="caption">Intelligence is split. The model does not write a search query. It sends current work. lossless compiles lookups.</p>
+</section>
+
+<section id="write">
+  <h2><b>04</b> — Write: tape first, then a thin index</h2>
+  <p class="lede">Catch-up is fail-open. Ingest is picky on purpose. Extract is allowed to drop almost everything; the tape still has the sentence.</p>
+  <div class="pipe">
+    <div class="step">
+      <div class="n">01</div>
+      <div>
+        <h3>Ingest the session file</h3>
+        <p>Hook or watcher. <code>Lstat</code> then <code>O_NOFOLLOW</code>. Must be a regular <code>.jsonl</code>, size-capped. No <code>/etc/passwd</code>, no swapped symlink. Copy into <code>~/.lossless/raw/&lt;owner&gt;__&lt;repo&gt;/</code>.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">02</div>
+      <div>
+        <h3>Parse harness JSONL</h3>
+        <p>Grok / Claude / Codex / Pi / OpenCode. Skip system and developer roles. Skip nested <code>tool_result</code>. Skip own ask payloads (<code>looksLikeOwnPayload</code>). Clip lines over 8k instead of dropping the tail.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">03</div>
+      <div>
+        <h3>Extract durable sentences</h3>
+        <p>Classify after <code>Fold</code> (curly apostrophes). <code>failed</code> only if grounded (path, tick, or proper noun) and not meta-talk. Paths are per-sentence plus the last few <em>user</em> turns, not the whole assistant message. Nearby does not glue <code>auth.ts</code> onto a later decoy.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">04</div>
+      <div>
+        <h3>Cap 12, pathful first</h3>
+        <p>At most 5 per type. Failed dir-cap 2; decision/constraint dir-cap 5. <code>FilterPaths</code> drops abs/<code>~</code>/drive/<code>..</code>, <code>.git</code>, <code>node_modules</code>, keys, percent-encoded traversal. Leading-dot dirs like <code>.github</code> stay.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="ask">
+  <h2><b>05</b> — Ask pipeline</h2>
+  <p class="lede">One MCP/REST call. Target p50 &lt; 500ms, p95 &lt; 2s at 10k claims. Never scan the full project table.</p>
+  <div class="pipe">
+    <div class="step">
+      <div class="n">01</div>
+      <div>
+        <h3>normalize</h3>
+        <p><code>project_key</code>, question/goal tokens, path keys + basename, identifier symbols. Rich if a path is set or there are ≥2 tokens. Rich asks are never overwritten.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">02</div>
+      <div>
+        <h3>compile if thin, then hydrate</h3>
+        <p>Empty question + goal: last 40 messages / 32k chars fill the query. Then load this session’s served / dwell / continue tape. Claims are shared by project; the action tape is this session only.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">03</div>
+      <div>
+        <h3>candidates · union · cap 400</h3>
+        <p>FTS ∪ path ∪ symbol ∪ failed/decision/constraint. Pathless asks hop through files the first hits named. Empty union: last 8 faileds. Optional kNN if an embedder is attached.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">04</div>
+      <div>
+        <h3>drop</h3>
+        <p>Extract-noise, fixture sessions, older same-path conflicts, decisions invalidated by a newer same-file failed on topic tokens (paths stripped).</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">05</div>
+      <div>
+        <h3>features + score</h3>
+        <p>No LLM. Sacred 4.0 failed-overlap + 2.5 shipped-overlap, then a path/ident/prose/HEAD mix.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">06</div>
+      <div>
+        <h3>pack 5 · type-cap 2 · warnings</h3>
+        <p>Force the best job-1 failed first. Then coverage, then score. Blocking warnings on the packed hits.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="candidates">
+  <h2><b>06</b> — Candidate generation</h2>
+  <p class="lede">Recall-oriented union. Structure first. Vectors only if an on-box embedder is attached. Live home runs with embedder none.</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Source</th><th>Cap</th><th>When</th></tr></thead>
+    <tbody>
+      <tr><td class="k">FTS</td><td>80</td><td>lookup tokens vs claim text + symbols</td></tr>
+      <tr><td class="k">Path</td><td>40 / path, 80 total</td><td>caller files + basename</td></tr>
+      <tr><td class="k">Symbol</td><td>40 / symbol, 80 total</td><td><code>jose</code>, <code>tokenBucket</code>. Not <code>library</code>.</td></tr>
+      <tr><td class="k">Failed / decision / constraint</td><td>40 each</td><td>path or symbol overlap</td></tr>
+      <tr><td class="k">Inferred path (two-hop)</td><td>6 paths, 24 / type</td><td>pathless only: first hits name files, pull job 1–2 on those files</td></tr>
+      <tr><td class="k">Recent faileds</td><td>8</td><td>only if the union is still empty</td></tr>
+      <tr><td class="k">Vector kNN</td><td>120</td><td>optional. skip if no embedder</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="diagram wide-only" aria-label="Pathless two-hop">
+    <svg viewBox="0 0 980 200" xmlns="http://www.w3.org/2000/svg" role="img">
+      <style>
+        .bx { fill: #161410; stroke: #2c2923; }
+        .tx { font: 13px "Iowan Old Style", Palatino, serif; fill: #ece6d8; }
+        .sx { font: 11px ui-monospace, Menlo, monospace; fill: #9a9284; }
+        .ln { stroke: #c9a227; fill: none; stroke-width: 1.2; }
+      </style>
+      <text x="30" y="24" class="sx">PATHLESS TWO-HOP</text>
+      <rect class="bx" x="20" y="40" width="220" height="70"/>
+      <text x="34" y="68" class="tx">“add rate limiting”</text>
+      <text x="34" y="90" class="sx">no paths on the ask</text>
+      <path class="ln" d="M250 75 H310"/>
+      <rect class="bx" x="320" y="40" width="260" height="70"/>
+      <text x="334" y="68" class="tx">hits limiter decision</text>
+      <text x="334" y="90" class="sx">on src/middleware/auth.ts</text>
+      <path class="ln" d="M590 75 H650"/>
+      <rect class="bx" x="660" y="40" width="300" height="70" stroke="#6a3226"/>
+      <text x="674" y="68" class="tx">pull Redis failed on that file</text>
+      <text x="674" y="90" class="sx">hop=1 · not failed_overlap</text>
+      <text x="30" y="150" class="tx">Hop finds the row. It does not mark every failed on auth.ts as “do not repeat.”</text>
+      <text x="30" y="174" class="sx">Caller path still empty on the action tape. Warehouse timeouts on another file stay out.</text>
+    </svg>
+  </div>
+  <div class="grid3 narrow-only">
+    <div class="card">
+      <span class="tag">1</span>
+      <h3>Pathless ask</h3>
+      <ul><li>“add rate limiting”</li><li>no files on the call</li></ul>
+    </div>
+    <div class="card">
+      <span class="tag write">2</span>
+      <h3>First hit names a file</h3>
+      <ul><li>limiter decision</li><li><code>src/middleware/auth.ts</code></li></ul>
+    </div>
+    <div class="card">
+      <span class="tag warn">3</span>
+      <h3>Hop that file</h3>
+      <ul><li>Redis failed on auth.ts</li><li>hop=1, not failed_overlap</li></ul>
+    </div>
+  </div>
+  <p class="caption">Then: drop extract-noise and fixtures · keep newest hash · drop older same-path conflicts (Jaccard ≥ 0.35) · drop decisions invalidated by a newer same-file failed on <em>topic</em> tokens (paths stripped, Jaccard ≥ 0.2).</p>
+</section>
+
+<section id="score">
+  <h2><b>07</b> — Features and score</h2>
+  <p class="lede">Computed only on candidates. Weights scale these features, not raw counts of faileds. Same idea as X’s “weight × P(action)”, not “1 report = 468 likes.”</p>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Feature</th><th>Range</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="k">type_rank</td><td>0–5</td><td>failed 5 · decision 4 · constraint 3 · state 2</td></tr>
+      <tr><td class="k">recency</td><td>0–1</td><td>0.5^(age / half-life). Constraint does not fade. Decision 180d. Failed 14d. State 7d.</td></tr>
+      <tr><td class="k">path</td><td>0–1</td><td>Jaccard of <em>caller</em> paths vs claim paths</td></tr>
+      <tr><td class="k">hop</td><td>0–1</td><td>Jaccard vs inferred files. Pack eligibility only, not job 1</td></tr>
+      <tr><td class="k">symbol / bm25 / vector</td><td>0–1</td><td>vector is 0 if embedder is none</td></tr>
+      <tr><td class="k">agree</td><td>0–1</td><td>(FTS + path + symbol) / 3</td></tr>
+      <tr><td class="k">failed_overlap</td><td>0 or 1</td><td>failed <em>and</em> strong overlap → warning</td></tr>
+      <tr><td class="k">shipped_overlap</td><td>0 or 1</td><td>decision / constraint / state and strong</td></tr>
+      <tr><td class="k">oon</td><td>0 or 1</td><td>caller named files, this claim shares none. Discounts P_answer only.</td></tr>
+      <tr><td class="k">dwell / served</td><td>0 or 1</td><td>this session’s GET/remember vs last pack. Jobs 1–2 cancel served.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="lede" style="margin-top:22px">Strong overlap: path &gt; 0 <em>or</em> symbol &gt; 0 <em>or</em> ≥2 content tokens <em>or</em> vector ≥ 0.55. One shared word (<code>rate</code>) is a weak bump only, no warning.</p>
+  <div class="formula">
+    <span class="c-fail">P_fail</span>    = failed_overlap + 0.25 × failed_weak<br>
+    <span class="c-ship">P_regress</span> = shipped_overlap + 0.24 × shipped_weak<br>
+    <span class="c-ans">P_answer</span>  = mix(type, path, symbol, bm25, vector, agree, recency)<br>
+              × (1 − 0.5) if oon<br><br>
+    <span class="c-fail">score</span> = <span class="c-fail">4.0 × P_fail</span>
+         + <span class="c-ship">2.5 × P_regress</span>
+         + <span class="c-ans">P_answer</span>
+         + <span class="c-tape">0.8 × dwell</span>
+         − 0.9 × served
+         − 0.7 × stale
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Profile</th><th>When</th><th>Boosts</th></tr></thead>
+    <tbody>
+      <tr><td class="k">path</td><td>caller sent files</td><td>path 1.8 · type 1.5</td></tr>
+      <tr><td class="k">ident</td><td>no path, has jose / jwt / …</td><td>symbol 1.6</td></tr>
+      <tr><td class="k">prose</td><td>words only</td><td>bm25 1.3 · vector 1.3</td></tr>
+      <tr><td class="k">HEAD</td><td>still empty after compile</td><td>type + path + tiny recency. No FTS, no vectors.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="caption">4.0 and 2.5 are sacred. Recency cannot beat an overlapping year-old constraint. Named constants live in <code>internal/retrieve/weights.go</code>.</p>
+</section>
+
+<section id="pack">
+  <h2><b>08</b> — Pack: the checkout</h2>
+  <p class="lede">Sort by score, then created_at, then id. Then walk. Hard cap 5. At most 2 per type if another type is still available.</p>
+  <div class="pipe">
+    <div class="step">
+      <div class="n">01</div>
+      <div>
+        <h3>Drop oon states</h3>
+        <p>Ask named files, this claim shares none. Skill-state on <code>SKILL.md</code> cannot take a slot from <code>auth.ts</code>.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">02</div>
+      <div>
+        <h3>Drop ungrounded faileds</h3>
+        <p>No caller path, no symbol, no failed-overlap, no hop. Weekday chatter dies. Two-hop Redis on an inferred file stays.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">03</div>
+      <div>
+        <h3>Force the best failed_overlap</h3>
+        <p>Job 1 cannot lose to the type cap. Then repeatedly take max(score − 0.8 × similarity to packed). Skip hash or text Jaccard ≥ 0.8. Type-cap 2.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">04</div>
+      <div>
+        <h3>evictFailed, then emit</h3>
+        <p>Swap in a path/symbol failed-overlap if it missed the pack. Then ≤5 hits and blocking warnings.</p>
+      </div>
+    </div>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Packed hit</th><th>Warning</th></tr></thead>
+    <tbody>
+      <tr><td class="k">failed + failed_overlap</td><td>A prior attempt failed (see id). Do not repeat without new evidence.</td></tr>
+      <tr><td class="k">decision + shipped_overlap</td><td>Existing implementation may already cover this (see id).</td></tr>
+      <tr><td class="k">constraint + shipped_overlap</td><td>A standing constraint applies (see id).</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="caption">If a tagged file’s mtime is newer than the stored claim, text is prefixed <code>[verify]</code> for this response only. Not persisted. Claims are shared by project. The action tape (served / dwell / continue) is only the asking session.</p>
+</section>
+
+<section id="example">
+  <h2><b>09</b> — Worked pack</h2>
+  <p class="lede">Year-discipline sim, embedder none. Ask: “why not jsonwebtoken” on <code>src/middleware/auth.ts</code>, clock August 2026. Jose was decided August 2025.</p>
+  <div class="pack">
+    <div class="hit failed">
+      <div class="typ">1 failed</div>
+      <div>
+        Redis token bucket failed in src/middleware/auth.ts staging.
+        <div class="meta">score ≈ 6.5 · path=0.50 · fail=1 · age=286d</div>
+      </div>
+    </div>
+    <div class="hit decision">
+      <div class="typ">2 decision</div>
+      <div>
+        We decided to use jose, not jsonwebtoken, for Edge.
+        <div class="meta">score ≈ 5.6 · path=0.50 · ship=1 · age=361d</div>
+      </div>
+    </div>
+    <div class="hit constraint">
+      <div class="typ">3 constraint</div>
+      <div>
+        Always never log Authorization headers in src/middleware/auth.ts.
+        <div class="meta">score ≈ 5.5 · path=1.00 · ship=1 · age=184d</div>
+      </div>
+    </div>
+  </div>
+  <p class="caption">Age did not evict jose. Path overlap did the work. Same shape across mobile, kernel, frontend, game, infra, embedded, and data (25/25 asks).</p>
+</section>
+
+<section id="not">
+  <h2><b>10</b> — What this is not</h2>
+  <div class="grid2">
+    <div class="card">
+      <span class="tag">not mem0</span>
+      <h3>We keep the tape</h3>
+      <ul>
+        <li>Mem0 LLM-extracts facts and throws the transcript away</li>
+        <li>Failed approaches and tool results survive here</li>
+        <li>Claims are HEAD. You can rebuild them</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag">not x for you</span>
+      <h3>We do not predict clicks</h3>
+      <ul>
+        <li>No Thompson-sampled cold start</li>
+        <li>No semantic-id slate diversity on a pathful ask</li>
+        <li>A checkout on auth.ts should stay on auth.ts</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag">not grep</span>
+      <h3>We do not dump the stream</h3>
+      <ul>
+        <li>Never listActive the whole project</li>
+        <li>Empty pack is valid</li>
+        <li>The model does not write a search string</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag ok">observe</span>
+      <h3>inspect is the loop</h3>
+      <ul>
+        <li><code>lossless inspect</code> — tape vs claims vs cursors</li>
+        <li><code>--ask</code> — score / path / fail / ship / why dropped</li>
+        <li><code>--jsonl</code> — extract keep/skip on a session file</li>
+        <li><code>--prune</code> — drop hook-test ingest, supersede extract-noise</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</main>
+<footer>
+  docs/algorithm.html · constants in internal/retrieve/weights.go ·
+  <a href="architecture.html">architecture</a> ·
+  <a href="retrieval.md">retrieval.md</a>
+</footer>
+</body>
+</html>

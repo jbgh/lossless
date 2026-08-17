@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"lossless/internal/version"
 )
 
 const ProtocolVersion = "2025-03-26"
@@ -41,7 +43,7 @@ type Server struct {
 }
 
 func New(b Backend) *Server {
-	return &Server{Backend: b, Name: "lossless", Version: "0.1.0"}
+	return &Server{Backend: b, Name: "lossless", Version: version.Version}
 }
 
 func (s *Server) Handle(raw []byte) []byte {
@@ -107,17 +109,17 @@ func (s *Server) initialize(params json.RawMessage) (any, error) {
 			ver = p.ProtocolVersion
 		}
 	}
-	name, version := s.Name, s.Version
+	name, infoVer := s.Name, s.Version
 	if name == "" {
 		name = "lossless"
 	}
-	if version == "" {
-		version = "0.1.0"
+	if infoVer == "" {
+		infoVer = version.Version
 	}
 	return map[string]any{
 		"protocolVersion": ver,
 		"capabilities":    map[string]any{"tools": map[string]any{}},
-		"serverInfo":      map[string]any{"name": name, "version": version},
+		"serverInfo":      map[string]any{"name": name, "version": infoVer},
 	}, nil
 }
 

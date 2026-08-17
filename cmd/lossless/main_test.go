@@ -498,6 +498,14 @@ func TestMainDispatch(t *testing.T) {
 	if code != 2 || !strings.Contains(out, "unknown command") {
 		t.Fatalf("unknown %d %s", code, out)
 	}
+	out, code = run("version")
+	if code != 0 || !strings.Contains(out, "lossless") || !strings.Contains(out, "0.1.0") {
+		t.Fatalf("version %d %s", code, out)
+	}
+	out, code = run("help")
+	if code != 0 || !strings.Contains(out, "lossless update") {
+		t.Fatalf("help update %d %s", code, out)
+	}
 	home := t.TempDir()
 	_, code = run("ask --home " + home + " --project acme/api --question jose")
 	if code != 0 {
@@ -554,5 +562,14 @@ func TestMainDispatch(t *testing.T) {
 	_, code = run("hook-opencode")
 	if code != 0 {
 		t.Fatalf("hook-opencode via main %d", code)
+	}
+}
+
+func TestRunVersionAndUpdateParse(t *testing.T) {
+	if runVersion([]string{"-bogus"}) != 2 {
+		t.Fatal("version parse")
+	}
+	if runUpdate([]string{"-bogus"}) != 2 {
+		t.Fatal("update parse")
 	}
 }

@@ -13,7 +13,7 @@ ask({ question, project, paths, goal })
   → context + warnings
 ```
 
-See [docs/architecture.html](docs/architecture.html) for a one-page map of the loop, store, and retrieve algorithm. [docs/pipeline.md](docs/pipeline.md) is the loop in prose, [docs/deploy.md](docs/deploy.md) is the portable REST + MCP contract (local by default; a remote home is manual). Then [docs/write.md](docs/write.md), [docs/ask.md](docs/ask.md), [docs/retrieval.md](docs/retrieval.md), [docs/harnesses.md](docs/harnesses.md), [docs/stack.md](docs/stack.md).
+See [docs/architecture.html](docs/architecture.html) for a one-page map of the loop and store, and [docs/algorithm.html](docs/algorithm.html) for the retrieve algorithm with diagrams. [docs/pipeline.md](docs/pipeline.md) is the loop in prose, [docs/deploy.md](docs/deploy.md) is the portable REST + MCP contract (local by default; a remote home is manual). Then [docs/write.md](docs/write.md), [docs/ask.md](docs/ask.md), [docs/retrieval.md](docs/retrieval.md), [docs/harnesses.md](docs/harnesses.md), [docs/stack.md](docs/stack.md).
 
 ## Why
 
@@ -21,33 +21,47 @@ Mem0, Cognee, and other “agent memory” tools extract facts with an LLM and t
 
 lossless keeps the event log (like git objects). Claims are HEAD — a derived view you can rebuild. `ask` is the checkout: five records, failed and shipped first, not a grep over ten years of `cat`.
 
-## Quick start
+## Install
+
+Release channel is GitHub Releases (`jbgh/lossless`). That is the only outbound network path; `doctor` and the daemon do not phone home.
+
+```bash
+curl -fsSL https://github.com/jbgh/lossless/releases/latest/download/install.sh | sh
+lossless setup
+lossless doctor
+```
+
+That writes a real binary to `~/.local/bin/lossless` (a dest symlink is replaced, not followed), then hooks, MCP, a skill, and a user service. Start a new agent session (Grok: `/hooks` then `r`; `/skills` then `r` if the session is already open). Everything stays on this machine.
+
+```bash
+lossless update          # later: pull the latest release and retarget hooks/service
+lossless update --check  # look only
+lossless version
+```
+
+A source-tree symlink (`~/.local/bin/lossless` → a repo `./lossless`) is off-channel. `lossless update` replaces it with the release binary. If the GitHub repo is private, set `GITHUB_TOKEN` (or `GH_TOKEN`) so `update` / `install.sh` can read Releases.
+
+From source:
 
 ```bash
 go test ./...
 make cover
 go build -o lossless ./cmd/lossless
+./lossless setup
+./lossless doctor
+```
+
+```bash
 ./lossless catch-up --jsonl ~/.grok/sessions/.../chat_history.jsonl --workspace "$(pwd)" --harness grok
 ./lossless remember --type decision --text "Use jose, not jsonwebtoken, for Edge." --project acme/api
 ./lossless ask --project acme/api --question "why not jsonwebtoken" --goal "pick a jwt library"
 ./lossless bench --root testdata/bench
-./lossless setup            # hooks + MCP for every harness, keep the daemon up
-./lossless doctor           # daemon, hooks, MCP, user service
 ./lossless inspect          # tape vs claims vs last packs; --project KEY --ask --jsonl FILE; --prune
 ./lossless serve            # REST + /mcp; watches session files
 ./lossless install-hooks    # Grok + Claude + Codex + Pi + OpenCode
 ./lossless install-mcp      # MCP for Grok, Claude, Codex, Pi, OpenCode
 ./lossless mcp              # stdio MCP (talks to the daemon)
 ```
-
-One-time install (any supported harness):
-
-```bash
-./lossless setup
-./lossless doctor
-```
-
-That writes hooks, MCP, a skill, and a short always-on home rule for Grok, Claude, Codex, Pi, and OpenCode so the model calls `ask` on real work without you typing `/lossless`. Then start a new agent session (Grok: `/hooks` then `r`; `/skills` then `r` if the session is already open). Everything stays on this machine.
 
 A remote home is optional and manual: run `serve` on any box, put TLS in front, set `LOSSLESS_URL` + `LOSSLESS_TOKEN`, point MCP at `/mcp`. We do not provision a cloud or ship your store for you. See [docs/deploy.md](docs/deploy.md).
 

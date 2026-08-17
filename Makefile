@@ -1,4 +1,13 @@
-.PHONY: test cover cover-html vet bench
+VERSION ?= 0.1.0
+LDFLAGS := -s -w -X lossless/internal/version.Version=$(VERSION)
+
+.PHONY: test cover cover-html vet bench lossless dist
+
+lossless:
+	go build -trimpath -ldflags "$(LDFLAGS)" -o lossless ./cmd/lossless
+
+dist:
+	VERSION=$(VERSION) scripts/dist.sh
 
 test:
 	go test ./...

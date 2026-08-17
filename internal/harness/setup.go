@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"lossless/internal/version"
 	"lossless/internal/write"
 )
 
@@ -156,6 +157,7 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 	} else {
 		add("binary", true, exe)
 	}
+	add("version", true, version.Version)
 	if dataHome == "" {
 		add("home", false, "unset")
 	} else if st, err := os.Stat(dataHome); err != nil || !st.IsDir() {
@@ -301,6 +303,7 @@ func ProbeHealth(base string) (string, error) {
 		OK       *bool  `json:"ok"`
 		Records  *int   `json:"records"`
 		Embedder string `json:"embedder"`
+		Version  string `json:"version"`
 	}
 	if json.Unmarshal(raw, &body) != nil || body.OK == nil || !*body.OK || body.Records == nil {
 		return "", fmt.Errorf("not a lossless daemon")
@@ -308,6 +311,9 @@ func ProbeHealth(base string) (string, error) {
 	emb := body.Embedder
 	if emb == "" {
 		emb = "none"
+	}
+	if body.Version != "" {
+		return fmt.Sprintf("%s records=%d embedder=%s version=%s", base, *body.Records, emb, body.Version), nil
 	}
 	return fmt.Sprintf("%s records=%d embedder=%s", base, *body.Records, emb), nil
 }
