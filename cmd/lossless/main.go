@@ -65,6 +65,10 @@ func main() {
 		os.Exit(runSetup(args))
 	case "doctor":
 		os.Exit(runDoctor(args))
+	case "migrate":
+		os.Exit(runMigrate(args))
+	case "token":
+		os.Exit(runToken(args))
 	case "ensure":
 		os.Exit(runEnsure(args))
 	case "hook-pi":
@@ -99,6 +103,9 @@ func usage() {
   lossless hook-codex         # stdin: Codex hook JSON; fail-open
   lossless setup              # hooks + MCP (all harnesses) + keep the daemon up
   lossless doctor             # daemon, hooks, MCP, service
+  lossless migrate --url https://home [--token TOKEN]   # ship local tapes to a VPS home
+  lossless token [--write]    # generate a bearer for --home-mode / migrate
+  lossless serve --home-mode  # public home: token required, listen 0.0.0.0:7432
   lossless install-hooks      # Grok + Claude + Codex + Pi + OpenCode
   lossless install-mcp        # MCP for every supported harness
   lossless ensure             # replay spool after sidecar was down
@@ -178,19 +185,31 @@ func runRemember(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	var recPaths []string
+	if *path != "" {
+		recPaths = []string{*path}
+	}
+	rec := claim.Record{
+		Type: *typ, Text: *text, ProjectKey: *project, WorkspaceRoot: *ws, Paths: recPaths, Harness: "other",
+	}
+	if write.HomeIsRemote() {
+		res, err := mcpserver.HTTP{BaseURL: write.HomeURL(), Token: env.Token()}.Remember(rec)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(res)
+		return 0
+	}
 	st, err := openStore(*home)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	defer st.Close()
-	var paths []string
-	if *path != "" {
-		paths = []string{*path}
-	}
-	res, err := write.Remember(st, claim.Record{
-		Type: *typ, Text: *text, ProjectKey: *project, WorkspaceRoot: *ws, Paths: paths, Harness: "other",
-	})
+	res, err := write.Remember(st, rec)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -215,16 +234,28 @@ func runAsk(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	req := retrieve.Request{
+		Question: *question, Project: *project, WorkspaceRoot: *ws,
+		Goal: *goal, Paths: paths, SessionID: *session, LimitTokens: *limit,
+	}
+	if write.HomeIsRemote() {
+		out, err := mcpserver.HTTP{BaseURL: write.HomeURL(), Token: env.Token()}.Ask(req)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(out)
+		return 0
+	}
 	st, err := openStore(*home)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	defer st.Close()
-	out, err := retrieve.Ask(st, retrieve.Request{
-		Question: *question, Project: *project, WorkspaceRoot: *ws,
-		Goal: *goal, Paths: paths, SessionID: *session, LimitTokens: *limit,
-	})
+	out, err := retrieve.Ask(st, req)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
@@ -269,8 +300,21 @@ func runServe(args []string) int {
 	listen := fs.String("listen", serve.DefaultAddr, "bind address")
 	token := fs.String("token", env.Token(), "bearer token (required if not loopback)")
 	doWatch := fs.Bool("watch", true, "poll harness session files while serving")
+	homeMode := fs.Bool("home-mode", false, "public home: require token, default 0.0.0.0:7432, no watch")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if *homeMode {
+		if !flagPassed(fs, "listen") {
+			*listen = "0.0.0.0:7432"
+		}
+		if !flagPassed(fs, "watch") {
+			*doWatch = false
+		}
+		if strings.TrimSpace(*token) == "" {
+			fmt.Fprintln(os.Stderr, "home-mode requires --token or LOSSLESS_TOKEN (lossless token --write)")
+			return 1
+		}
 	}
 	st, err := openStore(*home)
 	if err != nil {
@@ -334,6 +378,16 @@ func runMCP(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func flagPassed(fs *flag.FlagSet, name string) bool {
+	found := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }
 
 func resolveExe() (string, error) {
@@ -416,6 +470,90 @@ func runDoctor(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func runToken(args []string) int {
+	fs := flag.NewFlagSet("token", flag.ContinueOnError)
+	home := homeFlag(fs)
+	writeEnv := fs.Bool("write", false, "write LOSSLESS_TOKEN into service.env (0600)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	tok, err := env.NewToken()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if *writeEnv {
+		if err := harness.WriteServiceEnv(*home, env.BaseURL(), tok); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Fprintln(os.Stderr, "wrote", filepath.Join(*home, "service.env"))
+	}
+	fmt.Println(tok)
+	return 0
+}
+
+func runMigrate(args []string) int {
+	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	home := homeFlag(fs)
+	url := fs.String("url", env.URL(), "remote home URL")
+	token := fs.String("token", env.Token(), "bearer token")
+	noPush := fs.Bool("no-push", false, "rewire MCP only; do not upload tapes")
+	noMCP := fs.Bool("no-mcp", false, "do not rewrite harness MCP configs")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	res, err := write.Migrate(write.MigrateOpts{
+		DataHome: *home, URL: *url, Token: *token, Push: !*noPush,
+	})
+	fmt.Print(res.Format())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if !*noMCP {
+		exe, e := resolveExe()
+		if e != nil {
+			fmt.Fprintln(os.Stderr, e)
+			return 1
+		}
+		paths, e := harness.InstallMCP(harness.MCPConfig{
+			Home: os.Getenv("HOME"), Exe: exe, URL: *url, Token: *token,
+		})
+		if e != nil && len(paths) == 0 {
+			fmt.Fprintln(os.Stderr, e)
+			return 1
+		}
+		for _, p := range paths {
+			fmt.Println("wrote", p)
+		}
+		if e != nil {
+			fmt.Fprintln(os.Stderr, "mcp:", e)
+		}
+	}
+	if err := harness.WriteServiceEnv(*home, *url, *token); err != nil {
+		fmt.Fprintln(os.Stderr, "service.env:", err)
+	} else {
+		fmt.Println("wrote", filepath.Join(*home, "service.env"))
+	}
+	if dest := harness.ServicePath(os.Getenv("HOME")); dest != "" {
+		if _, err := harness.InstallUserService(mustExe(), os.Getenv("HOME"), *home, *url, *token); err == nil {
+			_ = harness.StartUserService(dest)
+			fmt.Println("service", dest)
+		}
+	}
+	fmt.Println("keep local lossless serve for hooks. start a new agent session so MCP talks to home.")
+	return 0
+}
+
+func mustExe() string {
+	exe, err := resolveExe()
+	if err != nil {
+		return "lossless"
+	}
+	return exe
 }
 
 const hookStdinLimit = 1 << 20

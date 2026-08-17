@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"lossless/internal/claim"
+	"lossless/internal/env"
 	"lossless/internal/retrieve"
 	"lossless/internal/store"
 	"lossless/internal/write"
@@ -98,7 +99,7 @@ func (h HTTP) Get(id string) (store.RecordView, bool, error) {
 }
 
 func (h HTTP) roundTrip(method, path string, body any, dest any) error {
-	base := strings.TrimRight(h.BaseURL, "/")
+	base := env.CanonicalURL(h.BaseURL)
 	if base == "" {
 		base = "http://127.0.0.1:7432"
 	}

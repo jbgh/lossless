@@ -135,7 +135,22 @@ lossless serve
 
 Catch-up writes `raw/` on this disk. `ask` reads this disk. Nothing listens off loopback. Nothing is uploaded. Tests run this way.
 
-If you later want a shared brain: copy `raw/` + `export/` to the VPS (or `sync` once), run home there, set `LOSSLESS_URL` + token on each sidecar. No format change.
+If you later want a shared brain:
+
+```bash
+# on the VPS (once)
+export LOSSLESS_TOKEN=$(lossless token --write)
+# TLS in front (Caddy / Tailscale Serve). Then:
+lossless serve --home-mode
+
+# on the laptop that already has local memory
+export LOSSLESS_URL=https://home.example
+export LOSSLESS_TOKEN=...
+lossless migrate
+lossless doctor
+```
+
+`migrate` uploads `raw/` tapes through `POST /v1/append` (resume-safe), rewrites MCP to the home, and updates `service.env`. Local `lossless serve` stays for hooks. No scp of sqlite. No format change.
 
 If you never want that: stay on local forever. That is a complete product.
 

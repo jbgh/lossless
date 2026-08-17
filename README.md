@@ -46,7 +46,7 @@ One-time install (any supported harness):
 ./lossless doctor
 ```
 
-That writes hooks + MCP for Grok, Claude, Codex, Pi, and OpenCode, and installs a user service so the daemon stays up. Then start a new agent session (Grok: `/hooks` then `r`). Remote home: `LOSSLESS_URL=https://…` and `LOSSLESS_TOKEN` in the environment — the token is never written into a harness config file.
+That writes hooks + MCP for Grok, Claude, Codex, Pi, and OpenCode, and installs a user service so the daemon stays up. Then start a new agent session (Grok: `/hooks` then `r`). Remote home later: `lossless token --write` on the VPS, `lossless serve --home-mode` behind TLS, then `lossless migrate --url https://…` on the laptop. The token is never written into a harness config file.
 
 Data dir: `~/.lossless/` (`LOSSLESS_HOME` to override).
 

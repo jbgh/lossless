@@ -30,7 +30,7 @@ type PushJob struct {
 }
 
 func HomeURL() string {
-	return strings.TrimRight(env.URL(), "/")
+	return env.BaseURL()
 }
 
 func HomeIsRemote() bool {
@@ -207,10 +207,23 @@ func MaybeEnqueuePush(home string, req CatchUpRequest, body string, prev int64) 
 }
 
 func postAppend(job PushJob) error {
-	u := HomeURL() + "/v1/append"
+	_, err := PostAppend(HomeURL(), env.Token(), job)
+	return err
+}
+
+func PostAppend(base, token string, job PushJob) (AppendResult, error) {
+	var out AppendResult
+	base = env.CanonicalURL(base)
+	if base == "" {
+		return out, fmt.Errorf("no home URL")
+	}
+	if err := CheckRemoteURL(base); err != nil {
+		return out, err
+	}
+	u := base + "/v1/append"
 	req, err := http.NewRequest(http.MethodPost, u, bytes.NewReader([]byte(job.Body)))
 	if err != nil {
-		return err
+		return out, err
 	}
 	req.Header.Set("Content-Type", "application/x-ndjson")
 	req.Header.Set("X-Project", job.Project)
@@ -221,28 +234,27 @@ func postAppend(job PushJob) error {
 	if job.Workspace != "" {
 		req.Header.Set("X-Workspace", job.Workspace)
 	}
-	if tok := env.Token(); tok != "" {
-		req.Header.Set("Authorization", "Bearer "+tok)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	client := outboundClient(10 * time.Second)
 	res, err := client.Do(req)
 	if err != nil {
-		return err
+		return out, err
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	_ = json.Unmarshal(b, &out)
 	if res.StatusCode == http.StatusConflict {
-		var ar AppendResult
-		_ = json.Unmarshal(b, &ar)
-		// Home already has this prefix — safe to drop. If we are ahead of
+		// Home already has this prefix — skip ahead. If we are ahead of
 		// home, keep the job so a later flush can retry after earlier chunks.
-		if job.PrevOff < ar.AcceptedThrough {
-			return nil
+		if job.PrevOff < out.AcceptedThrough {
+			return out, nil
 		}
-		return fmt.Errorf("append conflict: home at %d, job at %d", ar.AcceptedThrough, job.PrevOff)
+		return out, fmt.Errorf("append conflict: home at %d, job at %d", out.AcceptedThrough, job.PrevOff)
 	}
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("append %d: %s", res.StatusCode, b)
+		return out, fmt.Errorf("append %d: %s", res.StatusCode, b)
 	}
-	return nil
+	return out, nil
 }

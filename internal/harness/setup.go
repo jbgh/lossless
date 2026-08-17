@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"lossless/internal/write"
 )
 
 type SetupOpts struct {
@@ -174,7 +176,16 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 	} else if remoteHTTP(base) && token == "" {
 		add("url", false, base+" remote home needs LOSSLESS_TOKEN")
 	} else if remoteHTTP(base) {
-		add("url", true, base+" (https, token from env)")
+		if err := write.ProbeHome(base, token); err != nil {
+			add("url", false, err.Error())
+		} else {
+			add("url", true, base+" (https, token ok)")
+		}
+		if st, err := ProbeHealth("http://127.0.0.1:7432"); err != nil {
+			add("sidecar", false, "local serve not up — hooks still need lossless serve")
+		} else {
+			add("sidecar", true, st)
+		}
 	} else {
 		add("url", true, "loopback")
 	}

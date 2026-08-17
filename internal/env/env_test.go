@@ -40,3 +40,30 @@ func TestURLTokenSidecarClient(t *testing.T) {
 		t.Fatal(Token())
 	}
 }
+
+func TestCanonicalURL(t *testing.T) {
+	if CanonicalURL(" https://home.example/mcp/ ") != "https://home.example" {
+		t.Fatal(CanonicalURL(" https://home.example/mcp/ "))
+	}
+	if CanonicalURL("http://127.0.0.1:7432") != "http://127.0.0.1:7432" {
+		t.Fatal(CanonicalURL("http://127.0.0.1:7432"))
+	}
+	if CanonicalURL("") != "" {
+		t.Fatal("empty")
+	}
+	t.Setenv("LOSSLESS_URL", "https://home.example/mcp")
+	if BaseURL() != "https://home.example" {
+		t.Fatal(BaseURL())
+	}
+}
+
+func TestNewToken(t *testing.T) {
+	a, err := NewToken()
+	if err != nil || len(a) != 48 {
+		t.Fatalf("%q %v", a, err)
+	}
+	b, _ := NewToken()
+	if a == b {
+		t.Fatal("not random")
+	}
+}

@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"lossless/internal/env"
 )
 
 const defaultDaemon = "http://127.0.0.1:7432"
@@ -25,11 +27,11 @@ type MCPConfig struct {
 }
 
 func DaemonBase(raw string) string {
-	s := strings.TrimRight(strings.TrimSpace(raw), "/")
+	s := env.CanonicalURL(raw)
 	if s == "" {
 		return defaultDaemon
 	}
-	return strings.TrimSuffix(s, "/mcp")
+	return s
 }
 
 func MCPEndpoint(raw string) string {

@@ -57,6 +57,10 @@ func InstallUserService(exe, userHome, dataHome, url, token string) (string, err
 	return dest, nil
 }
 
+func WriteServiceEnv(dataHome, url, token string) error {
+	return writeServiceEnv(dataHome, url, token)
+}
+
 func writeServiceEnv(dataHome, url, token string) error {
 	if err := checkUnitString(token, "token"); err != nil {
 		return err

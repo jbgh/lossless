@@ -12,6 +12,14 @@ import (
 
 var looseOrigin = regexp.MustCompile(`[:/]([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?$`)
 
+func Decode(enc string) string {
+	enc = strings.TrimSpace(enc)
+	if enc == "" {
+		return ""
+	}
+	return Normalize(strings.Replace(enc, "__", "/", 1))
+}
+
 func Encode(key string) string {
 	s := strings.ReplaceAll(Normalize(key), "/", "__")
 	s = strings.ReplaceAll(s, string(filepath.Separator), "__")

@@ -56,6 +56,9 @@ func TestNormalizeAndEncode(t *testing.T) {
 	if Encode("acme/api") != "acme__api" {
 		t.Fatal(Encode("acme/api"))
 	}
+	if Decode("acme__api") != "acme/api" {
+		t.Fatal(Decode("acme__api"))
+	}
 }
 
 func TestFromWorkspaceGitOrigin(t *testing.T) {

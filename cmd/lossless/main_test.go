@@ -127,6 +127,15 @@ func TestRunServe(t *testing.T) {
 	if runDoctor([]string{"-bogus"}) != 2 {
 		t.Fatal("doctor parse")
 	}
+	if runMigrate([]string{"-bogus"}) != 2 {
+		t.Fatal("migrate parse")
+	}
+	if runToken([]string{"-bogus"}) != 2 {
+		t.Fatal("token parse")
+	}
+	if runServe([]string{"--home", t.TempDir(), "--home-mode"}) != 1 {
+		t.Fatal("home-mode requires token")
+	}
 }
 
 func TestRunInstallHooks(t *testing.T) {
