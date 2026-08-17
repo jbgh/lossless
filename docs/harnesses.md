@@ -45,6 +45,13 @@ Universal fallback, every harness: a **directory watch** on that harness's sessi
 | Cleanup risk | sessions kept | **`cleanupPeriodDays` default 30** | kept under `~/.pi` | kept under XDG share | kept under `~/.codex` |
 | Adapter risk | Low. We already know this. | Low. Best `transcript_path`. | Medium. Tree JSONL, not linear. Tail the file; do not walk the tree in v1. | Medium-high. May need to serialize from the plugin API if storage is not JSONL. | Medium. No compact hook. Watcher is load-bearing. |
 
+Install: `lossless setup`. That is hooks + MCP for all five, a launchd/systemd user unit, and a health check. `install-hooks` / `install-mcp` are the pieces if you need only one.
+
+| | Grok | Claude Code | Pi | OpenCode | Codex |
+|--|------|-------------|----|----------|-------|
+| MCP config | `~/.grok/config.toml` HTTP `/mcp` | `~/.claude.json` stdio `lossless mcp` | `~/.pi/agent/mcp.json` stdio | `~/.config/opencode/opencode.json` local | `~/.codex/config.toml` stdio |
+| Token | `headers.Authorization = Bearer ${LOSSLESS_TOKEN}` | inherit env | inherit env | inherit env | inherit env |
+
 Install order: **Grok → Claude → Codex → Pi → OpenCode**. That is popularity plus "do we have a file we can copy before the window dies."
 
 ---

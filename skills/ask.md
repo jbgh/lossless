@@ -17,6 +17,6 @@ POST http://127.0.0.1:7432/v1/ask
 
 Treat `warnings` as blocking unless the user overrides. After compact or on a new session, ask again.
 
-If the daemon is not up: `lossless serve`.
+If lossless is not installed: `lossless setup`. If the daemon is not up: `lossless doctor` then `lossless serve --watch`.
 
 See `docs/ask.md`.

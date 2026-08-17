@@ -13,7 +13,7 @@ ask({ question, project, paths, goal })
   → packed context + warnings
 ```
 
-See [docs/pipeline.md](docs/pipeline.md) for the loop, [docs/deploy.md](docs/deploy.md) for **local-only or one home / many sidecars**. Then [docs/write.md](docs/write.md), [docs/ask.md](docs/ask.md), [docs/retrieval.md](docs/retrieval.md), [docs/harnesses.md](docs/harnesses.md), [docs/stack.md](docs/stack.md).
+See [docs/architecture.html](docs/architecture.html) for a one-page map of the loop, store, and retrieve algorithm. [docs/pipeline.md](docs/pipeline.md) is the loop in prose, [docs/deploy.md](docs/deploy.md) is **local-only or one home / many sidecars**. Then [docs/write.md](docs/write.md), [docs/ask.md](docs/ask.md), [docs/retrieval.md](docs/retrieval.md), [docs/harnesses.md](docs/harnesses.md), [docs/stack.md](docs/stack.md).
 
 ## Why
 
@@ -31,11 +31,22 @@ go build -o lossless ./cmd/lossless
 ./lossless remember --type decision --text "Use jose, not jsonwebtoken, for Edge." --project acme/api
 ./lossless ask --project acme/api --question "why not jsonwebtoken" --goal "pick a jwt library"
 ./lossless bench --root testdata/bench
+./lossless setup            # hooks + MCP for every harness, keep the daemon up
+./lossless doctor           # daemon, hooks, MCP, user service
 ./lossless serve            # REST + /mcp; watches session files
 ./lossless install-hooks    # Grok + Claude + Codex + Pi + OpenCode
-./lossless install-mcp      # Grok HTTP MCP + Claude stdio MCP
+./lossless install-mcp      # MCP for Grok, Claude, Codex, Pi, OpenCode
 ./lossless mcp              # stdio MCP (talks to the daemon)
 ```
+
+One-time install (any supported harness):
+
+```bash
+./lossless setup
+./lossless doctor
+```
+
+That writes hooks + MCP for Grok, Claude, Codex, Pi, and OpenCode, and installs a user service so the daemon stays up. Then start a new agent session (Grok: `/hooks` then `r`). Remote home: `LOSSLESS_URL=https://…` and `LOSSLESS_TOKEN` in the environment — the token is never written into a harness config file.
 
 Data dir: `~/.lossless/` (`LOSSLESS_HOME` to override).
 

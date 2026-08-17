@@ -115,7 +115,7 @@ Two Codex workers on the same repo = two session ids, one project. Claims collid
 - Home binds `127.0.0.1` unless `--listen` is set. Public listen **requires** a token. No token + `0.0.0.0` = refuse to start.
 - Remote `LOSSLESS_URL` / sidecar URL must be `https`. Loopback `http://127.0.0.1` is fine. Outbound clients do not follow redirects (so a 302 cannot bounce a bearer token to another host).
 - TLS via Tailscale Serve or Caddy. The binary does not terminate Let’s Encrypt in v1.
-- Token is a high-entropy bearer, stored in env / `0600` file. Rotating it is a restart.
+- Token is a high-entropy bearer, stored in env / `0600` file. Rotating it is a restart. `lossless setup` may copy it into the launchd/systemd unit (`0600`) so the daemon starts on login. Harness MCP configs only reference `${LOSSLESS_TOKEN}`.
 - Sidecar redacts **before** the bytes leave the machine. Home redacts again.
 - Store dirs are `0700`. `export/`, `raw/`, `spool/`, and sqlite files are `0600`. Catch-up refuses symlinks and anything that is not a `.jsonl`. Claim IDs must be a single path-safe token.
 - Disk on the VPS: your LUKS / provider volume encryption. App-level at-rest encryption is not v1.
@@ -145,7 +145,7 @@ If you never want that: stay on local forever. That is a complete product.
 
 1. Local process that is already home+sidecar (catch-up as now).
 2. Split: `POST /v1/append` + spool + `LOSSLESS_URL` for ask.
-3. `install-hooks` still talks to the **local** sidecar only.
+3. `lossless setup` still talks to the **local** sidecar only for hooks. MCP on a remote home uses `LOSSLESS_URL` + `LOSSLESS_TOKEN` (never written into a committed config).
 4. Run home on a VPS, point every laptop’s sidecar at it.
 
 Do not skip (1). Do not make Grok’s PreCompact call the VPS in step (1).

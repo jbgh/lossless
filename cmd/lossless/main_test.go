@@ -121,6 +121,12 @@ func TestRunServe(t *testing.T) {
 	if runInstallMCP([]string{"-bogus"}) != 2 {
 		t.Fatal("install-mcp parse")
 	}
+	if runSetup([]string{"-bogus"}) != 2 {
+		t.Fatal("setup parse")
+	}
+	if runDoctor([]string{"-bogus"}) != 2 {
+		t.Fatal("doctor parse")
+	}
 }
 
 func TestRunInstallHooks(t *testing.T) {
@@ -155,6 +161,12 @@ func TestRunInstallHooks(t *testing.T) {
 	gb, err := os.ReadFile(filepath.Join(home, ".grok", "config.toml"))
 	if err != nil || !strings.Contains(string(gb), "lossless") {
 		t.Fatalf("grok mcp %s %v", gb, err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".codex", "config.toml")); err != nil {
+		t.Fatal("codex mcp", err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".pi", "agent", "mcp.json")); err != nil {
+		t.Fatal("pi mcp", err)
 	}
 	if runInstallHooks(nil) != 0 {
 		t.Fatal("install")

@@ -93,7 +93,7 @@ func TestMergeClaudeSettingsEmptyAndInvalid(t *testing.T) {
 }
 
 func TestMergeMCPConfigs(t *testing.T) {
-	got, err := MergeClaudeMCP([]byte(`{"model":"opus"}`), "/bin/am")
+	got, err := MergeClaudeMCP([]byte(`{"model":"opus"}`), "/bin/am", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,26 +103,26 @@ func TestMergeMCPConfigs(t *testing.T) {
 	if !strings.Contains(string(got), `"model"`) {
 		t.Fatal("lost model")
 	}
-	again, err := MergeClaudeMCP(got, "/bin/am")
+	again, err := MergeClaudeMCP(got, "/bin/am", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Count(string(again), `"command"`) != 1 {
 		t.Fatal("duplicate mcp")
 	}
-	if _, err := MergeClaudeMCP([]byte("{"), "/bin/am"); err == nil {
+	if _, err := MergeClaudeMCP([]byte("{"), "/bin/am", nil); err == nil {
 		t.Fatal("invalid")
 	}
 
-	toml := MergeGrokMCP(nil, "http://127.0.0.1:7432/mcp")
+	toml := MergeGrokMCP(nil, "http://127.0.0.1:7432/mcp", false)
 	if !strings.Contains(string(toml), "[mcp_servers.lossless]") {
 		t.Fatal(string(toml))
 	}
-	againT := MergeGrokMCP(toml, "http://other/mcp")
-	if string(againT) != string(toml) {
-		t.Fatal("should be idempotent")
+	againT := MergeGrokMCP(toml, "http://127.0.0.1:7432/mcp", false)
+	if strings.Count(string(againT), "[mcp_servers.lossless]") != 1 {
+		t.Fatal(string(againT))
 	}
-	merged := MergeGrokMCP([]byte("model = \"x\""), "http://127.0.0.1:7432/mcp")
+	merged := MergeGrokMCP([]byte("model = \"x\""), "http://127.0.0.1:7432/mcp", false)
 	if !strings.Contains(string(merged), "model") || !strings.Contains(string(merged), "lossless") {
 		t.Fatal(string(merged))
 	}
@@ -130,7 +130,7 @@ func TestMergeMCPConfigs(t *testing.T) {
 
 func TestWriteMCP(t *testing.T) {
 	home := t.TempDir()
-	g, err := WriteGrokMCP(home, "http://127.0.0.1:7432/mcp")
+	g, err := WriteGrokMCP(home, "http://127.0.0.1:7432/mcp", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestWriteMCP(t *testing.T) {
 	if !strings.Contains(string(b), "url") {
 		t.Fatal(string(b))
 	}
-	c, err := WriteClaudeMCP(home, "/bin/am")
+	c, err := WriteClaudeMCP(home, "/bin/am", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

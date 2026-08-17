@@ -61,6 +61,10 @@ func main() {
 		os.Exit(runInstallMCP(args))
 	case "install-hooks":
 		os.Exit(runInstallHooks(args))
+	case "setup":
+		os.Exit(runSetup(args))
+	case "doctor":
+		os.Exit(runDoctor(args))
 	case "ensure":
 		os.Exit(runEnsure(args))
 	case "hook-pi":
@@ -93,8 +97,10 @@ func usage() {
   lossless hook-grok          # stdin: Grok hook JSON; fail-open
   lossless hook-claude        # stdin: Claude hook JSON; fail-open
   lossless hook-codex         # stdin: Codex hook JSON; fail-open
+  lossless setup              # hooks + MCP (all harnesses) + keep the daemon up
+  lossless doctor             # daemon, hooks, MCP, service
   lossless install-hooks      # Grok + Claude + Codex + Pi + OpenCode
-  lossless install-mcp        # Grok url + Claude stdio MCP
+  lossless install-mcp        # MCP for every supported harness
   lossless ensure             # replay spool after sidecar was down
   lossless embed-backfill     # embed active claims if an on-box model is configured
   lossless hook-pi            # stdin: Pi extension JSON; fail-open
@@ -330,32 +336,85 @@ func runMCP(args []string) int {
 	return 0
 }
 
+func resolveExe() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	if r, err := filepath.EvalSymlinks(exe); err == nil {
+		return r, nil
+	}
+	return exe, nil
+}
+
 func runInstallMCP(args []string) int {
 	fs := flag.NewFlagSet("install-mcp", flag.ContinueOnError)
-	url := fs.String("url", "http://127.0.0.1:7432/mcp", "HTTP MCP endpoint for Grok")
+	url := fs.String("url", env.URL(), "daemon URL (Grok uses /mcp; others spawn lossless mcp)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	exe, err := os.Executable()
+	exe, err := resolveExe()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	exe, _ = filepath.EvalSymlinks(exe)
-	home := os.Getenv("HOME")
-	g, err := harness.WriteGrokMCP(home, *url)
+	paths, err := harness.InstallMCP(harness.MCPConfig{
+		Home: os.Getenv("HOME"), Exe: exe, URL: *url, Token: env.Token(),
+	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	c, err := harness.WriteClaudeMCP(home, exe)
+	for _, p := range paths {
+		fmt.Println("wrote", p)
+	}
+	fmt.Println("start the daemon: lossless serve --watch")
+	fmt.Println("or: lossless setup")
+	return 0
+}
+
+func runSetup(args []string) int {
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	home := homeFlag(fs)
+	url := fs.String("url", env.URL(), "daemon URL")
+	noService := fs.Bool("no-service", false, "do not install launchd/systemd user service")
+	noStart := fs.Bool("no-start", false, "do not start the daemon")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	exe, err := resolveExe()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	fmt.Println("wrote", g)
-	fmt.Println("wrote", c)
-	fmt.Println("start the daemon: lossless serve")
+	res, err := harness.Setup(harness.SetupOpts{
+		UserHome: os.Getenv("HOME"), DataHome: *home, Exe: exe, URL: *url, Token: env.Token(),
+		Service: !*noService, Start: !*noStart,
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Print(res.Format())
+	return 0
+}
+
+func runDoctor(args []string) int {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	home := homeFlag(fs)
+	url := fs.String("url", env.URL(), "daemon URL")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	exe, err := resolveExe()
+	if err != nil {
+		exe = ""
+	}
+	rep := harness.Doctor(os.Getenv("HOME"), *home, exe, *url, env.Token())
+	fmt.Print(rep.Format())
+	if !rep.Ok() {
+		return 1
+	}
 	return 0
 }
 
@@ -512,49 +571,15 @@ func runInstallHooks(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	exe, err := os.Executable()
+	exe, err := resolveExe()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	exe, _ = filepath.EvalSymlinks(exe)
-	home := os.Getenv("HOME")
-	var wrote []string
-	if dest, err := harness.WriteGrokHooks(home, exe); err != nil {
+	wrote, err := harness.InstallHooks(os.Getenv("HOME"), exe)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
-	} else {
-		wrote = append(wrote, dest)
-	}
-	if dest, err := harness.WriteClaudeHooks(home, exe); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	} else {
-		wrote = append(wrote, dest)
-	}
-	if dest, err := harness.WriteCodexHooks(home, exe); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	} else {
-		wrote = append(wrote, dest)
-	}
-	if dest, err := harness.WriteCodexFeatures(home); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	} else {
-		wrote = append(wrote, dest)
-	}
-	if dest, err := harness.WritePiExtension(home, exe); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	} else {
-		wrote = append(wrote, dest)
-	}
-	if dest, err := harness.WriteOpenCodePlugin(home); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
-	} else {
-		wrote = append(wrote, dest)
 	}
 	for _, d := range wrote {
 		fmt.Println("wrote", d)

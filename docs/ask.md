@@ -8,7 +8,7 @@ MCP tools: `ask`, `remember`, `get_record` (same JSON as the REST bodies).
 - HTTP MCP: `http://127.0.0.1:7432/mcp` (same process as `serve`)
 - stdio MCP: `lossless mcp` (HTTP client of the daemon; set `LOSSLESS_URL` in home mode)
 
-`lossless install-mcp` registers Grok (`url`) and Claude (`command`). The daemon must be running.
+`lossless setup` is the one command: hooks + MCP for Grok, Claude, Codex, Pi, and OpenCode, plus a user service so `serve` stays up. `lossless doctor` checks it. Remote `LOSSLESS_URL` must be `https`; Grok gets `Authorization: Bearer ${LOSSLESS_TOKEN}` (the value stays in the environment). stdio harnesses inherit `LOSSLESS_TOKEN` and get `LOSSLESS_URL` only when the daemon is not loopback.
 
 No other read verbs in v1. Full record + excerpt: `GET /v1/records/:id`.
 

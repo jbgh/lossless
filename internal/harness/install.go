@@ -106,76 +106,24 @@ func containsCommand(v any, command string) bool {
 	return strings.Contains(s, strings.ReplaceAll(command, `"`, `\"`))
 }
 
-func MergeClaudeMCP(existing []byte, exe string) ([]byte, error) {
-	root := map[string]any{}
-	trim := bytes.TrimSpace(existing)
-	if len(trim) > 0 {
-		if err := json.Unmarshal(trim, &root); err != nil {
-			return nil, err
+func InstallHooks(home, exe string) ([]string, error) {
+	var out []string
+	writers := []func() (string, error){
+		func() (string, error) { return WriteGrokHooks(home, exe) },
+		func() (string, error) { return WriteClaudeHooks(home, exe) },
+		func() (string, error) { return WriteCodexHooks(home, exe) },
+		func() (string, error) { return WriteCodexFeatures(home) },
+		func() (string, error) { return WritePiExtension(home, exe) },
+		func() (string, error) { return WriteOpenCodePlugin(home) },
+	}
+	for _, w := range writers {
+		p, err := w()
+		if err != nil {
+			return out, err
 		}
+		out = append(out, p)
 	}
-	servers, _ := root["mcpServers"].(map[string]any)
-	if servers == nil {
-		servers = map[string]any{}
-		root["mcpServers"] = servers
-	}
-	servers["lossless"] = map[string]any{
-		"command": exe,
-		"args":    []string{"mcp"},
-	}
-	out, err := json.MarshalIndent(root, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-	return append(out, '\n'), nil
-}
-
-func WriteClaudeMCP(home, exe string) (string, error) {
-	dest := filepath.Join(home, ".claude.json")
-	var existing []byte
-	if b, err := os.ReadFile(dest); err == nil {
-		existing = b
-	}
-	merged, err := MergeClaudeMCP(existing, exe)
-	if err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(dest, merged, 0o644); err != nil {
-		return "", err
-	}
-	return dest, nil
-}
-
-func MergeGrokMCP(existing []byte, url string) []byte {
-	if bytes.Contains(existing, []byte("[mcp_servers.lossless]")) {
-		return existing
-	}
-	var b bytes.Buffer
-	if len(bytes.TrimSpace(existing)) > 0 {
-		b.Write(existing)
-		if !bytes.HasSuffix(existing, []byte("\n")) {
-			b.WriteByte('\n')
-		}
-		b.WriteByte('\n')
-	}
-	fmt.Fprintf(&b, "[mcp_servers.lossless]\nurl = %q\n", url)
-	return b.Bytes()
-}
-
-func WriteGrokMCP(home, url string) (string, error) {
-	destDir := filepath.Join(home, ".grok")
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return "", err
-	}
-	dest := filepath.Join(destDir, "config.toml")
-	var existing []byte
-	if b, err := os.ReadFile(dest); err == nil {
-		existing = b
-	}
-	if err := os.WriteFile(dest, MergeGrokMCP(existing, url), 0o644); err != nil {
-		return "", err
-	}
-	return dest, nil
+	return out, nil
 }
 
 func MergeCodexHooks(existing []byte, exe string) ([]byte, error) {
@@ -273,14 +221,18 @@ func WritePiExtension(home, exe string) (string, error) {
 }
 
 func OpenCodePluginSource() string {
-	return `export const AgentMemory = async ({ directory }) => {
+	return `// lossless OpenCode plugin — fail-open catch-up to the local sidecar
+export const AgentMemory = async ({ directory }) => {
   const url = (process.env.LOSSLESS_SIDECAR || "http://127.0.0.1:7432").replace(/\/$/, "");
+  const token = process.env.LOSSLESS_TOKEN || "";
   const fire = async (sessionID, source) => {
     if (!sessionID) return;
     try {
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = "Bearer " + token;
       await fetch(url + "/v1/catch-up", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           harness: "opencode",
           session_id: sessionID,

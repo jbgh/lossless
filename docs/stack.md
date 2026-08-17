@@ -44,7 +44,7 @@ The expensive work we will keep doing is **parsers and adapters** (Grok vs Claud
 - **Go 1.24+**, module `lossless`.
 - Layout:
   ```
-  cmd/lossless/         # serve, catch-up, ask, remember, install-hooks
+  cmd/lossless/         # serve, setup, doctor, catch-up, ask, remember
   internal/write/       # catch-up, raw log, redact, cursors, spool
   internal/retrieve/    # later, against docs/retrieval.md
   internal/harness/     # grok, claude, … locate + parse
