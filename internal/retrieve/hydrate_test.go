@@ -7,6 +7,38 @@ import (
 	"lossless/internal/claim"
 )
 
+func TestAskDoesNotStealOtherSessionTape(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "01JJOSE", Type: "decision",
+		Text:      "Picked jose over jsonwebtoken on the Edge runtime.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2025-12-14T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "01JBILL", Type: "failed",
+		Text:      "Stripe invoice webhook failed in src/billing/export.ts.",
+		Paths:     []string{"src/billing/export.ts"},
+		CreatedAt: "2026-08-10T00:00:00Z",
+	})
+	askAt(t, st, Request{
+		Project: "acme/api", SessionID: "grok-auth-sess",
+		Goal: "add rate limiting", Paths: []string{"src/middleware/auth.ts"},
+	})
+	// Claude on the same project, different session, no id borrow.
+	out := askAt(t, st, Request{
+		Project: "acme/api", SessionID: "claude-bill-sess",
+		Goal: "fix invoice export", Paths: []string{"src/billing/export.ts"},
+	})
+	got := textsOf(out)
+	if !strings.Contains(got, "Stripe") && !strings.Contains(got, "invoice") {
+		t.Fatalf("claude missed its files: %+v", out)
+	}
+	if strings.Contains(got, "jose") {
+		t.Fatalf("claude inherited grok tape: %+v", out)
+	}
+}
+
 func TestThinAskAfterRichUsesTape(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"lossless/internal/harness"
+	"lossless/internal/projectkey"
 	"lossless/internal/store"
 	"lossless/internal/write"
 )
@@ -149,6 +150,47 @@ func Discover(opts Options, known []store.Session) []Target {
 	return out
 }
 
+func idleSeal(st *store.Store, t Target, opts Options) bool {
+	idle := opts.IdleSeal
+	if idle <= 0 {
+		idle = 24 * time.Hour
+	}
+	project := t.Project
+	if project == "" && t.Workspace != "" {
+		project = projectkey.FromWorkspace(t.Workspace)
+	}
+	if project == "" || t.SessionID == "" {
+		return false
+	}
+	return idleSealPath(st.LiveRawPath(project, t.SessionID, time.Now()), idle)
+}
+
+func idleSealPath(raw string, idle time.Duration) bool {
+	if raw == "" {
+		return false
+	}
+	fi, err := os.Stat(raw)
+	if err != nil {
+		return false
+	}
+	if time.Since(fi.ModTime()) < idle {
+		return false
+	}
+	_, err = write.SealRaw(raw)
+	return err == nil
+}
+
+func needsCatchUp(st *store.Store, jsonl string) bool {
+	if jsonl == "" {
+		return false
+	}
+	fi, err := os.Stat(jsonl)
+	if err != nil {
+		return false
+	}
+	return st.Cursor(jsonl) != fi.Size()
+}
+
 func Tick(st *store.Store, opts Options) (Result, error) {
 	known, err := st.ListSessions()
 	if err != nil {
@@ -167,6 +209,12 @@ func Tick(st *store.Store, opts Options) (Result, error) {
 				continue
 			}
 		}
+		if !needsCatchUp(st, t.JSONL) {
+			if sealed := idleSeal(st, t, opts); sealed {
+				res.Sealed++
+			}
+			continue
+		}
 		out, err := write.CatchUp(st, write.CatchUpRequest{
 			JSONL: t.JSONL, Project: t.Project, WorkspaceRoot: t.Workspace,
 			Harness: t.Harness, SessionID: t.SessionID, Source: "turn",
@@ -182,12 +230,8 @@ func Tick(st *store.Store, opts Options) (Result, error) {
 		if idle <= 0 {
 			idle = 24 * time.Hour
 		}
-		if out.RawPath != "" {
-			if fi, err := os.Stat(out.RawPath); err == nil && time.Since(fi.ModTime()) >= idle {
-				if _, err := write.SealRaw(out.RawPath); err == nil {
-					res.Sealed++
-				}
-			}
+		if sealed := idleSealPath(out.RawPath, idle); sealed {
+			res.Sealed++
 		}
 	}
 	return res, nil

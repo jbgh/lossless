@@ -1,7 +1,6 @@
 package retrieve
 
 import (
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -25,13 +24,7 @@ func (e Engine) hydrateActions(req Request, q query) query {
 	}
 	acts, err := e.Store.RecentActions(q.ProjectKey, q.SessionID, ActionTapeCap)
 	if err != nil || len(acts) == 0 {
-		if q.SessionID != "" && q.SessionID != "default" {
-			return q
-		}
-		acts, err = e.Store.RecentActions(q.ProjectKey, "", ActionTapeCap)
-		if err != nil || len(acts) == 0 {
-			return q
-		}
+		return q
 	}
 
 	fillPaths := len(q.PathKeys) == 0
@@ -201,21 +194,8 @@ func (e Engine) resolveSession(req Request, q query) string {
 	if q.SessionID != "" {
 		return q.SessionID
 	}
-	path := e.locateSession(q.ProjectKey, q.WorkspaceRoot)
-	if path != "" && e.Store != nil {
-		if sess, ok := e.Store.SessionByJSONL(path); ok && sess.SessionID != "" {
-			return sess.SessionID
-		}
-		base := filepath.Base(path)
-		if strings.HasSuffix(base, ".jsonl") {
-			return strings.TrimSuffix(base, ".jsonl")
-		}
-	}
-	if e.Store != nil {
-		if id := e.Store.NewestSessionID(q.ProjectKey); id != "" {
-			return id
-		}
-	}
+	// Never borrow another harness's tape. Claims are project-shared;
+	// served/dwell stay on this session or the project default.
 	return "default"
 }
 
