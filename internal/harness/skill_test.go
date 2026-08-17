@@ -13,7 +13,7 @@ func TestInstallSkillsWritesGrokAndClaude(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(paths) != 3 {
+	if len(paths) != 5 {
 		t.Fatal(paths)
 	}
 	body, err := os.ReadFile(filepath.Join(home, ".grok", "skills", "lossless", "SKILL.md"))
@@ -28,6 +28,10 @@ func TestInstallSkillsWritesGrokAndClaude(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "lossless", "SKILL.md")); err != nil {
 		t.Fatal(err)
+	}
+	rule, err := os.ReadFile(filepath.Join(home, ".grok", "rules", "lossless.md"))
+	if err != nil || !strings.Contains(string(rule), "ask") {
+		t.Fatalf("rule: %s %v", rule, err)
 	}
 }
 

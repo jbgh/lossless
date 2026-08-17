@@ -12,7 +12,7 @@ func toolDefs() []map[string]any {
 	return []map[string]any{
 		{
 			"name":        "ask",
-			"description": "Retrieve packed past work for the current goal and paths. Call before implementing or after compact. Treat warnings as blocking unless the user overrides.",
+			"description": "Required before implementing, changing behavior, or continuing after compact. Packs past failed/decisions/constraints for the current goal and files. Send workspace_root, goal, and paths. Treat warnings as blocking unless the user overrides. Do not wait for the user to mention lossless. Skip trivia.",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{

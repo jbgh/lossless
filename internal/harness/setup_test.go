@@ -35,6 +35,8 @@ func TestSetupWritesHooksAndMCP(t *testing.T) {
 		".pi/agent/mcp.json",
 		".grok/skills/lossless/SKILL.md",
 		".claude/skills/lossless/SKILL.md",
+		".grok/rules/lossless.md",
+		".claude/rules/lossless.md",
 	} {
 		if _, err := os.Stat(filepath.Join(user, rel)); err != nil {
 			t.Fatal(rel, err)

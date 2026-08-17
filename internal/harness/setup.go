@@ -214,6 +214,12 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 	}, "ask")
 	add("skills", skillOK, skillDetail)
 
+	ruleOK, ruleDetail := checkFiles(map[string]string{
+		"grok":   filepath.Join(userHome, ".grok", "rules", "lossless.md"),
+		"claude": filepath.Join(userHome, ".claude", "rules", "lossless.md"),
+	}, "ask")
+	add("rules", ruleOK, ruleDetail)
+
 	svc := ServicePath(userHome)
 	if svc != "" {
 		if _, err := os.Stat(svc); err == nil {
