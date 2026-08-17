@@ -72,7 +72,7 @@ func TestFlushPush(t *testing.T) {
 }
 
 func TestMaybeEnqueuePush(t *testing.T) {
-	t.Setenv("LOSSLESS_URL", "http://home.example:9")
+	t.Setenv("LOSSLESS_URL", "https://home.example:9")
 	home := t.TempDir()
 	MaybeEnqueuePush(home, CatchUpRequest{Project: "acme/api", SessionID: "s"}, "line\n", 0)
 	files, _ := ListPush(home)
@@ -127,7 +127,7 @@ func TestFlushPushConflictBehindDropsJob(t *testing.T) {
 
 func TestEnqueueHomePushOffsets(t *testing.T) {
 	st := tmpStore(t)
-	t.Setenv("LOSSLESS_URL", "http://home.example:7432")
+	t.Setenv("LOSSLESS_URL", "https://home.example:7432")
 	req := CatchUpRequest{Project: "acme/api", SessionID: "s-off", Harness: "grok"}
 	enqueueHomePush(st, req, "aaa\n")
 	enqueueHomePush(st, req, "bbbb\n")
@@ -146,5 +146,70 @@ func TestEnqueueHomePushOffsets(t *testing.T) {
 	}
 	if jobs[0].PrevOff != 0 || jobs[1].PrevOff != 4 {
 		t.Fatalf("offsets %+v %+v", jobs[0], jobs[1])
+	}
+}
+
+func TestCheckHomeURL(t *testing.T) {
+	t.Setenv("LOSSLESS_URL", "")
+	if err := CheckHomeURL(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LOSSLESS_URL", "http://127.0.0.1:7432")
+	if err := CheckHomeURL(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LOSSLESS_URL", "http://localhost:7432")
+	if err := CheckHomeURL(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LOSSLESS_URL", "https://home.example:7432")
+	if err := CheckHomeURL(); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LOSSLESS_URL", "http://home.example:7432")
+	if err := CheckHomeURL(); err == nil {
+		t.Fatal("plain http remote must fail")
+	}
+	t.Setenv("LOSSLESS_URL", "ftp://home.example")
+	if err := CheckHomeURL(); err == nil {
+		t.Fatal("ftp must fail")
+	}
+}
+
+func TestMaybeEnqueuePushRejectsPlainHTTPRemote(t *testing.T) {
+	t.Setenv("LOSSLESS_URL", "http://home.example:7432")
+	home := t.TempDir()
+	MaybeEnqueuePush(home, CatchUpRequest{Project: "acme/api", SessionID: "s"}, "line\n", 0)
+	files, _ := ListPush(home)
+	if len(files) != 0 {
+		t.Fatal("must not enqueue to cleartext remote")
+	}
+}
+
+func TestFlushPushDoesNotFollowRedirect(t *testing.T) {
+	var leaked bool
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			leaked = true
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(evil.Close)
+	homeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, evil.URL+"/v1/append", http.StatusFound)
+	}))
+	t.Cleanup(homeSrv.Close)
+	t.Setenv("LOSSLESS_URL", homeSrv.URL)
+	t.Setenv("LOSSLESS_TOKEN", "sekrit")
+	home := t.TempDir()
+	if _, err := WritePush(home, PushJob{SessionID: "s", Body: "hello\n"}); err != nil {
+		t.Fatal(err)
+	}
+	n, err := FlushPush(home)
+	if n != 0 || err == nil {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if leaked {
+		t.Fatal("bearer followed redirect")
 	}
 }

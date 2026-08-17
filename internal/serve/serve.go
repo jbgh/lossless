@@ -200,6 +200,10 @@ func Handler(st *store.Store, token string) http.Handler {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing id"})
 			return
 		}
+		if !store.SafeRecordID(id) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+			return
+		}
 		rec, ok := st.View(id)
 		if !ok {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})

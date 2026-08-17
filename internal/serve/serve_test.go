@@ -358,6 +358,25 @@ func TestCatchUpAndRememberHTTP(t *testing.T) {
 	}
 	res.Body.Close()
 
+	res, err = http.Post(srv.URL+"/v1/remember", "application/json", bytes.NewReader([]byte(
+		`{"project":"acme/api","type":"decision","text":"Use jose, not jsonwebtoken, for Edge.","id":"../etc/passwd"}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != 400 {
+		t.Fatal(res.StatusCode)
+	}
+	res.Body.Close()
+
+	res, err = http.Get(srv.URL + "/v1/records/has/slash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != 400 {
+		t.Fatal(res.StatusCode)
+	}
+	res.Body.Close()
+
 	res, err = http.Get(srv.URL + "/v1/catch-up")
 	if err != nil {
 		t.Fatal(err)

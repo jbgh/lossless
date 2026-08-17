@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,19 +24,16 @@ type Store struct {
 }
 
 func Open(root string) (*Store, error) {
-	if err := os.MkdirAll(filepath.Join(root, "export"), 0o755); err != nil {
+	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Join(root, "raw"), 0o755); err != nil {
-		return nil, err
+	for _, sub := range []string{"export", "raw", "index", "spool"} {
+		if err := os.MkdirAll(filepath.Join(root, sub), 0o700); err != nil {
+			return nil, err
+		}
 	}
-	if err := os.MkdirAll(filepath.Join(root, "index"), 0o755); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(filepath.Join(root, "spool"), 0o755); err != nil {
-		return nil, err
-	}
-	db, err := sql.Open("sqlite", filepath.Join(root, "index", "claims.sqlite"))
+	dbPath := filepath.Join(root, "index", "claims.sqlite")
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -48,6 +46,7 @@ func Open(root string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	_ = os.Chmod(dbPath, 0o600)
 	return s, nil
 }
 
@@ -156,6 +155,9 @@ func (s *Store) WriteClaim(rec claim.Record) (superseded string, err error) {
 	}
 	if rec.ID == "" {
 		rec.ID = claim.NewID()
+	}
+	if !SafeRecordID(rec.ID) {
+		return "", fmt.Errorf("invalid record id")
 	}
 	if rec.CreatedAt == "" {
 		rec.CreatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -267,13 +269,13 @@ func (s *Store) ManualRawPath(t time.Time) string {
 
 func (s *Store) writeFile(rec claim.Record) error {
 	dir := filepath.Join(s.Root, "export", projectkey.Encode(rec.ProjectKey))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	dest := filepath.Join(dir, rec.ID+".md")
 	tmp := dest + ".tmp"
 	body := serialize(rec)
-	if err := os.WriteFile(tmp, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(tmp, []byte(body), 0o600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, dest)
@@ -382,6 +384,13 @@ func serialize(rec claim.Record) string {
 	b.WriteString(rec.Text)
 	b.WriteByte('\n')
 	return b.String()
+}
+
+var recordIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
+// SafeRecordID is the write and lookup gate for claim IDs used as filenames.
+func SafeRecordID(id string) bool {
+	return recordIDRe.MatchString(id)
 }
 
 func sanitize(id string) string {

@@ -359,10 +359,16 @@ func runInstallMCP(args []string) int {
 	return 0
 }
 
+const hookStdinLimit = 1 << 20
+
+func readHookStdin() ([]byte, error) {
+	return io.ReadAll(io.LimitReader(os.Stdin, hookStdinLimit))
+}
+
 func runHookGrok() int {
 	// Fail-open: any error exits 0 so compact is never blocked.
 	defer func() { _ = recover() }()
-	raw, err := io.ReadAll(os.Stdin)
+	raw, err := readHookStdin()
 	if err != nil || len(raw) == 0 {
 		return 0
 	}
@@ -401,7 +407,7 @@ func runHookGrok() int {
 
 func runHookClaude() int {
 	defer func() { _ = recover() }()
-	raw, err := io.ReadAll(os.Stdin)
+	raw, err := readHookStdin()
 	if err != nil || len(raw) == 0 {
 		return 0
 	}
@@ -451,7 +457,7 @@ func runHookClaude() int {
 func runHookCodex() int {
 	defer func() { _ = recover() }()
 	defer func() { fmt.Println(`{"continue":true}`) }()
-	raw, err := io.ReadAll(os.Stdin)
+	raw, err := readHookStdin()
 	if err != nil || len(raw) == 0 {
 		return 0
 	}
@@ -606,7 +612,7 @@ func runEmbedBackfill(args []string) int {
 
 func runHookPi() int {
 	defer func() { _ = recover() }()
-	raw, err := io.ReadAll(os.Stdin)
+	raw, err := readHookStdin()
 	if err != nil || len(raw) == 0 {
 		return 0
 	}
@@ -645,7 +651,7 @@ func runHookPi() int {
 
 func runHookOpenCode() int {
 	defer func() { _ = recover() }()
-	raw, err := io.ReadAll(os.Stdin)
+	raw, err := readHookStdin()
 	if err != nil || len(raw) == 0 {
 		return 0
 	}

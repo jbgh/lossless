@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"lossless/internal/claim"
 	"lossless/internal/retrieve"
@@ -52,7 +53,12 @@ func (h HTTP) client() *http.Client {
 	if h.Client != nil {
 		return h.Client
 	}
-	return http.DefaultClient
+	return &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return fmt.Errorf("redirects disabled")
+		},
+	}
 }
 
 func (h HTTP) Ask(req retrieve.Request) (retrieve.Response, error) {
@@ -119,7 +125,7 @@ func (h HTTP) roundTrip(method, path string, body any, dest any) error {
 		return fmt.Errorf("lossless daemon not reachable at %s (%v). Start it with: lossless serve", base, err)
 	}
 	defer res.Body.Close()
-	raw, err := io.ReadAll(res.Body)
+	raw, err := io.ReadAll(io.LimitReader(res.Body, maxRPCBytes))
 	if err != nil {
 		return err
 	}

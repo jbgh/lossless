@@ -231,6 +231,19 @@ func TestCatchUpFromWorkspaceAndPartialTail(t *testing.T) {
 	}
 }
 
+func TestRememberRejectsUnsafeID(t *testing.T) {
+	st := tmpStore(t)
+	if _, err := Remember(st, claim.Record{
+		ID: "../etc/passwd", Type: "decision",
+		Text: "Use jose, not jsonwebtoken, for Edge.", ProjectKey: "acme/api",
+	}); err == nil {
+		t.Fatal("expected reject")
+	}
+	if _, err := os.Stat(filepath.Join(st.Root, "export", "etc", "passwd.md")); !os.IsNotExist(err) {
+		t.Fatalf("escaped store: %v", err)
+	}
+}
+
 func TestRememberValidationAndDefaults(t *testing.T) {
 	st := tmpStore(t)
 	if _, err := Remember(st, claim.Record{}); err == nil {

@@ -122,6 +122,36 @@ func TestWriteClaimSupersedesAndExport(t *testing.T) {
 	}
 }
 
+func TestWriteClaimRejectsUnsafeID(t *testing.T) {
+	st := tmp(t)
+	if _, err := st.WriteClaim(rec("../etc/passwd", "decision", "Use jose, not jsonwebtoken, for Edge.", nil)); err == nil {
+		t.Fatal("expected reject")
+	}
+	if _, err := st.WriteClaim(rec("ok-id", "decision", "Use jose, not jsonwebtoken, for Edge.", nil)); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(st.Root, "export", "acme__api", "ok-id.md")
+	info, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("export mode %v", info.Mode().Perm())
+	}
+}
+
+func TestWriteClaimProjectDotDotStaysInStore(t *testing.T) {
+	st := tmp(t)
+	r := rec("SAFEID", "decision", "Use jose, not jsonwebtoken, for Edge.", nil)
+	r.ProjectKey = ".."
+	if _, err := st.WriteClaim(r); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(st.Root, "export", "unknown", "SAFEID.md")); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWriteClaimExportDirBlocked(t *testing.T) {
 	dir := t.TempDir()
 	st, err := Open(dir)

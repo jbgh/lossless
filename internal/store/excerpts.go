@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -33,10 +34,12 @@ func (s *Store) excerptPath(month string) string {
 }
 
 func (s *Store) openExcerpt(month string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", s.excerptPath(month))
+	p := s.excerptPath(month)
+	db, err := sql.Open("sqlite", p)
 	if err != nil {
 		return nil, err
 	}
+	_ = os.Chmod(p, 0o600)
 	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
 		_ = db.Close()
 		return nil, err

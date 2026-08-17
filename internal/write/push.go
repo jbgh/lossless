@@ -42,7 +42,10 @@ func HomeIsRemote() bool {
 	if err != nil {
 		return false
 	}
-	host := parsed.Hostname()
+	return remoteHost(parsed.Hostname())
+}
+
+func remoteHost(host string) bool {
 	if host == "" || host == "localhost" {
 		return false
 	}
@@ -50,6 +53,42 @@ func HomeIsRemote() bool {
 		return false
 	}
 	return true
+}
+
+// CheckHomeURL rejects a non-loopback LOSSLESS_URL that is not https.
+func CheckHomeURL() error {
+	return CheckRemoteURL(HomeURL())
+}
+
+// CheckRemoteURL allows empty and loopback http. Anything else must be https.
+func CheckRemoteURL(raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Host == "" {
+		return fmt.Errorf("invalid URL")
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("URL must be http or https")
+	}
+	if !remoteHost(parsed.Hostname()) {
+		return nil
+	}
+	if scheme != "https" {
+		return fmt.Errorf("remote URL must be https")
+	}
+	return nil
+}
+
+func errNoRedirect(*http.Request, []*http.Request) error {
+	return fmt.Errorf("redirects disabled")
+}
+
+func outboundClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout, CheckRedirect: errNoRedirect}
 }
 
 func ClientID(home string) string {
@@ -68,7 +107,7 @@ func ClientID(home string) string {
 }
 
 func WritePush(home string, job PushJob) (string, error) {
-	if err := os.MkdirAll(SpoolDir(home), 0o755); err != nil {
+	if err := os.MkdirAll(SpoolDir(home), 0o700); err != nil {
 		return "", err
 	}
 	name := fmt.Sprintf("push-%d-%s.json", time.Now().UnixNano(), sanitizeName(job.SessionID))
@@ -78,7 +117,7 @@ func WritePush(home string, job PushJob) (string, error) {
 		return "", err
 	}
 	tmp := dest + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(tmp, append(b, '\n'), 0o600); err != nil {
 		return "", err
 	}
 	return dest, os.Rename(tmp, dest)
@@ -106,6 +145,9 @@ func ListPush(home string) ([]string, error) {
 func FlushPush(home string) (int, error) {
 	if HomeURL() == "" {
 		return 0, nil
+	}
+	if err := CheckHomeURL(); err != nil {
+		return 0, err
 	}
 	files, err := ListPush(home)
 	if err != nil {
@@ -149,6 +191,9 @@ func MaybeEnqueuePush(home string, req CatchUpRequest, body string, prev int64) 
 	if !HomeIsRemote() || strings.TrimSpace(body) == "" {
 		return
 	}
+	if err := CheckHomeURL(); err != nil {
+		return
+	}
 	_, _ = WritePush(home, PushJob{
 		Project:   req.Project,
 		Harness:   req.Harness,
@@ -179,7 +224,7 @@ func postAppend(job PushJob) error {
 	if tok := env.Token(); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := outboundClient(10 * time.Second)
 	res, err := client.Do(req)
 	if err != nil {
 		return err

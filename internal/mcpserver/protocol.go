@@ -13,6 +13,8 @@ import (
 
 const ProtocolVersion = "2025-03-26"
 
+const maxRPCBytes = 2 << 20
+
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
@@ -141,7 +143,7 @@ func (s *Server) HTTPHandler() http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		body, err := io.ReadAll(r.Body)
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxRPCBytes))
 		if err != nil || len(bytes.TrimSpace(body)) == 0 {
 			http.Error(w, "invalid JSON", http.StatusBadRequest)
 			return
@@ -226,6 +228,9 @@ func readContentLength(r *bufio.Reader) ([]byte, error) {
 	}
 	if n <= 0 {
 		return nil, fmt.Errorf("missing Content-Length")
+	}
+	if n > maxRPCBytes {
+		return nil, fmt.Errorf("Content-Length too large")
 	}
 	buf := make([]byte, n)
 	if _, err := io.ReadFull(r, buf); err != nil {

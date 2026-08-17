@@ -26,9 +26,9 @@ type AppendRequest struct {
 
 type AppendResult struct {
 	AcceptedThrough int64 `json:"accepted_through"`
-	Extracted       int  `json:"extracted"`
-	Conflict        bool `json:"conflict,omitempty"`
-	Noop            bool `json:"noop,omitempty"`
+	Extracted       int   `json:"extracted"`
+	Conflict        bool  `json:"conflict,omitempty"`
+	Noop            bool  `json:"noop,omitempty"`
 }
 
 func appendCursorKey(client, session string) string {
@@ -79,10 +79,10 @@ func Append(st *store.Store, req AppendRequest) (AppendResult, error) {
 
 	now := time.Now()
 	rawPath := st.LiveRawPath(req.Project, req.SessionID, now)
-	if err := os.MkdirAll(filepath.Dir(rawPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(rawPath), 0o700); err != nil {
 		return out, err
 	}
-	raw, err := os.OpenFile(rawPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	raw, err := os.OpenFile(rawPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return out, err
 	}

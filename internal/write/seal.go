@@ -36,7 +36,7 @@ func SealRaw(path string) (string, error) {
 	}
 	defer src.Close()
 	tmp := zst + ".tmp"
-	dst, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	dst, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", err
 	}
@@ -78,7 +78,12 @@ func SealRaw(path string) (string, error) {
 
 func ReadRaw(path string) ([]byte, error) {
 	if _, err := os.Stat(path); err == nil {
-		return os.ReadFile(path)
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		return io.ReadAll(io.LimitReader(f, maxCatchUpBytes))
 	}
 	zst := path
 	if !strings.HasSuffix(path, ".zst") {
@@ -94,5 +99,5 @@ func ReadRaw(path string) ([]byte, error) {
 		return nil, err
 	}
 	defer dec.Close()
-	return io.ReadAll(dec)
+	return io.ReadAll(io.LimitReader(dec, maxCatchUpBytes))
 }

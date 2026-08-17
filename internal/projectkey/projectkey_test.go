@@ -50,6 +50,12 @@ func TestNormalizeAndEncode(t *testing.T) {
 	if Normalize("a/b/c") != "b/c" {
 		t.Fatalf("last two: %q", Normalize("a/b/c"))
 	}
+	if Encode("..") != "unknown" || Encode(".") != "unknown" || Encode("") != "unknown" {
+		t.Fatalf("traversal: %q %q %q", Encode(".."), Encode("."), Encode(""))
+	}
+	if Encode("acme/api") != "acme__api" {
+		t.Fatal(Encode("acme/api"))
+	}
 }
 
 func TestFromWorkspaceGitOrigin(t *testing.T) {

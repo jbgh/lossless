@@ -69,8 +69,16 @@ func postCatchUp(base string, req CatchUpRequest, timeout time.Duration) error {
 	if err != nil {
 		return err
 	}
-	client := &http.Client{Timeout: timeout}
-	res, err := client.Post(base+"/v1/catch-up", "application/json", bytes.NewReader(body))
+	if err := CheckRemoteURL(base); err != nil {
+		return err
+	}
+	httpReq, err := http.NewRequest(http.MethodPost, strings.TrimRight(base, "/")+"/v1/catch-up", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	client := outboundClient(timeout)
+	res, err := client.Do(httpReq)
 	if err != nil {
 		return err
 	}

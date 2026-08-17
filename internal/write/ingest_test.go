@@ -39,3 +39,22 @@ func TestCatchUpRejectsNonJSONLPath(t *testing.T) {
 		t.Fatal("expected reject")
 	}
 }
+
+func TestCheckIngestFileRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "secret")
+	if err := os.WriteFile(target, []byte("root:x:0:0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "chat.jsonl")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkIngestFile(link); err == nil {
+		t.Fatal("expected symlink reject")
+	}
+	st := tmpStore(t)
+	if _, err := CatchUp(st, CatchUpRequest{JSONL: link, Project: "acme/api", SessionID: "x"}); err == nil {
+		t.Fatal("catch-up must refuse symlink")
+	}
+}

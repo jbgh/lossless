@@ -39,7 +39,7 @@ func WriteSpool(home string, job SpoolJob) (string, error) {
 	if job.CreatedAt == "" {
 		job.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
-	if err := os.MkdirAll(SpoolDir(home), 0o755); err != nil {
+	if err := os.MkdirAll(SpoolDir(home), 0o700); err != nil {
 		return "", err
 	}
 	name := fmt.Sprintf("%d-%s.json", time.Now().UnixNano(), sanitizeName(job.SessionID))
@@ -49,7 +49,7 @@ func WriteSpool(home string, job SpoolJob) (string, error) {
 		return "", err
 	}
 	tmp := dest + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(tmp, append(b, '\n'), 0o600); err != nil {
 		return "", err
 	}
 	if err := os.Rename(tmp, dest); err != nil {

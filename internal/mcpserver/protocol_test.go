@@ -222,3 +222,17 @@ func TestStdioAndContentLength(t *testing.T) {
 		t.Fatal(out.String())
 	}
 }
+
+func TestContentLengthTooLarge(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	s := New(Local{Store: st})
+	framed := "Content-Length: 999999999\r\n\r\n{}"
+	var out bytes.Buffer
+	if err := s.ServeStdio(strings.NewReader(framed), &out); err == nil {
+		t.Fatal("expected Content-Length reject")
+	}
+}

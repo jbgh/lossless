@@ -104,10 +104,10 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 
 	now := time.Now()
 	rawPath := st.LiveRawPath(project, session, now)
-	if err := os.MkdirAll(filepath.Dir(rawPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(rawPath), 0o700); err != nil {
 		return out, err
 	}
-	raw, err := os.OpenFile(rawPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	raw, err := os.OpenFile(rawPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return out, err
 	}
@@ -258,7 +258,7 @@ func writeVirtualJSONL(st *store.Store, session string, msgs []map[string]any) (
 		session = "messages"
 	}
 	dir := filepath.Join(st.Root, "spool")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
 	dest := filepath.Join(dir, "virtual-"+sanitizeName(session)+".jsonl")
@@ -275,7 +275,7 @@ func writeVirtualJSONL(st *store.Store, session string, msgs []map[string]any) (
 		b.Write(line)
 		b.WriteByte('\n')
 	}
-	if err := os.WriteFile(dest, []byte(b.String()), 0o644); err != nil {
+	if err := os.WriteFile(dest, []byte(b.String()), 0o600); err != nil {
 		return "", err
 	}
 	return dest, nil
@@ -336,13 +336,13 @@ func Remember(st *store.Store, rec claim.Record) (CatchUpResult, error) {
 	}
 
 	rawPath := st.ManualRawPath(time.Now())
-	if err := os.MkdirAll(filepath.Dir(rawPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(rawPath), 0o700); err != nil {
 		return out, err
 	}
 	line, _ := json.Marshal(map[string]any{
 		"type": "remember", "role": "user", "text": rec.Text, "claim_type": rec.Type,
 	})
-	f, err := os.OpenFile(rawPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(rawPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return out, err
 	}

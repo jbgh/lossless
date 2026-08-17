@@ -32,15 +32,7 @@ func checkIngestFile(path string) error {
 		return err
 	}
 	if fi.Mode()&os.ModeSymlink != 0 {
-		target, err := filepath.EvalSymlinks(abs)
-		if err != nil {
-			return err
-		}
-		fi, err = os.Stat(target)
-		if err != nil {
-			return err
-		}
-		abs = target
+		return fmt.Errorf("ingest path must not be a symlink")
 	}
 	if !fi.Mode().IsRegular() {
 		return fmt.Errorf("ingest path is not a regular file")
@@ -48,7 +40,6 @@ func checkIngestFile(path string) error {
 	if fi.Size() > maxCatchUpBytes {
 		return fmt.Errorf("ingest file too large (%d bytes)", fi.Size())
 	}
-	_ = abs
 	return nil
 }
 
