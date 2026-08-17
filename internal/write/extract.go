@@ -54,6 +54,9 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 				continue
 			}
 			typ := classify(sent, msg)
+			if typ == "failed" && (statusFailed(sent) || failedAsObject(sent) || !groundedFailed(sent, paths)) {
+				continue
+			}
 			if typ == "" {
 				continue
 			}
@@ -167,7 +170,7 @@ func skipSentence(s string) bool {
 	if strings.HasPrefix(low, "next i ") || strings.HasPrefix(low, "next i'") || strings.HasPrefix(low, "next i’ll") || strings.HasPrefix(low, "next i'll") {
 		return true
 	}
-	if metaFailedTalk(t) || sessionOpConstraint(t) || agentPromptConstraint(t) || planningDecision(t) {
+	if metaFailedTalk(t) || sessionOpConstraint(t) || agentPromptConstraint(t) || planningDecision(t) || statusFailed(t) || failedAsObject(t) {
 		return true
 	}
 	if strings.HasSuffix(t, "(") || strings.HasSuffix(t, "`." ) || strings.HasSuffix(t, "do not") {
@@ -182,6 +185,7 @@ func planningDecision(s string) bool {
 		"i'll check", "i’ll check", "i will check", "i'll look", "i’ll look",
 		"i'll read", "i’ll read", "i'll audit", "i’ll audit",
 		"i'll fix", "i’ll fix", "i'll start", "i’ll start", "i'll add", "i’ll add",
+		"i'll inspect", "i’ll inspect",
 	} {
 		if strings.Contains(low, p) {
 			return true
@@ -207,6 +211,72 @@ func agentPromptConstraint(s string) bool {
 	low := strings.ToLower(s)
 	return strings.Contains(low, "why don't you") || strings.Contains(low, "why dont you") ||
 		strings.HasPrefix(low, "can you ") || strings.HasPrefix(low, "could you ")
+}
+
+func statusFailed(s string) bool {
+	low := strings.ToLower(s)
+	for _, n := range []string{
+		"ci unit-test", "unit-test failure", "unit test failure",
+		"background notification", "checking #", "pr #", "pr-size-check",
+		"which of those", "re-pushing", "exit 0",
+	} {
+		if strings.Contains(low, n) {
+			return true
+		}
+	}
+	return false
+}
+
+func failedAsObject(s string) bool {
+	low := strings.ToLower(s)
+	return strings.Contains(low, "failed items") || strings.Contains(low, "re-queues failed") ||
+		strings.Contains(low, "pre-failed skip") || strings.Contains(low, "failure reason") ||
+		strings.Contains(low, "retryable failure")
+}
+
+func groundedFailed(s string, paths []string) bool {
+	if len(paths) > 0 || pathRE.FindString(s) != "" {
+		return true
+	}
+	if statusFailed(s) || failedAsObject(s) {
+		return false
+	}
+	if strings.Contains(s, "`") || strings.Contains(s, "**") {
+		return true
+	}
+	fields := strings.Fields(s)
+	for i, w := range fields {
+		w = strings.Trim(w, ".,;:()[]\"'")
+		if w == "" {
+			continue
+		}
+		if i == 0 && sentenceStarter[w] {
+			continue
+		}
+		if len(w) >= 3 && w[0] >= 'A' && w[0] <= 'Z' && !allUpper(w) {
+			return true
+		}
+		if strings.Contains(w, "-") && w[0] >= 'A' && w[0] <= 'Z' {
+			return true
+		}
+	}
+	return false
+}
+
+var sentenceStarter = map[string]bool{
+	"The": true, "This": true, "That": true, "These": true, "Those": true,
+	"So": true, "If": true, "We": true, "On": true, "A": true, "An": true,
+	"It": true, "I": true, "After": true, "Before": true, "When": true,
+	"While": true, "Then": true, "Also": true, "Just": true, "Checking": true,
+}
+
+func allUpper(s string) bool {
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' {
+			return false
+		}
+	}
+	return true
 }
 
 func isQuestion(s string) bool {

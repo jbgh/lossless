@@ -291,8 +291,11 @@ func extractNoise(rec claim.Record) bool {
 	if strings.HasPrefix(t, "**") && !strings.Contains(t, ".") {
 		return true
 	}
-	if (strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ")) && (strings.Contains(t, "**") || len(t) < 80) {
-		return true
+	if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
+		rest := strings.TrimSpace(t[2:])
+		if strings.Contains(t, "**") || strings.HasPrefix(rest, "`") || len(t) < 80 {
+			return true
+		}
 	}
 	low := strings.ToLower(t)
 	if strings.Contains(low, "failed-overlap") || strings.Contains(low, "classified as") || strings.Contains(low, "failure mode") {
@@ -307,13 +310,42 @@ func extractNoise(rec claim.Record) bool {
 	if rec.Type == "constraint" && (sessionOpConstraint(low) || agentPromptConstraint(low)) {
 		return true
 	}
-	if rec.Type == "failed" && len(rec.Paths) == 0 && failedOnlyInTicks(t) {
+	if rec.Type == "failed" && (statusFailed(low) || failedAsObject(low) || (len(rec.Paths) == 0 && failedOnlyInTicks(t))) {
+		return true
+	}
+	if rec.Type == "state" && processState(low) {
 		return true
 	}
 	if truncatedClaim(t) {
 		return true
 	}
 	return false
+}
+
+func statusFailed(low string) bool {
+	for _, n := range []string{
+		"ci unit-test", "unit-test failure", "unit test failure",
+		"background notification", "checking #", "pr #", "pr-size-check",
+		"which of those", "re-pushing", "exit 0",
+	} {
+		if strings.Contains(low, n) {
+			return true
+		}
+	}
+	return false
+}
+
+func failedAsObject(low string) bool {
+	return strings.Contains(low, "failed items") || strings.Contains(low, "re-queues failed") ||
+		strings.Contains(low, "pre-failed skip") || strings.Contains(low, "failure reason") ||
+		strings.Contains(low, "retryable failure")
+}
+
+func processState(low string) bool {
+	return strings.Contains(low, "in this session") || strings.Contains(low, "the next stop") ||
+		strings.Contains(low, "next test that matters") || strings.Contains(low, "not another fixture") ||
+		strings.Contains(low, "that row is always there") || strings.Contains(low, "i'll inspect") ||
+		strings.Contains(low, "i’ll inspect")
 }
 
 func truncatedClaim(t string) bool {
@@ -332,6 +364,7 @@ func planningDecision(low string) bool {
 		"i'll check", "i’ll check", "i will check", "i'll look", "i’ll look",
 		"i'll read", "i’ll read", "i'll audit", "i’ll audit",
 		"i'll fix", "i’ll fix", "i'll start", "i’ll start", "i'll add", "i’ll add",
+		"i'll inspect", "i’ll inspect",
 	} {
 		if strings.Contains(low, p) {
 			return true

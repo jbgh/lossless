@@ -129,5 +129,11 @@ func liveNoise(h retrieve.Hit) string {
 	if strings.Contains(low, "failed-overlap") || strings.Contains(low, "classified as") {
 		return "meta"
 	}
+	if h.Type == "failed" && (strings.Contains(low, "ci unit-test") || strings.Contains(low, "unit-test failure") || strings.Contains(low, "checking #") || strings.Contains(low, "which of those") || strings.Contains(low, "background notification") || strings.Contains(low, "re-pushing")) {
+		return "status-failed"
+	}
+	if h.Type == "state" && (strings.Contains(low, "next test that matters") || strings.Contains(low, "in this session") || strings.Contains(low, "that row is always there") || strings.Contains(low, "i'll inspect") || strings.Contains(low, "i’ll inspect")) {
+		return "process-state"
+	}
 	return ""
 }

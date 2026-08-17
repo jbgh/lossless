@@ -125,6 +125,18 @@ func TestExtractNoiseAndJobOverlap(t *testing.T) {
 	if extractNoise(claim.Record{Type: "decision", Text: "I'll cold-start at game size × 2 instead of resizing mid-session."}) {
 		t.Fatal("real I'll decision")
 	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "That background notification is just the local Android MediaUrlsTest run finishing (exit 0) while we fixed the CI unit-test failure."}) {
+		t.Fatal("ci status")
+	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "Checking #3081 failure and re-pushing both.", Paths: []string{"git.memora.pics/memora/memora.git"}}) {
+		t.Fatal("checking #")
+	}
+	if !extractNoise(claim.Record{Type: "state", Text: "So the next test that matters is not another fixture."}) {
+		t.Fatal("process state")
+	}
+	if extractNoise(claim.Record{Type: "failed", Text: "**Upload Complete** sheet: 7 of 10 uploaded, 3 failed.", Paths: []string{}}) {
+		t.Fatal("real upload failed")
+	}
 	qtoks := []string{"retrieve", "extract", "failed", "noise", "pack"}
 	if contentOverlap(qtoks, jobOverlapText("Raising to 8 would make recall look better — extract noise classified as `failed`.")) >= OverlapStrongMin {
 		t.Fatal("meta should not be strong job overlap")

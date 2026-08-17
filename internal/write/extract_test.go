@@ -106,6 +106,38 @@ func TestExtractErrorHandlingIsNotFailed(t *testing.T) {
 	}
 }
 
+func TestExtractSkipsStatusFaileds(t *testing.T) {
+	got := Extract([]Message{
+		{Role: "assistant", Offset: 1, Text: "That background notification is just the local Android MediaUrlsTest run finishing (exit 0) from earlier while we fixed the CI unit-test failure."},
+		{Role: "assistant", Offset: 2, Text: "Checking #3081 failure and re-pushing both."},
+		{Role: "assistant", Offset: 3, Text: "If anything still looks off on device after pull-to-refresh / reinstall, say which of those four failed."},
+		{Role: "assistant", Offset: 4, Text: "So the Retry button is live: it re-queues failed items and they land on the server/grid."},
+		{Role: "assistant", Offset: 5, Text: "Who-reacted failed in preview."},
+		{Role: "assistant", Offset: 6, Text: "**Upload Complete** sheet: **7 of 10 uploaded, 3 failed**, each with **Could not load this photo**, and a Retry that does nothing."},
+		{Role: "assistant", Offset: 7, Text: "Redis token bucket failed in src/middleware/auth.ts staging."},
+	}, ExtractOpts{ProjectKey: "memora/memora", SessionID: "s"})
+	for _, r := range got {
+		if strings.Contains(r.Text, "background notification") || strings.Contains(r.Text, "Checking #") || strings.Contains(r.Text, "which of those") || strings.Contains(r.Text, "re-queues failed") {
+			t.Fatalf("status failed extracted: %+v", r)
+		}
+	}
+	var who, upload, redis bool
+	for _, r := range got {
+		if r.Type == "failed" && strings.Contains(r.Text, "Who-reacted") {
+			who = true
+		}
+		if r.Type == "failed" && strings.Contains(r.Text, "Upload Complete") {
+			upload = true
+		}
+		if r.Type == "failed" && strings.Contains(r.Text, "Redis") {
+			redis = true
+		}
+	}
+	if !who || !upload || !redis {
+		t.Fatalf("real faileds missed who=%v upload=%v redis=%v %+v", who, upload, redis, got)
+	}
+}
+
 func TestExtractSkipsLiveSessionNoise(t *testing.T) {
 	got := Extract([]Message{
 		{Role: "assistant", Offset: 1, Text: "## Investigation: why those uploads failed"},

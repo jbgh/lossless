@@ -60,6 +60,10 @@ func TestFilterPaths(t *testing.T) {
 	if len(got) != 1 || got[0] != "pkg/foo.go" {
 		t.Fatalf("traversal: %v", got)
 	}
+	got = FilterPaths([]string{"git.memora.pics/memora/memora.git", "https://github.com/acme/api.git", "internal/write/catchup.go"})
+	if len(got) != 1 || got[0] != "internal/write/catchup.go" {
+		t.Fatalf("remote: %v", got)
+	}
 }
 
 func TestLineRedacts(t *testing.T) {

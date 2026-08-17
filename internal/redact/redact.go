@@ -50,7 +50,7 @@ func ShouldDropClaim(text string, paths []string) bool {
 func FilterPaths(paths []string) []string {
 	var out []string
 	for _, p := range paths {
-		if traversalPath(p) || sensitivePath.MatchString(p) {
+		if traversalPath(p) || remotePath(p) || sensitivePath.MatchString(p) {
 			continue
 		}
 		out = append(out, p)
@@ -76,6 +76,15 @@ func traversalPath(p string) bool {
 		}
 	}
 	return false
+}
+
+func remotePath(p string) bool {
+	n := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(p), "\\", "/"))
+	if strings.Contains(n, "://") || strings.HasSuffix(n, ".git") {
+		return true
+	}
+	host := strings.Split(n, "/")[0]
+	return strings.Contains(host, ".")
 }
 
 // Line returns the line to append to raw. Secret lines become {"_redacted":true}.
