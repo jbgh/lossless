@@ -35,19 +35,11 @@ func (s *Store) excerptPath(month string) string {
 
 func (s *Store) openExcerpt(month string) (*sql.DB, error) {
 	p := s.excerptPath(month)
-	db, err := sql.Open("sqlite", p)
+	db, err := sql.Open("sqlite", sqliteURI(p))
 	if err != nil {
 		return nil, err
 	}
 	_ = os.Chmod(p, 0o600)
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if _, err := db.Exec(`PRAGMA busy_timeout=5000`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
 	_, err = db.Exec(`
 CREATE TABLE IF NOT EXISTS excerpts (
   id TEXT PRIMARY KEY,

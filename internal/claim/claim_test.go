@@ -21,6 +21,15 @@ func TestNewIDUniqueAndShaped(t *testing.T) {
 	}
 }
 
+func TestFixtureSession(t *testing.T) {
+	if !FixtureSession("grok-auth") || !FixtureSession("claude-jwt") || !FixtureSession("sess1") {
+		t.Fatal("bench sessions")
+	}
+	if FixtureSession("01a003db-f4a6-7f43-a694-082428bbff32") || FixtureSession("eval") {
+		t.Fatal("live sessions")
+	}
+}
+
 func TestHashNormalizesPunctuationAndCase(t *testing.T) {
 	a := Hash("acme/api", "decision", "Use JOSE, not jsonwebtoken!")
 	b := Hash("acme/api", "decision", "use jose not jsonwebtoken")

@@ -166,9 +166,6 @@ func TestAskDedupSameHashKeepsNewest(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.DB.Exec(`UPDATE records SET status = 'active', claim_hash = ? WHERE id = 'OLDH'`, h); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := st.DB.Exec(`INSERT INTO records_fts(body, record_id) VALUES(?, 'OLDH')`, text); err != nil {
 		t.Fatal(err)
 	}
@@ -301,7 +298,7 @@ func TestAskKeepsOlderHashWhenNewerAlreadySeen(t *testing.T) {
 		ID: "NEWER", Type: "decision", Text: text, CreatedAt: "2026-08-10T00:00:00Z",
 	})
 	if _, err := st.DB.Exec(`INSERT INTO records(`+`id, type, project_key, workspace_root, harness, session_id, created_at, text, why, paths_json, symbols_json, path_mtime_json, status, supersedes, source, claim_hash`+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		"OLDER", "decision", "acme/api", "", "grok", "eval", "2026-07-01T00:00:00Z", text, "", "[]", `["jose"]`, "{}", "active", "", "import", h,
+		"OLDER", "decision", "acme/api", "", "grok", "eval", "2026-07-01T00:00:00Z", text, "", "[]", `["jose"]`, "{}", "superseded", "", "import", h,
 	); err != nil {
 		t.Fatal(err)
 	}

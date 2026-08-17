@@ -486,6 +486,41 @@ func TestListenAndServe(t *testing.T) {
 	t.Fatalf("never healthy: %v", last)
 }
 
+func TestListenAlreadyServingIsOK(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	errCh := make(chan error, 1)
+	go func() { errCh <- Listen(Options{Addr: addr}, st) }()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		res, err := http.Get("http://" + addr + "/health")
+		if err == nil {
+			res.Body.Close()
+			if res.StatusCode == 200 {
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := Listen(Options{Addr: addr}, st); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-errCh:
+		t.Fatal(err)
+	default:
+	}
+}
+
 func TestAppendHTTP(t *testing.T) {
 	st, err := store.Open(t.TempDir())
 	if err != nil {

@@ -17,7 +17,7 @@ var (
 	constraintRE = regexp.MustCompile(`(?i)\b(always|never|don't|do not|must|we use|we don't)\b`)
 	hedgeRE      = regexp.MustCompile(`(?i)\b(i don't think|i do not think|not sure|maybe|probably|might|should we|could we|can we|do we)\b`)
 	questionRE   = regexp.MustCompile(`(?i)^\s*(should|could|can|may|do|did|is|are|will)\b`)
-	stateRE      = regexp.MustCompile(`(?i)\b(working on|current plan|next(?: step)?|now implementing)\b`)
+	stateRE      = regexp.MustCompile(`(?i)\b(working on|current plan|next step|now implementing)\b`)
 	decisionRE   = regexp.MustCompile(`(?i)\b(decided|going with|we'll use|we will use|picked \w+ over|chose|instead of)\b`)
 )
 
@@ -50,6 +50,9 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 		}
 		paths := redact.FilterPaths(uniq(append(pathRE.FindAllString(msg.Text, -1), nearby(msg, usable)...)))
 		for _, sent := range splitSentences(msg.Text) {
+			if skipSentence(sent) {
+				continue
+			}
 			typ := classify(sent, msg)
 			if typ == "" {
 				continue
@@ -106,6 +109,29 @@ func classify(sentence string, msg Message) string {
 		return "state"
 	}
 	return ""
+}
+
+func skipSentence(s string) bool {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return true
+	}
+	if strings.HasPrefix(t, "#") || strings.HasPrefix(t, ">") {
+		return true
+	}
+	if strings.HasPrefix(t, "**") && strings.HasSuffix(t, "**") && !strings.Contains(t, ".") {
+		return true
+	}
+	if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
+		if strings.Contains(t, "**") || strings.HasPrefix(strings.TrimSpace(t[2:]), "`") || strings.HasPrefix(strings.TrimSpace(t[2:]), ">") {
+			return true
+		}
+	}
+	low := strings.ToLower(t)
+	if strings.Contains(low, "fixture") || strings.Contains(low, "quoted the") {
+		return true
+	}
+	return false
 }
 
 func isQuestion(s string) bool {

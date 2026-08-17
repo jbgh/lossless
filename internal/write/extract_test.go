@@ -106,6 +106,24 @@ func TestExtractErrorHandlingIsNotFailed(t *testing.T) {
 	}
 }
 
+func TestExtractSkipsHeadingsAndQuotedFixtures(t *testing.T) {
+	got := Extract([]Message{
+		{Role: "assistant", Offset: 1, Text: "**What you do next**"},
+		{Role: "assistant", Offset: 2, Text: "- Redis limiter **failed** (twice) + warning: do not repeat"},
+		{Role: "assistant", Offset: 3, Text: "> Redis token bucket failed in staging."},
+		{Role: "assistant", Offset: 4, Text: "A markdown heading became a state, and quoting the Redis fixture became a failed."},
+		{Role: "assistant", Offset: 5, Text: "Next I will check the store after compact."},
+	}, ExtractOpts{ProjectKey: "jbgh/lossless", SessionID: "s"})
+	for _, r := range got {
+		if strings.Contains(r.Text, "What you do next") || strings.Contains(r.Text, "Redis limiter") || strings.Contains(r.Text, "quoting the") {
+			t.Fatalf("noise extracted: %+v", r)
+		}
+		if r.Type == "state" && strings.Contains(r.Text, "Next I will") {
+			t.Fatalf("bare next became state: %+v", r)
+		}
+	}
+}
+
 func TestExtractHedgingIsNotConstraint(t *testing.T) {
 	got := Extract([]Message{{
 		Role: "user", Offset: 1,

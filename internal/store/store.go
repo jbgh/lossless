@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"lossless/internal/claim"
@@ -21,6 +23,7 @@ type Store struct {
 	Root     string
 	DB       *sql.DB
 	Embedder embed.Embedder
+	writeMu  sync.Mutex
 }
 
 func Open(root string) (*Store, error) {
@@ -33,18 +36,12 @@ func Open(root string) (*Store, error) {
 		}
 	}
 	dbPath := filepath.Join(root, "index", "claims.sqlite")
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", sqliteURI(dbPath))
 	if err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if _, err := db.Exec(`PRAGMA busy_timeout=5000`); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
+	db.SetMaxOpenConns(4)
+	db.SetMaxIdleConns(2)
 	s := &Store{Root: root, DB: db}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
@@ -55,6 +52,15 @@ func Open(root string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.DB.Close() }
+
+func sqliteURI(path string) string {
+	q := make(url.Values)
+	q.Add("_pragma", "busy_timeout(10000)")
+	q.Add("_pragma", "journal_mode(WAL)")
+	q.Add("_pragma", "synchronous(NORMAL)")
+	u := url.URL{Scheme: "file", Path: path, RawQuery: q.Encode()}
+	return u.String()
+}
 
 func (s *Store) migrate() error {
 	_, err := s.DB.Exec(`
@@ -135,7 +141,40 @@ CREATE INDEX IF NOT EXISTS idx_actions_sess ON actions(project_key, session_id, 
 `); err != nil {
 		return err
 	}
+	if err := s.collapseDuplicateActive(); err != nil {
+		return err
+	}
+	if _, err := s.DB.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_hash_active ON records(claim_hash) WHERE status = 'active'`); err != nil {
+		return err
+	}
 	return s.backfillIndex()
+}
+
+func (s *Store) collapseDuplicateActive() error {
+	rows, err := s.DB.Query(`SELECT claim_hash FROM records WHERE status = 'active' GROUP BY claim_hash HAVING COUNT(*) > 1`)
+	if err != nil {
+		return err
+	}
+	var hashes []string
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		hashes = append(hashes, h)
+	}
+	_ = rows.Close()
+	for _, h := range hashes {
+		var keep string
+		if err := s.DB.QueryRow(`SELECT id FROM records WHERE claim_hash = ? AND status = 'active' ORDER BY created_at DESC, id DESC LIMIT 1`, h).Scan(&keep); err != nil {
+			return err
+		}
+		if _, err := s.DB.Exec(`UPDATE records SET status = 'superseded' WHERE claim_hash = ? AND status = 'active' AND id != ?`, h, keep); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) Cursor(path string) int64 {
@@ -175,32 +214,80 @@ func (s *Store) WriteClaim(rec claim.Record) (superseded string, err error) {
 	if rec.ClaimHash == "" {
 		rec.ClaimHash = claim.Hash(rec.ProjectKey, rec.Type, rec.Text)
 	}
-	var existing string
-	_ = s.DB.QueryRow(
-		`SELECT id FROM records WHERE claim_hash = ? AND status = 'active' AND id != ?`,
-		rec.ClaimHash, rec.ID,
-	).Scan(&existing)
-	if existing != "" {
-		if _, err := s.DB.Exec(`UPDATE records SET status = 'superseded' WHERE id = ?`, existing); err != nil {
-			return "", err
-		}
-		rec.Supersedes = existing
-		if err := s.rewriteStatus(existing, "superseded"); err != nil {
-			return "", err
-		}
-		_ = s.DeleteVector(existing)
-		superseded = existing
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	err = withBusyRetry(func() error {
+		var e error
+		superseded, e = s.writeClaimOnce(rec)
+		return e
+	})
+	if err != nil {
+		return "", err
+	}
+	_ = s.reindex(rec)
+	if superseded != "" {
+		rec.Supersedes = superseded
+		_ = s.rewriteStatus(superseded, "superseded")
+		_ = s.DeleteVector(superseded)
 	}
 	if err := s.writeFile(rec); err != nil {
-		return "", err
-	}
-	if err := s.upsertRow(rec); err != nil {
-		return "", err
+		return superseded, err
 	}
 	if rec.Status == "active" {
 		s.embedClaim(rec.ID, rec.ProjectKey, rec.Text, rec.Symbols)
 	} else {
 		_ = s.DeleteVector(rec.ID)
+	}
+	return superseded, nil
+}
+
+func isBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "SQLITE_BUSY") || strings.Contains(s, "database is locked")
+}
+
+func withBusyRetry(fn func() error) error {
+	var err error
+	for i := 0; i < 32; i++ {
+		err = fn()
+		if err == nil || !isBusy(err) {
+			return err
+		}
+		time.Sleep(time.Duration(8+i*4) * time.Millisecond)
+	}
+	return err
+}
+
+func (s *Store) writeClaimOnce(rec claim.Record) (superseded string, err error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return "", err
+	}
+	var existing string
+	_ = tx.QueryRow(
+		`SELECT id FROM records WHERE claim_hash = ? AND status = 'active' AND id != ?`,
+		rec.ClaimHash, rec.ID,
+	).Scan(&existing)
+	if existing != "" {
+		if _, err := tx.Exec(`UPDATE records SET status = 'superseded' WHERE id = ?`, existing); err != nil {
+			_ = tx.Rollback()
+			return "", err
+		}
+		rec.Supersedes = existing
+		superseded = existing
+	}
+	if err := s.upsertRowTx(tx, rec); err != nil {
+		_ = tx.Rollback()
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") && strings.Contains(err.Error(), "claim_hash") {
+			return "", nil
+		}
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
 	}
 	return superseded, nil
 }
@@ -214,6 +301,27 @@ func (s *Store) Get(id string) (claim.Record, bool) {
 		return claim.Record{}, false
 	}
 	return rec, true
+}
+
+func (s *Store) ProjectHasLiveWork(project string) bool {
+	if s == nil || s.DB == nil {
+		return false
+	}
+	rows, err := s.DB.Query(`SELECT DISTINCT session_id FROM records WHERE project_key = ? AND status = 'active'`, projectkey.Normalize(project))
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return false
+		}
+		if !claim.FixtureSession(id) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) ListActive(project string) ([]claim.Record, error) {
@@ -297,7 +405,22 @@ func (s *Store) rewriteStatus(id, status string) error {
 	return s.upsertRow(rec)
 }
 
+type dbExec interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
 func (s *Store) upsertRow(rec claim.Record) error {
+	if err := upsertRecord(s.DB, rec); err != nil {
+		return err
+	}
+	return s.reindex(rec)
+}
+
+func (s *Store) upsertRowTx(tx *sql.Tx, rec claim.Record) error {
+	return upsertRecord(tx, rec)
+}
+
+func upsertRecord(e dbExec, rec claim.Record) error {
 	pj, _ := json.Marshal(rec.Paths)
 	sj, _ := json.Marshal(rec.Symbols)
 	mj, _ := json.Marshal(rec.PathMtime)
@@ -314,7 +437,7 @@ func (s *Store) upsertRow(rec claim.Record) error {
 	if rec.TranscriptRef != nil {
 		ref, _ = json.Marshal(rec.TranscriptRef)
 	}
-	_, err := s.DB.Exec(`INSERT INTO records(
+	_, err := e.Exec(`INSERT INTO records(
 		id, type, project_key, workspace_root, harness, session_id, created_at, text, why,
 		paths_json, symbols_json, path_mtime_json, status, supersedes, source, claim_hash, transcript_ref_json
 	) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
@@ -324,10 +447,7 @@ func (s *Store) upsertRow(rec claim.Record) error {
 		path_mtime_json=excluded.path_mtime_json, transcript_ref_json=excluded.transcript_ref_json`,
 		rec.ID, rec.Type, rec.ProjectKey, rec.WorkspaceRoot, rec.Harness, rec.SessionID, rec.CreatedAt,
 		rec.Text, rec.Why, string(pj), string(sj), string(mj), rec.Status, rec.Supersedes, rec.Source, rec.ClaimHash, string(ref))
-	if err != nil {
-		return err
-	}
-	return s.reindex(rec)
+	return err
 }
 
 func (s *Store) scan(q string, args ...any) (claim.Record, error) {

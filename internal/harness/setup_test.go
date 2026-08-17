@@ -146,6 +146,9 @@ func TestInstallUserServiceWritesUnit(t *testing.T) {
 	if !strings.Contains(s, "serve") || !strings.Contains(s, data) {
 		t.Fatal(s)
 	}
+	if runtime.GOOS == "darwin" && !strings.Contains(s, "SuccessfulExit") {
+		t.Fatal("launchd must not restart a clean exit")
+	}
 	st, _ := os.Stat(p)
 	if st.Mode().Perm() != 0o600 {
 		t.Fatalf("mode %v", st.Mode().Perm())

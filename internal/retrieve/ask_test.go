@@ -103,6 +103,32 @@ func textsOf(out Response) string {
 	return b.String()
 }
 
+func TestAskDropsFixtureSessions(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "FIXJOSE", Type: "decision", SessionID: "grok-auth", Source: "import",
+		Text: "We decided to use jose, not jsonwebtoken, for Edge.",
+		CreatedAt: "2026-08-01T00:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "REALSKILL", Type: "decision", SessionID: "01a003db-f4a6-7f43-a694-082428bbff32", Source: "remember",
+		Text: "Setup writes the lossless skill into every harness native dir.",
+		CreatedAt: "2026-08-17T04:54:39Z",
+	})
+	out := askAt(t, st, Request{
+		Project:  "acme/api",
+		Question: "what did we decide about jose and the skill",
+		Goal:     "install the skill",
+	})
+	got := textsOf(out)
+	if strings.Contains(got, "jose") {
+		t.Fatalf("fixture won ask: %+v", out)
+	}
+	if !strings.Contains(got, "skill") {
+		t.Fatalf("real decision missing: %+v", out)
+	}
+}
+
 func TestRateLimitReturnsFailedAndWarning(t *testing.T) {
 	st := seed(t)
 	out := askAt(t, st, Request{

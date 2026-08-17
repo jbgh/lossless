@@ -77,9 +77,13 @@ func (e Engine) Ask(req Request) (Response, error) {
 	}
 	var cand []scored
 	seenHash := map[string]int{} // claim_hash -> index of newest
+	dropFix := e.Store != nil && e.Store.ProjectHasLiveWork(q.ProjectKey)
 	for _, id := range ids {
 		rec, ok := recs[id]
 		if !ok || rec.Status != "active" {
+			continue
+		}
+		if dropFix && claim.FixtureSession(rec.SessionID) {
 			continue
 		}
 		if prev, ok := seenHash[rec.ClaimHash]; ok {

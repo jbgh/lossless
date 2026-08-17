@@ -57,12 +57,6 @@ func Append(st *store.Store, req AppendRequest) (AppendResult, error) {
 		req.Source = "append"
 	}
 	key := appendCursorKey(req.Client, req.SessionID)
-	current := st.Cursor(key)
-	out.AcceptedThrough = current
-	if req.PrevOff != current {
-		out.Conflict = true
-		return out, nil
-	}
 	body := req.Body
 	if !strings.HasSuffix(string(body), "\n") {
 		if i := strings.LastIndex(string(body), "\n"); i >= 0 {
@@ -89,6 +83,14 @@ func Append(st *store.Store, req AppendRequest) (AppendResult, error) {
 	if err := syscall.Flock(int(raw.Fd()), syscall.LOCK_EX); err != nil {
 		_ = raw.Close()
 		return out, err
+	}
+	current := st.Cursor(key)
+	out.AcceptedThrough = current
+	if req.PrevOff != current {
+		_ = syscall.Flock(int(raw.Fd()), syscall.LOCK_UN)
+		_ = raw.Close()
+		out.Conflict = true
+		return out, nil
 	}
 	var clean strings.Builder
 	for _, line := range strings.Split(strings.TrimSuffix(string(body), "\n"), "\n") {

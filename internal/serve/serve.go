@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"context"
 
@@ -240,7 +241,31 @@ func Listen(opts Options, st *store.Store) error {
 		defer cancel()
 		go func() { _ = watch.Run(ctx, st, wopts) }()
 	}
-	return http.ListenAndServe(addr, Handler(st, opts.Token))
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		if alreadyServing(addr) {
+			return nil
+		}
+		return err
+	}
+	return http.Serve(ln, Handler(st, opts.Token))
+}
+
+func alreadyServing(addr string) bool {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	client := &http.Client{Timeout: 300 * time.Millisecond}
+	res, err := client.Get("http://" + net.JoinHostPort(host, port) + "/health")
+	if err != nil {
+		return false
+	}
+	defer res.Body.Close()
+	return res.StatusCode == http.StatusOK
 }
 
 func withBearer(next http.Handler, token string) http.Handler {

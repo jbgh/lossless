@@ -66,6 +66,12 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 		session = strings.TrimSuffix(filepath.Base(req.JSONL), ".jsonl")
 	}
 
+	unlock, err := lockSession(st, project, session)
+	if err != nil {
+		return out, err
+	}
+	defer unlock()
+
 	if err := checkIngestFile(req.JSONL); err != nil {
 		return out, err
 	}
@@ -129,7 +135,7 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 		_ = raw.Close()
 		return out, err
 	}
-	unlock := func() {
+	unlockRaw := func() {
 		_ = syscall.Flock(int(raw.Fd()), syscall.LOCK_UN)
 		_ = raw.Close()
 	}
@@ -142,7 +148,7 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 			rest = rest[:i+1]
 		} else {
 			// wait for a full line
-			unlock()
+			unlockRaw()
 			return out, nil
 		}
 	}
@@ -151,14 +157,14 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 	}
 	written, err := raw.WriteString(clean.String())
 	if err != nil {
-		unlock()
+		unlockRaw()
 		return out, err
 	}
 	if err := raw.Sync(); err != nil {
-		unlock()
+		unlockRaw()
 		return out, err
 	}
-	unlock()
+	unlockRaw()
 
 	consumed := int64(len(rest))
 	if err := st.SetCursor(req.JSONL, srcOff+consumed); err != nil {
@@ -209,6 +215,26 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 		WorkspaceRoot: req.WorkspaceRoot, Source: req.Source,
 	}, clean.String())
 	return out, nil
+}
+
+func lockSession(st *store.Store, project, session string) (func(), error) {
+	live := st.LiveRawPath(project, session, time.Now())
+	if err := os.MkdirAll(filepath.Dir(live), 0o700); err != nil {
+		return nil, err
+	}
+	lp := live + ".lock"
+	f, err := os.OpenFile(lp, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return func() {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
+	}, nil
 }
 
 func enqueueHomePush(st *store.Store, req CatchUpRequest, body string) {

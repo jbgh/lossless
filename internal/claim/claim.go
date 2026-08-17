@@ -48,6 +48,20 @@ func Hash(projectKey, typ, text string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// FixtureSession is a bench/eval tape imported into a live project.
+// Those records stay in raw; they must not win ask.
+func FixtureSession(id string) bool {
+	switch strings.TrimSpace(id) {
+	case "grok-auth", "claude-jwt", "grok-billing", "grok-css-noise",
+		"grok-error-handling", "grok-hedge", "grok-long-tail",
+		"grok-postgres", "grok-redis-retry", "grok-secret",
+		"grok-two-fails", "sess1", "csess":
+		return true
+	default:
+		return false
+	}
+}
+
 // Tokens returns unicode word tokens, lowercased, length > 1.
 func Tokens(s string) []string {
 	var out []string
