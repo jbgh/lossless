@@ -21,11 +21,9 @@ The session log is the memory. Compact is lossy. lossless is not.
 
 # Introduction
 
-lossless is a work-context index for coding agents. It copies the harness session file, derives a small index of durable claims, and on `ask` checks out at most five records for the current goal and files — failed first, then what already shipped.
+lossless is a work-context index for coding agents. It copies the harness session file, builds a small index, and on `ask` returns at most five records for the current goal and files. Failed work first, then what already shipped.
 
-It is model-agnostic and harness-agnostic. Claims are keyed by project (`owner/repo`), not by which model or harness ran the turn. Switch tools on the same repo and `ask` still returns the same faileds and decisions.
-
-Transcripts stay on this machine. Apache-2.0.
+Memory is not tied to a model or a harness. Claims are keyed by project (`owner/repo`). Switch tools on the same repo and `ask` still returns the same faileds and decisions.
 
 ```
 ask({ question, project, paths, goal })
@@ -36,19 +34,19 @@ ask({ question, project, paths, goal })
 
 - **Tape.** Hooks copy the session file into `~/.lossless/raw`. Full JSONL. Kept.
 - **Claims.** A rebuildable index: failed, decision, constraint, state, thread. Not a substitute for the tape.
-- **ask.** A checkout of ≤5 records plus warnings. The agent writes the next reply; lossless does not.
+- **ask.** At most five records plus warnings. The agent writes the next reply. lossless does not.
 - **Across models and harnesses.** One store per project. Grok, Claude, Codex, Pi, and OpenCode share it.
 - **Local by default.** `127.0.0.1`, no token, nothing uploaded. `doctor` does not phone home.
 
 # Why compact forgets
 
-A coding agent does not keep the whole session in mind. Each turn the *window* is rebuilt: system prompt, recent turns, whatever still fits. When that fills up, the harness **compacts** — early work is replaced by a summary so the next call fits the context limit.
+A coding agent does not keep the whole session in mind. Each turn the *window* is rebuilt: system prompt, recent turns, whatever still fits. When that fills up, the harness **compacts**. Early work is replaced by a summary so the next call fits the context limit.
 
-A summary is not the work. Failed approaches become a clause. A library choice becomes “picked something.” A constraint disappears. Over a long project that happens again and again. Each compact is thinner than the last. A new session starts from the latest summary. A new model or a new harness has none of it. That is how burned work gets retried, and how a shipped decision gets undone: the model and the harness simply do not have the record anymore.
+A summary is not the work. Failed approaches become a clause. A library choice becomes "picked something." A constraint disappears. Over a long project that happens again and again. Each compact is thinner than the last. A new session starts from the latest summary. A new model or a new harness has none of it. Burned work gets retried. A shipped decision gets undone. The model and the harness no longer have the record.
 
-The session *file* on disk is still append-only. The window is not. lossless copies that file, derives a small index, and lets the next turn check out what must not be forgotten.
+The session *file* on disk is still append-only. The window is not. lossless copies that file, builds an index, and lets the next turn check out what must not be forgotten.
 
-Write is push (hooks on compact, stop, session end). Read is pull (`ask`). Compact hooks copy the tape; they do not inject a pack.
+Write is push (hooks on compact, stop, session end). Read is pull (`ask`). Compact hooks copy the tape. They do not inject a pack.
 
 # Quickstart
 
@@ -87,14 +85,14 @@ lossless remember --type decision --text "..." --project owner/repo
 lossless inspect --project owner/repo --ask
 ```
 
-MCP tools (`ask`, `remember`, `get_record`) speak the same JSON as `POST /v1/ask`. The skill tells the agent to call `ask` on real work without anyone typing `/lossless`.
+MCP tools (`ask`, `remember`, `get_record`) use the same JSON as `POST /v1/ask`. The skill tells the agent to call `ask` on real work without anyone typing `/lossless`.
 
 | | Local (default) | From source | Remote home |
 |---|-----------------|-------------|-------------|
 | **Best for** | This machine | Contributors | A box lossless already runs on |
 | **Setup** | `install.sh` then `lossless setup` | `go build` then `./lossless setup` | TLS + `LOSSLESS_URL` + `LOSSLESS_TOKEN` |
 | **Store** | `~/.lossless` | same | copy `raw/` or start empty |
-| **Network** | none, except `update` | none, except `update` | client → home only |
+| **Network** | none, except `update` | none, except `update` | client to home only |
 
 A remote home is documented and manual. lossless does not provision a cloud or ship the store. See [docs/deploy.md](docs/deploy.md).
 
@@ -124,7 +122,7 @@ lossless bench --root testdata/bench
 | Pi | yes | yes |
 | OpenCode | yes | yes |
 
-Any other agent that can call authenticated `/mcp` or `POST /v1/ask` can use the same store. Claims stay on `owner/repo` so a pack from one harness is visible to the next.
+Any other agent that can call authenticated `/mcp` or `POST /v1/ask` can use the same store. Claims stay on `owner/repo`, so a pack from one harness is visible to the next.
 
 # What it isn't
 
@@ -137,10 +135,10 @@ Any other agent that can call authenticated `/mcp` or `POST /v1/ask` can use the
 
 # Documentation
 
-- [docs/README.md](docs/README.md) — index
-- [docs/architecture.md](docs/architecture.md) — loop and store
-- [docs/algorithm.md](docs/algorithm.md) — how retrieve picks five records
-- [docs/pipeline.md](docs/pipeline.md) — who asks, what happens after
+- [docs/README.md](docs/README.md): index
+- [docs/architecture.md](docs/architecture.md): loop and store
+- [docs/algorithm.md](docs/algorithm.md): how retrieve picks five records
+- [docs/pipeline.md](docs/pipeline.md): who asks, what happens after
 - [docs/write.md](docs/write.md) · [docs/ask.md](docs/ask.md) · [docs/retrieval.md](docs/retrieval.md)
 - [docs/harnesses.md](docs/harnesses.md) · [docs/deploy.md](docs/deploy.md) · [docs/stack.md](docs/stack.md)
 
@@ -153,7 +151,7 @@ Any other agent that can call authenticated `/mcp` or `POST /v1/ask` can use the
 ~/.lossless/index/excerpts-YYYY-MM.sqlite                # monthly excerpt windows
 ```
 
-`LOSSLESS_HOME` overrides the data dir. SQLite is not the corpus. Default config makes **zero outbound network calls**.
+`LOSSLESS_HOME` overrides the data dir. SQLite is not the corpus. Default config makes no outbound network calls.
 
 # License
 
