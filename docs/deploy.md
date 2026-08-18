@@ -38,7 +38,7 @@ lossless update --check  # no write
 
 `install.sh` and `lossless update` download `lossless-<os>-<arch>` plus `SHA256SUMS`, verify the digest, refuse non-https / off-host redirects, and rename over `~/.local/bin/lossless` so a dest symlink is replaced instead of followed. `update` then rewrites hooks and the user service to that path and restarts the daemon.
 
-This is opt-in. `doctor` and `serve` do not call GitHub. A private release repo needs `GITHUB_TOKEN` (or `GH_TOKEN`).
+This is opt-in. `doctor` and `serve` do not call GitHub. `jbgh/lossless` is public, so no token is required. Set `GITHUB_TOKEN` (or `GH_TOKEN`) only if you point `LOSSLESS_UPDATE_REPO` at a private fork.
 
 ---
 

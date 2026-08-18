@@ -6,7 +6,7 @@ Coding agents rebuild the *window* on every turn and replace early work with a s
 
 Same shape as a log stream (Splunk / Grafana Loki) or git: keep the tape, build indexes, check out a few records. Do not paste the stream into the next prompt.
 
-Transcripts stay on your machine. Apache-2.0.
+Transcripts stay on your machine. Apache-2.0. **0.1.0** is the first public cut — [release notes](CHANGELOG.md), [GitHub Releases](https://github.com/jbgh/lossless/releases/tag/v0.1.0).
 
 ```
 ask({ question, project, paths, goal })
@@ -23,8 +23,6 @@ lossless keeps the event log (like git objects). Claims are HEAD — a derived v
 
 ## Install
 
-Release channel is GitHub Releases (`jbgh/lossless`). That is the only outbound network path; `doctor` and the daemon do not phone home.
-
 ```bash
 curl -fsSL https://github.com/jbgh/lossless/releases/latest/download/install.sh | sh
 lossless setup
@@ -33,13 +31,15 @@ lossless doctor
 
 That writes a real binary to `~/.local/bin/lossless` (a dest symlink is replaced, not followed), then hooks, MCP, a skill, and a user service. Start a new agent session (Grok: `/hooks` then `r`; `/skills` then `r` if the session is already open). Everything stays on this machine.
 
+Binaries: macOS and Linux, amd64 and arm64.
+
 ```bash
 lossless update          # later: pull the latest release and retarget hooks/service
 lossless update --check  # look only
 lossless version
 ```
 
-A source-tree symlink (`~/.local/bin/lossless` → a repo `./lossless`) is off-channel. `lossless update` replaces it with the release binary. If the GitHub repo is private, set `GITHUB_TOKEN` (or `GH_TOKEN`) so `update` / `install.sh` can read Releases.
+`update` is the only command that calls GitHub. `doctor` and the daemon do not phone home. The repo is public; a token is only needed if you point `LOSSLESS_UPDATE_REPO` at a private fork.
 
 From source:
 
@@ -51,19 +51,23 @@ go build -o lossless ./cmd/lossless
 ./lossless doctor
 ```
 
+## Commands
+
 ```bash
-./lossless catch-up --jsonl ~/.grok/sessions/.../chat_history.jsonl --workspace "$(pwd)" --harness grok
-./lossless remember --type decision --text "Use jose, not jsonwebtoken, for Edge." --project acme/api
-./lossless ask --project acme/api --question "why not jsonwebtoken" --goal "pick a jwt library"
-./lossless bench --root testdata/bench
-./lossless inspect          # tape vs claims vs last packs; --project KEY --ask --jsonl FILE; --prune
-./lossless serve            # REST + /mcp; watches session files
-./lossless install-hooks    # Grok + Claude + Codex + Pi + OpenCode
-./lossless install-mcp      # MCP for Grok, Claude, Codex, Pi, OpenCode
-./lossless mcp              # stdio MCP (talks to the daemon)
+lossless setup              # hooks + MCP + skill + user service
+lossless doctor             # daemon, hooks, MCP, service
+lossless inspect            # tape vs claims vs last packs; --project KEY --ask --jsonl FILE --prune
+lossless ask --project KEY [--question "..."] [--goal "..."] [--path FILE]
+lossless remember --type decision --text "..."
+lossless catch-up --jsonl FILE --workspace DIR --harness grok
+lossless serve              # REST + /mcp; watches session files
+lossless mcp                # stdio MCP (talks to the daemon)
+lossless bench --root testdata/bench
 ```
 
 A remote home is optional and manual: run `serve` on any box, put TLS in front, set `LOSSLESS_URL` + `LOSSLESS_TOKEN`, point MCP at `/mcp`. We do not provision a cloud or ship your store for you. See [docs/deploy.md](docs/deploy.md).
+
+## Data
 
 Data dir: `~/.lossless/` (`LOSSLESS_HOME` to override).
 

@@ -26,18 +26,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${GITHUB_REF_NAME}"
-          notes="lossless ${tag}
-
-          Install:
-          \`\`\`
-          curl -fsSL https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/install.sh | sh
-          lossless setup
-          \`\`\`
-
-          Already installed: \`lossless update\`
-          "
+          scripts/release-notes.sh "$tag" > /tmp/notes.md
+          if [ ! -s /tmp/notes.md ]; then
+            printf '%s\n\nSee CHANGELOG.md.\n' "lossless ${tag}" > /tmp/notes.md
+          fi
+          {
+            echo
+            echo "### Install"
+            echo
+            echo '```'
+            echo "curl -fsSL https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/install.sh | sh"
+            echo "lossless setup"
+            echo '```'
+            echo
+            echo "Already installed: \`lossless update\`"
+          } >> /tmp/notes.md
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" dist/* --clobber
+            gh release edit "$tag" --title "lossless ${tag}" --notes-file /tmp/notes.md
           else
-            gh release create "$tag" dist/* --title "lossless ${tag}" --notes "$notes"
+            gh release create "$tag" dist/* --title "lossless ${tag}" --notes-file /tmp/notes.md
           fi
