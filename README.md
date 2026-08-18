@@ -48,8 +48,6 @@ The session *file* on disk is still append-only. The window is not. lossless cop
 
 Write is push (hooks on compact, stop, session end). Read is pull (`ask`). Compact hooks copy the tape. They do not inject a pack.
 
-# Compact only, then lossless
-
 ### Compact only
 
 The harness still writes a session file. Compact keeps a summary in the window. After enough turns, or a new session, or a new model, the early record is gone.
