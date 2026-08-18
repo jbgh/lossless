@@ -82,6 +82,15 @@ func TestSkipProse(t *testing.T) {
 	if SkipProse("Always never log Authorization headers in src/middleware/auth.ts.") {
 		t.Fatal("user constraint")
 	}
+	if !ProductCopy("Compact thinning is failed approaches become a clause.") {
+		t.Fatal("readme failed")
+	}
+	if !SkipProse("Over a long project that happens again and again, so failed approaches disappear.") {
+		t.Fatal("readme long-project")
+	}
+	if SkipProse("Redis token bucket failed in src/middleware/auth.ts staging.") {
+		t.Fatal("real failed")
+	}
 	if !SkipProse("** Each of those five is a stand-in for a real failure.") {
 		t.Fatal("unclosed bold + stand-in")
 	}

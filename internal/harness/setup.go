@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"lossless/internal/store"
 	"lossless/internal/version"
 	"lossless/internal/write"
 )
@@ -215,6 +216,24 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 
 	ruleOK, ruleDetail := checkFiles(RuleDests(userHome), "ask")
 	add("rules", ruleOK, ruleDetail)
+
+	if dataHome != "" {
+		if _, err := os.Stat(filepath.Join(dataHome, "index", "claims.sqlite")); err == nil {
+			if st, err := store.Open(dataHome); err == nil {
+				n := st.CountActive()
+				last := st.LastAskAt("")
+				_ = st.Close()
+				switch {
+				case last != "":
+					add("ask", true, "last "+last)
+				case n > 0:
+					add("ask", true, fmt.Sprintf("none yet; tape has %d claims", n))
+				default:
+					add("ask", true, "no tape yet")
+				}
+			}
+		}
+	}
 
 	svc := ServicePath(userHome)
 	if svc != "" {

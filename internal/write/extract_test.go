@@ -328,6 +328,28 @@ func TestExtractSkipsToolDumps(t *testing.T) {
 	}
 }
 
+func TestExtractSkipsReadmeProse(t *testing.T) {
+	got := Extract([]Message{
+		{Role: "assistant", Offset: 1, Text: "Compact thinning is failed approaches become a clause; a library choice becomes picked something."},
+		{Role: "assistant", Offset: 2, Text: "Over a long project that happens again and again, so failed approaches and shipped decisions disappear."},
+		{Role: "assistant", Offset: 3, Text: "Redis token bucket failed in src/middleware/auth.ts staging."},
+	}, ExtractOpts{ProjectKey: "acme/api"})
+	for _, r := range got {
+		if strings.Contains(r.Text, "Compact thinning") || strings.Contains(r.Text, "long project") {
+			t.Fatalf("readme prose extracted: %+v", r)
+		}
+	}
+	ok := false
+	for _, r := range got {
+		if r.Type == "failed" && strings.Contains(r.Text, "Redis") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("real failed missed: %+v", got)
+	}
+}
+
 func TestExtractSkipsAdviceFailureTalk(t *testing.T) {
 	got := Extract([]Message{
 		{Role: "assistant", Offset: 1, Text: "** Each of those five is a stand-in for a real failure."},

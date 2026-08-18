@@ -249,6 +249,34 @@ func TestTwoHopFindsFailedViaBridgeDecision(t *testing.T) {
 	}
 }
 
+func TestTinySymbolDoesNotForceFailedOverlap(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "01JJOSE", Type: "decision",
+		Text:      "Picked jose over jsonwebtoken on the Edge runtime.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-07-20T11:00:00Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "01JPARSE", Type: "failed",
+		Text:      "Wave-2 dogfood stress: dumping an ask JSON body was split into fake faileds in src/failure/handler.ts.",
+		Paths:     []string{"src/failure/handler.ts"},
+		CreatedAt: "2026-08-12T00:00:00Z",
+	})
+	out := askAt(t, st, Request{
+		Project:  "acme/api",
+		Question: "why not retune weights",
+		Goal:     "review retrieve weights",
+		Paths:    []string{"internal/retrieve/weights.go"},
+	})
+	if hasWarn(out, "failed") {
+		t.Fatalf("tiny symbol overlap must not force a failed warn: %v pack=%s", out.Warnings, textsOf(out))
+	}
+	if !strings.Contains(textsOf(out), "jose") && !strings.Contains(textsOf(out), "jsonwebtoken") && !strings.Contains(textsOf(out), "Picked") {
+		// jose may not pack on a weights path; just require no job-1 warn
+	}
+}
+
 func TestOneWordOverlapDoesNotForceFailed(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{

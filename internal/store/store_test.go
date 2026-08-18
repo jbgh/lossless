@@ -721,6 +721,9 @@ func TestActionTapeRoundTrip(t *testing.T) {
 	if st.NewestSessionID("acme/api") != "s1" {
 		t.Fatal(st.NewestSessionID("acme/api"))
 	}
+	if st.LastAskAt("acme/api") != "2026-08-16T15:00:00Z" {
+		t.Fatal(st.LastAskAt("acme/api"))
+	}
 	st.RecordDwell("acme/api", "s1", "A")
 	got, err = st.RecentActions("acme/api", "s1", 10)
 	if err != nil || len(got) < 3 {

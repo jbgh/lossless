@@ -325,6 +325,13 @@ func Format(w io.Writer, r Report) {
 	fmt.Fprintf(w, "\nproject %s\n", d.Key)
 	fmt.Fprintf(w, "  types  failed=%d decision=%d constraint=%d state=%d\n",
 		d.ByType["failed"], d.ByType["decision"], d.ByType["constraint"], d.ByType["state"])
+	if len(d.LastAsks) > 0 {
+		fmt.Fprintf(w, "  ask    last %s\n", d.LastAsks[0].At)
+	} else if r.Records > 0 {
+		fmt.Fprintf(w, "  ask    none yet; tape has %d claims\n", r.Records)
+	} else {
+		fmt.Fprintln(w, "  ask    no tape yet")
+	}
 	if len(d.Sessions) == 0 {
 		fmt.Fprintln(w, "  sessions  (none recorded)")
 	}

@@ -115,7 +115,7 @@ Computed only on candidates. Weights scale these features, not raw counts of fai
 | `oon` | 0 or 1 | caller named files, this claim shares none. Discounts P_answer only. |
 | `dwell` / `served` | 0 or 1 | this session’s GET/remember vs last pack. Jobs 1–2 cancel served. |
 
-Strong overlap: path > 0 *or* symbol > 0 *or* ≥2 content tokens *or* vector ≥ 0.55. One shared word (`rate`) is a weak bump only, no warning.
+Strong overlap: path > 0 *or* a shared identifier *or* symbol Jaccard ≥ 0.25 *or* ≥2 content tokens *or* vector ≥ 0.55. One shared word (`rate`) or a 0.05 Jaccard with no shared ident is weak, no warning.
 
 ```
 P_fail    = failed_overlap + 0.25 × failed_weak

@@ -214,10 +214,14 @@ func SkipProse(s string) bool {
 		NarrativeDecision(t) || StatusFailed(t) || FailedAsObject(t) || QuotedAttribution(t) {
 		return true
 	}
-	if RememberedProse(t) || YAMLClaimChrome(t) || Truncated(t) || SkillTalk(t) {
+	if RememberedProse(t) || YAMLClaimChrome(t) || Truncated(t) || SkillTalk(t) || ProductCopy(t) {
 		return true
 	}
 	return false
+}
+
+func ProductCopy(s string) bool {
+	return containsAny(s, productCopy)
 }
 
 func SkillTalk(s string) bool {
@@ -281,6 +285,12 @@ var (
 	skillTalk = []string{
 		"ignore a skill", "can ignore a skill",
 		"one sentence on a tool", "not a guarantee",
+	}
+	productCopy = []string{
+		"compact thinning", "failed approaches become",
+		"library choice becomes", "picked something",
+		"session log is the memory", "compaction is lossy",
+		"stay abstract in the readme", "over a long project that happens",
 	}
 	yamlChrome = []string{
 		"text: ", "text = ", "text=", "type: failed", "type: decision", "type: constraint",

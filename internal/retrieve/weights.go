@@ -52,6 +52,7 @@ const (
 	WDwell           = 0.8
 	WOon             = 0.5
 	OverlapStrongMin = 2
+	OverlapSymbolMin = 0.25
 	PFailWeak        = 0.25
 	PRegressWeak     = 0.24
 	WHotType         = 1.5

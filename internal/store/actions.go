@@ -122,6 +122,20 @@ ORDER BY at DESC, id DESC LIMIT ?`, project, limit)
 	return out, rows.Err()
 }
 
+func (s *Store) LastAskAt(project string) string {
+	project = projectkey.Normalize(project)
+	q := `SELECT at FROM actions WHERE kind = ?`
+	args := []any{ActionAsk}
+	if project != "" {
+		q += ` AND project_key = ?`
+		args = append(args, project)
+	}
+	q += ` ORDER BY at DESC, id DESC LIMIT 1`
+	var at string
+	_ = s.DB.QueryRow(q, args...).Scan(&at)
+	return at
+}
+
 func (s *Store) NewestSessionID(project string) string {
 	project = projectkey.Normalize(project)
 	var id string

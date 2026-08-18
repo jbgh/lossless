@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 — 2026-08-18
+
+- `ask` catch-up the asking session when the harness file is ahead of the cursor.
+- Extract keeps everyday coding phrases (`use X, not Y`, `prefer X over Y`, `stick with`, tests don't pass).
+- Gate advice-`failure` talk, unclosed `**` chrome, and README product copy so those sentences do not become faileds.
+- `failed_overlap` needs a real symbol Jaccard (`OverlapSymbolMin`), not any shared token. 4.0 / 2.5 unchanged.
+- `doctor` and `inspect` show last `ask` versus the tape.
+
 ## 0.1.0 — 2026-08-17
 
 First public release. Local work log for coding agents: keep the tape, check out five records.

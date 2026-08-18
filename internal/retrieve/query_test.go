@@ -128,6 +128,9 @@ func TestExtractNoiseAndJobOverlap(t *testing.T) {
 	if !extractNoise(claim.Record{Type: "failed", Text: "That background notification is just the local Android MediaUrlsTest run finishing (exit 0) while we fixed the CI unit-test failure."}) {
 		t.Fatal("ci status")
 	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "Compact thinning is failed approaches become a clause."}) {
+		t.Fatal("readme prose")
+	}
 	if !extractNoise(claim.Record{Type: "failed", Text: "Checking #3081 failure and re-pushing both.", Paths: []string{"git.memora.pics/memora/memora.git"}}) {
 		t.Fatal("checking #")
 	}

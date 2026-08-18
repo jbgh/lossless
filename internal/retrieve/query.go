@@ -129,6 +129,22 @@ func isHead(q query) bool {
 	return len(q.PathKeys) == 0 && len(q.Symbols) == 0 && len(q.LookupTokens) == 0
 }
 
+func hasSharedIdent(qSym, rSym []string) bool {
+	if len(qSym) == 0 || len(rSym) == 0 {
+		return false
+	}
+	set := map[string]bool{}
+	for _, s := range rSym {
+		set[strings.ToLower(s)] = true
+	}
+	for _, s := range qSym {
+		if set[strings.ToLower(s)] {
+			return true
+		}
+	}
+	return false
+}
+
 func identLower(s string) bool {
 	if len(s) < 3 {
 		return false

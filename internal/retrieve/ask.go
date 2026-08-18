@@ -485,7 +485,7 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64,
 	s.agree = float64(nAgree) / 3
 	overlapTokens := append(append([]string{}, q.QuestionTokens...), q.GoalTokens...)
 	hits := contentOverlap(overlapTokens, jobOverlapText(rec.Text))
-	strong := s.path > 0 || s.symbol > 0 || hits >= OverlapStrongMin || s.vector >= VectorGate
+	strong := s.path > 0 || hasSharedIdent(qSym, rSym) || s.symbol >= OverlapSymbolMin || hits >= OverlapStrongMin || s.vector >= VectorGate
 	weak := !strong && hits >= 1
 	switch rec.Type {
 	case "failed":
