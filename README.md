@@ -38,7 +38,7 @@ ask({ question, project, paths, goal })
 - **Across models and harnesses.** One store per project. Grok, Claude, Codex, Pi, and OpenCode share it.
 - **Local by default.** `127.0.0.1`, no token, nothing uploaded. `doctor` does not phone home.
 
-# Why compact forgets
+# Compaction is lossy
 
 A coding agent does not keep the whole session in mind. Each turn the *window* is rebuilt: system prompt, recent turns, whatever still fits. When that fills up, the harness **compacts**. Early work is replaced by a summary so the next call fits the context limit.
 
