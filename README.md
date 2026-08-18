@@ -48,6 +48,46 @@ The session *file* on disk is still append-only. The window is not. lossless cop
 
 Write is push (hooks on compact, stop, session end). Read is pull (`ask`). Compact hooks copy the tape. They do not inject a pack.
 
+# Without lossless, then with
+
+### Without
+
+The harness still writes a session file. Compact only keeps a summary in the window. After enough turns, or a new session, or a new model, the early record is gone.
+
+![Session stack crushed into one thin card](docs/images/without-compact.jpg)
+
+```mermaid
+flowchart LR
+  T1[Turns] --> C[Compact]
+  C --> S[Thinner window]
+  S --> C
+  S --> N[New session or model]
+  N --> R[Retry burned work]
+```
+
+### With
+
+Compact still thins the window. Hooks copy the session file onto the tape. `ask` checks out at most five records and warnings for this goal and these files.
+
+![Full tape, five cards checked out](docs/images/with-ask.jpg)
+
+```mermaid
+flowchart LR
+  T1[Turns] --> C[Compact]
+  C --> S[Thinner window]
+  T1 --> Tape[Tape kept]
+  S --> Ask[ask]
+  Tape --> Ask
+  Ask --> P[Five records plus warnings]
+  P --> A[Agent acts]
+```
+
+### Across harnesses
+
+Same project store. A pack written from one harness is visible to the next.
+
+![Three harness windows over one shared drawer of five cards](docs/images/across-harnesses.jpg)
+
 # Quickstart
 
 ```bash
