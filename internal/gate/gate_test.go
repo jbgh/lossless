@@ -82,4 +82,13 @@ func TestSkipProse(t *testing.T) {
 	if SkipProse("Always never log Authorization headers in src/middleware/auth.ts.") {
 		t.Fatal("user constraint")
 	}
+	if !SkipProse("** Each of those five is a stand-in for a real failure.") {
+		t.Fatal("unclosed bold + stand-in")
+	}
+	if !FailedAsObject("Fix the failure at the layer that caused it.") {
+		t.Fatal("fix the failure")
+	}
+	if SkipProse("Redis connection failure in src/middleware/auth.ts.") {
+		t.Fatal("real connection failure")
+	}
 }

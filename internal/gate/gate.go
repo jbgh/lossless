@@ -201,7 +201,7 @@ func SkipProse(s string) bool {
 	if strings.HasPrefix(t, "**") && strings.HasSuffix(t, "**") && !strings.Contains(t, ".") {
 		return true
 	}
-	if strings.HasPrefix(t, "**") && strings.Count(t, "**") == 1 && len(t) < 40 {
+	if strings.HasPrefix(t, "**") && strings.Count(t, "**")%2 == 1 {
 		return true
 	}
 	if hasPrefixFold(t, []string{"**what was wrong", "**what you do next"}) {
@@ -263,6 +263,7 @@ var (
 	failedObject = []string{
 		"failed items", "re-queues failed", "pre-failed skip",
 		"failure reason", "retryable failure",
+		"real failure", "the failure at", "fix the failure",
 	}
 	metaFailed = []string{
 		"failed-overlap", "classified as", "type-cap", "packtype",
@@ -271,6 +272,7 @@ var (
 		"off-topic", "ranking/topic",
 		"failed/decision", "classify now",
 		"forced failed", "counts as a",
+		"stand-in",
 	}
 	processState = []string{
 		"in this session", "the next stop", "next test that matters",

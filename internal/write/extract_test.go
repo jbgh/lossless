@@ -328,6 +328,28 @@ func TestExtractSkipsToolDumps(t *testing.T) {
 	}
 }
 
+func TestExtractSkipsAdviceFailureTalk(t *testing.T) {
+	got := Extract([]Message{
+		{Role: "assistant", Offset: 1, Text: "** Each of those five is a stand-in for a real failure."},
+		{Role: "assistant", Offset: 2, Text: "Fix the failure at the layer that caused it."},
+		{Role: "assistant", Offset: 3, Text: "Redis connection failure in src/middleware/auth.ts."},
+	}, ExtractOpts{ProjectKey: "acme/api"})
+	for _, r := range got {
+		if strings.Contains(r.Text, "stand-in") || strings.Contains(r.Text, "layer that") {
+			t.Fatalf("advice failed extracted: %+v", r)
+		}
+	}
+	ok := false
+	for _, r := range got {
+		if r.Type == "failed" && strings.Contains(r.Text, "Redis") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("real connection failure missed: %+v", got)
+	}
+}
+
 func TestExtractCodingSessionPhrases(t *testing.T) {
 	got := Extract([]Message{
 		{Role: "assistant", Offset: 1, Text: "Use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."},
