@@ -48,7 +48,7 @@ The expensive work we will keep doing is **parsers and adapters** (Grok vs Claud
   ```
   cmd/lossless/         # serve, setup, doctor, catch-up, ask, remember
   internal/write/       # catch-up, raw log, redact, cursors, spool
-  internal/retrieve/    # later, against docs/retrieval.md
+  internal/retrieve/    # ask, pack, catch-up-before-ask
   internal/harness/     # grok, claude, … locate + parse
   testdata/             # fixtures
   ```

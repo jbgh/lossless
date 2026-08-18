@@ -14,5 +14,6 @@ Agent memory for coding sessions. These pages are meant to be read on GitHub.
 | [deploy.md](deploy.md) | REST + MCP, local default, optional remote home |
 | [stack.md](stack.md) | Language and environment |
 | [eval.md](eval.md) | Benchmark and sims |
+| [roadmap.md](roadmap.md) | What ships next, and what will not |
 
 Start at the [README](../README.md). Release notes: [CHANGELOG](../CHANGELOG.md).

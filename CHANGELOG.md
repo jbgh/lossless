@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 — 2026-08-18
+
+- Gate `I'll ask` / `I will ask` so planning narration is not stored as a decision.
+- `ask` catch-up is store-first: omitted `session_id` still catch-up stored sessions for this workspace that are behind. A set-but-unknown id is exact locate only. Do not walk harness homes for newest mtime.
+
 ## 0.1.1 — 2026-08-18
 
 - `ask` catch-up the asking session when the harness file is ahead of the cursor.

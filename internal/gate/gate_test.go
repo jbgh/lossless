@@ -100,4 +100,16 @@ func TestSkipProse(t *testing.T) {
 	if SkipProse("Redis connection failure in src/middleware/auth.ts.") {
 		t.Fatal("real connection failure")
 	}
+	if !SkipProse("I'll ask lossless what's already decided, then look through the repo.") {
+		t.Fatal("i'll ask planning")
+	}
+	if !SkipProse("I’ll ask lossless what's already decided.") {
+		t.Fatal("curly i'll ask")
+	}
+	if SkipProse("Use the ask tool before implementing in src/app.ts.") {
+		t.Fatal("real ask mention")
+	}
+	if SkipProse("I'll stick with postgres instead of mysql.") {
+		t.Fatal("i'll stick with is a decision")
+	}
 }

@@ -111,6 +111,8 @@ Risk: the model forgets to call. Mitigation: skill is global and short; Claude S
 
 ### Caller B — the adapter (when the harness allows)
 
+Specified for 0.2b. **Not shipped** in 0.1.x. Stop hooks stay write-only. See [roadmap.md](roadmap.md).
+
 Used for **cold** moments when the model has not spoken yet or just lost the window.
 
 | Moment | Who | Work context |
@@ -191,8 +193,8 @@ Mitigations, in order:
 
 1. PreCompact catch-up has already saved raw (write path). Nothing is *lost*.
 2. Skill: "If the conversation was just compacted, call ask before more edits."
-3. Claude: next `UserPromptSubmit` injects a hot packet.
-4. We do **not** pretend Grok PostCompact can inject.
+3. Claude SessionStart / just-compacted inject is **0.2b**, not shipped. See [roadmap.md](roadmap.md).
+4. lossless does **not** pretend Grok PostCompact can inject.
 
 So: compact cannot lose the past (write). Compact *can* lose a turn of awareness (read) until the model or the next user prompt asks. That is honest.
 

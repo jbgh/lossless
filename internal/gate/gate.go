@@ -241,6 +241,7 @@ var (
 		"i'll replace", "i'll swap",
 		"i'll rewrite", "i will rewrite",
 		"i'll migrate", "i'll refactor",
+		"i'll ask", "i will ask",
 		"the next hour", "we will use the next", "we'll use the next",
 	}
 	sessionOp = []string{

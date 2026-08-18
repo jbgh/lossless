@@ -61,7 +61,7 @@ SQLite is the index, not the corpus. A laptop can keep raw forever if it is file
 For You’s contract, not Phoenix: hydrate what this session just did, retrieve from several neighborhoods, score named jobs, pack for coverage, record what was served. p50 < 500ms, p95 < 2s. Hooks stay fast.
 
 1. **Request** — `question`, `goal`, `paths[]`, `project` or `workspace_root`, `session_id?`, `limit_tokens`
-2. **Catch-up this session** — if the asking session’s harness file is ahead of the cursor, ingest complete lines first.
+2. **Catch-up this session** — store-first. Omitted `session_id` catch-up stored workspace sessions that are behind. A set id uses the stored row, or exact locate. Ingest complete lines first.
 3. **Normalize** — project key, tokens, path keys (plus basename), identifier symbols. `library` / `choice` are not symbols. `jwt` is.
 4. **Compile if thin** — if no paths and <2 tokens: last user line + pathRE + recent claim paths from the owned session tail. Rich asks are never overwritten.
 5. **Hydrate action tape** — last pack ids, GET/remember dwells, last-ask tokens — only on a *continue* (same question, anaphoric thin ask, or same files). A rich ask on a new path is a topic shift: no inherited Redis symbols.
