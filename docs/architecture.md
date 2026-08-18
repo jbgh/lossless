@@ -61,11 +61,12 @@ SQLite is the index, not the corpus. A laptop can keep raw forever if it is file
 For You’s contract, not Phoenix: hydrate what this session just did, retrieve from several neighborhoods, score named jobs, pack for coverage, record what was served. p50 < 500ms, p95 < 2s. Hooks stay fast.
 
 1. **Request** — `question`, `goal`, `paths[]`, `project` or `workspace_root`, `session_id?`, `limit_tokens`
-2. **Normalize** — project key, tokens, path keys (plus basename), identifier symbols. `library` / `choice` are not symbols. `jwt` is.
-3. **Compile if thin** — if no paths and <2 tokens: last user line + pathRE + recent claim paths from the owned session tail. Rich asks are never overwritten.
-4. **Hydrate action tape** — last pack ids, GET/remember dwells, last-ask tokens — only on a *continue* (same question, anaphoric thin ask, or same files). A rich ask on a new path is a topic shift: no inherited Redis symbols.
-5. **Profile** — `head` if still empty. Else `path` / `ident` / `prose`. Mixes structure vs “sounds like.” Overlap weights do not change.
-6. **Candidates ≤ 400** — union, not a scan. HEAD skips FTS and vectors.
+2. **Catch-up this session** — if the asking session’s harness file is ahead of the cursor, ingest complete lines first.
+3. **Normalize** — project key, tokens, path keys (plus basename), identifier symbols. `library` / `choice` are not symbols. `jwt` is.
+4. **Compile if thin** — if no paths and <2 tokens: last user line + pathRE + recent claim paths from the owned session tail. Rich asks are never overwritten.
+5. **Hydrate action tape** — last pack ids, GET/remember dwells, last-ask tokens — only on a *continue* (same question, anaphoric thin ask, or same files). A rich ask on a new path is a topic shift: no inherited Redis symbols.
+6. **Profile** — `head` if still empty. Else `path` / `ident` / `prose`. Mixes structure vs “sounds like.” Overlap weights do not change.
+7. **Candidates ≤ 400** — union, not a scan. HEAD skips FTS and vectors.
 
 | Source | What |
 |--------|------|
@@ -78,10 +79,10 @@ For You’s contract, not Phoenix: hydrate what this session just did, retrieve 
 | Recent faileds | only if the union is empty |
 | HEAD caps | 12 failed / 10 decision / 8 constraint |
 
-7. **Dedup + filters** — newest `claim_hash`. Drop older same-path conflicts (Jaccard ≥ 0.35). Drop a decision if a newer same-path failed shares topic (≥ 0.2). Filters, not scores.
-8. **Features + score** — type, recency (half-life by type; constraint = 1), path/symbol Jaccard, min-max BM25, cosine, agree, graded overlap, dwell, served, OON. Stat mtimes on the current top 30 only. `[verify]` is ephemeral.
-9. **Pack ≤ 5** — best failed-overlap first. Then `score − 0.8 × max_sim`. Type cap 2 if another type is uncovered. Diversity Jaccard 0.8. Evict so a job-1 failed cannot lose to the cap.
-10. **Emit + record** — warnings cite ids that are in the packet. Then write `ask` / `warn` rows to the tape. Fail-open.
+8. **Dedup + filters** — newest `claim_hash`. Drop older same-path conflicts (Jaccard ≥ 0.35). Drop a decision if a newer same-path failed shares topic (≥ 0.2). Filters, not scores.
+9. **Features + score** — type, recency (half-life by type; constraint = 1), path/symbol Jaccard, min-max BM25, cosine, agree, graded overlap, dwell, served, OON. Stat mtimes on the current top 30 only. `[verify]` is ephemeral.
+10. **Pack ≤ 5** — best failed-overlap first. Then `score − 0.8 × max_sim`. Type cap 2 if another type is uncovered. Diversity Jaccard 0.8. Evict so a job-1 failed cannot lose to the cap.
+11. **Emit + record** — warnings cite ids that are in the packet. Then write `ask` / `warn` rows to the tape. Fail-open.
 
 Details and diagrams: [algorithm.md](algorithm.md).
 

@@ -169,7 +169,7 @@ Every trigger does the same thing: **catch up**. Copy new bytes, then derive. Tr
 | **Remember** | `POST /v1/remember` | Agent or human says "keep this" | sync |
 | **Import** | CLI | Historical JSONL | unbounded, background |
 
-PreCompact is a safety net, not the only writer. If turn-level catch-up is healthy, PreCompact is a no-op (cursor already at EOF).
+PreCompact is a safety net, not the only writer. If turn-level catch-up is healthy, PreCompact is a no-op (cursor already at EOF). `ask` also catch-up the asking session if the cursor is behind, so a missed Stop hook does not serve a stale pack.
 
 The model is **not** asked to dump the window. After compact the window is already a summary; the session file still has the original tool results (measured: 8-compact Grok session, 17.6 MB history, 0 summary lines). Copy the file. See [Window vs session file](#window-vs-session-file-measured).
 

@@ -9,14 +9,15 @@ import (
 )
 
 var (
-	hardFailedRE = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|doesn't work|doesn't compile|won't compile|failed|failure|didn't compile|does not work|threw)\b`)
+	hardFailedRE = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|doesn't work|doesn't compile|won't compile|failed|failure|didn't compile|does not work|doesn't pass|does not pass|don't pass|do not pass|won't pass|will not pass|threw|dead end)\b`)
 	softFailedRE = regexp.MustCompile(`(?i)\b(revert|abort)\b`)
 	exceptionTo  = regexp.MustCompile(`(?i)exception to`)
 	constraintRE = regexp.MustCompile(`(?i)\b(always|never|don't|do not|must|we use|we don't)\b`)
 	hedgeRE      = regexp.MustCompile(`(?i)\b(i don't think|i do not think|not sure|maybe|probably|might|should we|could we|can we|do we)\b`)
 	questionRE   = regexp.MustCompile(`(?i)^\s*(should|could|can|may|do|did|is|are|will)\b`)
 	stateRE      = regexp.MustCompile(`(?i)\b(working on|current plan|next step|now implementing)\b`)
-	decisionRE   = regexp.MustCompile(`(?i)\b(decided|going with|we'll use|we will use|picked \w+ over|chose|instead of)\b`)
+	decisionRE   = regexp.MustCompile(`(?i)\b(decided|going with|we'll use|we will use|picked \w+ over|chose|instead of|prefer \S+ over|stick with)\b`)
+	useNotRE     = regexp.MustCompile(`(?i)\buse\s+([A-Za-z][\w./@+-]*),?\s+not\s+([A-Za-z][\w./@+-]*)`)
 	backtickSpan = regexp.MustCompile("`[^`]*`")
 	typeTalkRE   = regexp.MustCompile(`(?i)\b(failed-overlap|shipped-overlap|type-cap|packtypecap|classified as|claim type|as a failed|as failed)\b`)
 )
@@ -32,10 +33,10 @@ func classify(sentence string, msg Message) string {
 	if hard && !gate.MetaFailedTalk(sentence) {
 		return "failed"
 	}
-	if decisionRE.MatchString(folded) && !gate.Planning(sentence) && !gate.NarrativeDecision(sentence) {
+	if isDecision(folded) && !gate.Planning(sentence) && !gate.NarrativeDecision(sentence) {
 		return "decision"
 	}
-	if (msg.Error || (soft && !gate.MetaFailedTalk(sentence))) && !(decisionRE.MatchString(folded) && !gate.Planning(sentence)) {
+	if (msg.Error || (soft && !gate.MetaFailedTalk(sentence))) && !(isDecision(folded) && !gate.Planning(sentence)) {
 		return "failed"
 	}
 	if constraintRE.MatchString(folded) && msg.Role == "user" && !hedgeRE.MatchString(folded) && !gate.SessionOp(sentence) && !gate.AgentPrompt(sentence) && !gate.ConstraintFragment(sentence) {
@@ -114,6 +115,22 @@ func allUpper(s string) bool {
 		}
 	}
 	return true
+}
+
+func isDecision(folded string) bool {
+	if decisionRE.MatchString(folded) {
+		return true
+	}
+	m := useNotRE.FindStringSubmatch(folded)
+	if m == nil {
+		return false
+	}
+	return !useNotStop[strings.ToLower(m[1])]
+}
+
+var useNotStop = map[string]bool{
+	"the": true, "a": true, "an": true, "this": true, "that": true,
+	"our": true, "my": true, "any": true, "it": true,
 }
 
 func isQuestion(s string) bool {

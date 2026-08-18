@@ -62,12 +62,13 @@ Catch-up is fail-open. Ingest is picky on purpose. Extract is allowed to drop al
 
 One MCP/REST call. Target p50 < 500ms, p95 < 2s at 10k claims. Never scan the full project table.
 
-1. **normalize** — `project_key`, question/goal tokens, path keys + basename, identifier symbols. Rich if a path is set or there are ≥2 tokens. Rich asks are never overwritten.
-2. **compile if thin, then hydrate** — empty question + goal: last 40 messages / 32k chars fill the query. Then load this session’s served / dwell / continue tape. Claims are shared by project; the action tape is this session only.
-3. **candidates · union · cap 400** — FTS ∪ path ∪ symbol ∪ failed/decision/constraint. Pathless asks hop through files the first hits named. Empty union: last 8 faileds. Optional kNN if an embedder is attached.
-4. **drop** — extract-noise, fixture sessions, older same-path conflicts, decisions invalidated by a newer same-file failed on topic tokens (paths stripped).
-5. **features + score** — no LLM. Sacred 4.0 failed-overlap + 2.5 shipped-overlap, then a path/ident/prose/HEAD mix.
-6. **pack 5 · type-cap 2 · warnings** — force the best job-1 failed first. Then coverage, then score. Blocking warnings on the packed hits.
+1. **catch-up this session** — if `session_id` is set and the harness file has complete lines the index has not ingested, copy them first. Fail-open.
+2. **normalize** — `project_key`, question/goal tokens, path keys + basename, identifier symbols. Rich if a path is set or there are ≥2 tokens. Rich asks are never overwritten.
+3. **compile if thin, then hydrate** — empty question + goal: last 40 messages / 32k chars fill the query. Then load this session’s served / dwell / continue tape. Claims are shared by project; the action tape is this session only.
+4. **candidates · union · cap 400** — FTS ∪ path ∪ symbol ∪ failed/decision/constraint. Pathless asks hop through files the first hits named. Empty union: last 8 faileds. Optional kNN if an embedder is attached.
+5. **drop** — extract-noise, fixture sessions, older same-path conflicts, decisions invalidated by a newer same-file failed on topic tokens (paths stripped).
+6. **features + score** — no LLM. Sacred 4.0 failed-overlap + 2.5 shipped-overlap, then a path/ident/prose/HEAD mix.
+7. **pack 5 · type-cap 2 · warnings** — force the best job-1 failed first. Then coverage, then score. Blocking warnings on the packed hits.
 
 ## 6. Candidate generation
 

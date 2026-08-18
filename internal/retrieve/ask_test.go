@@ -129,6 +129,32 @@ func TestAskDropsFixtureSessions(t *testing.T) {
 	}
 }
 
+func TestAskCatchesUpSessionTape(t *testing.T) {
+	st := tmpStore(t)
+	dir := t.TempDir()
+	jsonl := filepath.Join(dir, "chat.jsonl")
+	line := `{"type":"assistant","content":"Use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."}` + "\n"
+	if err := os.WriteFile(jsonl, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertSession(store.Session{
+		JSONL: jsonl, SessionID: "s-fresh", Harness: "grok",
+		Workspace: dir, Project: "acme/api",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := askAt(t, st, Request{
+		Project:   "acme/api",
+		SessionID: "s-fresh",
+		Question:  "why not jsonwebtoken",
+		Goal:      "pick a jwt library",
+		Paths:     []string{"src/middleware/auth.ts"},
+	})
+	if !strings.Contains(textsOf(out), "jose") {
+		t.Fatalf("ask did not ingest the session tape: %+v", out)
+	}
+}
+
 func TestAskDropsOonSkillState(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{

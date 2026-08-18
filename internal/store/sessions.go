@@ -40,6 +40,21 @@ func (s *Store) SessionByJSONL(jsonl string) (Session, bool) {
 	return out, true
 }
 
+func (s *Store) SessionByID(sessionID string) (Session, bool) {
+	if sessionID == "" {
+		return Session{}, false
+	}
+	var out Session
+	err := s.DB.QueryRow(
+		`SELECT jsonl, session_id, harness, workspace, project_key FROM sessions WHERE session_id = ? ORDER BY rowid DESC LIMIT 1`,
+		sessionID,
+	).Scan(&out.JSONL, &out.SessionID, &out.Harness, &out.Workspace, &out.Project)
+	if err != nil {
+		return Session{}, false
+	}
+	return out, true
+}
+
 func (s *Store) ListSessions() ([]Session, error) {
 	rows, err := s.DB.Query(`SELECT jsonl, session_id, harness, workspace, project_key FROM sessions`)
 	if err != nil {

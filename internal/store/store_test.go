@@ -214,6 +214,13 @@ func TestSessionRegistry(t *testing.T) {
 	if _, ok := st.SessionByJSONL("missing"); ok {
 		t.Fatal("missing")
 	}
+	byID, ok := st.SessionByID("s2")
+	if !ok || byID.JSONL != "/tmp/a.jsonl" {
+		t.Fatalf("by id %+v %v", byID, ok)
+	}
+	if _, ok := st.SessionByID("missing"); ok {
+		t.Fatal("missing id")
+	}
 	all, err := st.ListSessions()
 	if err != nil || len(all) != 1 {
 		t.Fatal(all, err)

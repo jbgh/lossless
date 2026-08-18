@@ -328,6 +328,41 @@ func TestExtractSkipsToolDumps(t *testing.T) {
 	}
 }
 
+func TestExtractCodingSessionPhrases(t *testing.T) {
+	got := Extract([]Message{
+		{Role: "assistant", Offset: 1, Text: "Use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."},
+		{Role: "assistant", Offset: 2, Text: "Prefer postgres over mysql in src/db/client.ts."},
+		{Role: "assistant", Offset: 3, Text: "Stick with the in-process limiter in src/middleware/auth.ts."},
+		{Role: "assistant", Offset: 4, Text: "The auth unit tests don't pass in src/middleware/auth.test.ts."},
+		{Role: "assistant", Offset: 5, Text: "Use the next not because we ran out of time."},
+		{Role: "user", Offset: 6, Text: "Should we use jose, not jsonwebtoken?"},
+	}, ExtractOpts{ProjectKey: "acme/api"})
+	var jose, pg, stick, tests bool
+	for _, r := range got {
+		if r.Type == "decision" && strings.Contains(r.Text, "jose") {
+			jose = true
+		}
+		if r.Type == "decision" && strings.Contains(r.Text, "postgres") {
+			pg = true
+		}
+		if r.Type == "decision" && strings.Contains(strings.ToLower(r.Text), "stick") {
+			stick = true
+		}
+		if r.Type == "failed" && strings.Contains(r.Text, "don't pass") {
+			tests = true
+		}
+		if strings.Contains(r.Text, "next not") {
+			t.Fatalf("use-the-next extracted: %+v", r)
+		}
+		if strings.HasPrefix(r.Text, "Should we") {
+			t.Fatalf("question extracted: %+v", r)
+		}
+	}
+	if !jose || !pg || !stick || !tests {
+		t.Fatalf("coding phrases missed jose=%v pg=%v stick=%v tests=%v %+v", jose, pg, stick, tests, got)
+	}
+}
+
 func TestExtractQuestionIsNotDecisionOrConstraint(t *testing.T) {
 	got := Extract([]Message{{
 		Role: "user", Offset: 1,
