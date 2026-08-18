@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 — 2026-08-18
+
+- Gate README/roadmap residue so those sentences do not become faileds. Locks are the slogan (`failed work first, then`), the colon roadmap line (`the next product is:`), and `before it retries the failed work` — not `the next product is` / `retries the failed work` / `0.3 extract` (those swallow real claims). Real pathful faileds and `stick with` decisions stay.
+
 ## 0.1.2 — 2026-08-18
 
 - Gate `I'll ask` / `I will ask` so planning narration is not stored as a decision.

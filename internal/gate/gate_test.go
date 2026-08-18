@@ -112,4 +112,40 @@ func TestSkipProse(t *testing.T) {
 	if SkipProse("I'll stick with postgres instead of mysql.") {
 		t.Fatal("i'll stick with is a decision")
 	}
+	if !SkipProse("Failed work first, then what already shipped.") {
+		t.Fatal("readme failed-first")
+	}
+	if !SkipProse("The next product is: the model sees it before it retries the failed work.") {
+		t.Fatal("roadmap next-product")
+	}
+	if !SkipProse("Remaining recent residue (“The next product is…”, “Failed work first…”) is extract residue.") {
+		t.Fatal("residue meta")
+	}
+	if !SkipProse(`“I’ll stick with postgres” still extracts.`) {
+		t.Fatal("gate-test echo")
+	}
+	if !SkipProse("Harness holes beyond OpenCode watcher / Codex desktop.") {
+		t.Fatal("review prompt")
+	}
+	if !SkipProse("First I'll load the diff, gate copy, and eval sentences.") {
+		t.Fatal("i'll load planning")
+	}
+	if SkipProse("Redis token bucket failed in src/middleware/auth.ts staging after the limiter shipped.") {
+		t.Fatal("real failed after shipped")
+	}
+	if SkipProse("We decided the next product is the mobile SDK, not the CLI, in packages/sdk/index.ts.") {
+		t.Fatal("real next-product decision")
+	}
+	if SkipProse("The dispatcher retries the failed worker in src/jobs/worker.ts after Redis failed.") {
+		t.Fatal("failed worker")
+	}
+	if SkipProse("We decided to keep what already shipped in src/middleware/auth.ts.") {
+		t.Fatal("keep what already shipped")
+	}
+	if SkipProse("I'll stick with the parser that still extracts JWTs from cookies in src/auth.ts.") {
+		t.Fatal("still extracts jwt")
+	}
+	if SkipProse("0.1.3 / 0.3 extract-clean: gate failed-work-first. Real pathful faileds stay.") {
+		t.Fatal("0.1.3 remember")
+	}
 }

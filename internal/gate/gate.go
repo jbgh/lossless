@@ -242,6 +242,7 @@ var (
 		"i'll rewrite", "i will rewrite",
 		"i'll migrate", "i'll refactor",
 		"i'll ask", "i will ask",
+		"i'll load", "i will load",
 		"the next hour", "we will use the next", "we'll use the next",
 	}
 	sessionOp = []string{
@@ -278,6 +279,9 @@ var (
 		"failed/decision", "classify now",
 		"forced failed", "counts as a",
 		"stand-in",
+		"extract residue", "ask-would-drop",
+		"remaining recent residue",
+		"still extracts.",
 	}
 	processState = []string{
 		"in this session", "the next stop", "next test that matters",
@@ -292,6 +296,9 @@ var (
 		"library choice becomes", "picked something",
 		"session log is the memory", "compaction is lossy",
 		"stay abstract in the readme", "over a long project that happens",
+		"failed work first, then", "then what already shipped",
+		"the next product is:", "before it retries the failed work",
+		"harness holes beyond",
 	}
 	yamlChrome = []string{
 		"text: ", "text = ", "text=", "type: failed", "type: decision", "type: constraint",

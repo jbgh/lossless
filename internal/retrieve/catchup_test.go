@@ -312,6 +312,47 @@ func TestPlanningIWillAskNotLetMeAsk(t *testing.T) {
 	}
 }
 
+func TestExtractNoiseKeepsPointOneThreeRemember(t *testing.T) {
+	if retrieveNoise("0.1.3 / 0.3 extract-clean: gate failed-work-first. Real pathful faileds stay.") {
+		t.Fatal("0.1.3 remember is not residue")
+	}
+	if !retrieveNoise("The next product is: the model sees it before it retries the failed work.") {
+		t.Fatal("roadmap next-product")
+	}
+}
+
+func retrieveNoise(text string) bool {
+	return extractNoise(claim.Record{Type: "failed", Text: text})
+}
+
+func TestAskDropsReadmeFailedFirstResidue(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "FAILFIRST", Type: "failed", SessionID: "s-live",
+		Text:      "Failed work first, then what already shipped.",
+		CreatedAt: "2026-08-18T17:41:09Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "REALFAIL", Type: "failed", SessionID: "s-live",
+		Text:      "Redis token bucket failed in src/middleware/auth.ts staging.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-08-17T18:51:54Z",
+	})
+	out := askAt(t, st, Request{
+		Project:  "acme/api",
+		Question: "what failed on auth",
+		Goal:     "fix the limiter",
+		Paths:    []string{"src/middleware/auth.ts"},
+	})
+	got := textsOf(out)
+	if strings.Contains(got, "Failed work first") {
+		t.Fatalf("readme residue packed: %+v", out)
+	}
+	if !strings.Contains(got, "Redis") {
+		t.Fatalf("real failed missed: %+v", out)
+	}
+}
+
 func TestAskDropsStoredIllAskPlanning(t *testing.T) {
 	if !gate.Planning("I'll ask lossless what's already decided, then look through the repo.") {
 		t.Fatal("gate")
