@@ -142,7 +142,7 @@ No LLM query expansion. No hand-built synonym list. Paraphrase ("JWT library" vs
 
 ## 2. Candidate generation
 
-Build a set of at most **`CANDIDATE_CAP = 200`** record ids.
+Build a set of at most **`CandidateCap` (400)** record ids.
 
 ### Session-conditioned
 
@@ -313,7 +313,7 @@ Return the full claim. If `transcript_ref` is set, also return the redacted exce
 
 ## Eval
 
-The engine is not done until the fixture suite passes. Fixtures live in `eval/ask/` (to be filled). Each case is:
+The engine is not done until the fixture suite passes. Cases live in `eval/ask/*.json` and run from `eval/eval_test.go`. Each case is:
 
 ```json
 {
@@ -382,10 +382,10 @@ If the embedder is missing, the engine still runs (A–E only). JWT paraphrase s
 
 ## Implementation notes
 
-- Candidate gen is SQL / FTS / posting tables. Ranking is a tight loop over ≤ 200 rows.
+- Candidate gen is SQL / FTS / posting tables. Ranking is a tight loop over ≤ 400 rows.
 - `stat` at most 30 paths, and only after a first-pass score without `stale`.
 - Rebuild from export must restore posting lists, not only the claims table.
-- Weights and caps (`CANDIDATE_CAP`, FTS 80, pack 5, half-life 14) live in one module.
+- Weights and caps (`CandidateCap`, FTS 80, pack 5, half-life 14) live in `internal/retrieve/weights.go`.
 - Claim vectors are written at derive time (same catch-up as claims). Rebuild: walk `export/**/*.md`, re-embed. Store `embed_model` in index meta; mismatch triggers rebuild.
 - Language: this spec is language-agnostic. The daemon is **Go**. Local embeddings via `LOSSLESS_EMBED_CMD` (see `scripts/embed_minilm.py`) or a future in-process MiniLM. Not a cloud API. Not CGO. Missing model is degraded mode.
 

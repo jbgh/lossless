@@ -30,7 +30,7 @@ ask({ question, project, paths, goal })
   → context + warnings
 ```
 
-### Key features
+## Key features
 
 - **Tape.** Hooks copy the session file into `~/.lossless/raw`. Full JSONL. Kept.
 - **Claims.** A rebuildable index: failed, decision, constraint, state, thread. Not a substitute for the tape.
