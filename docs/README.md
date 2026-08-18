@@ -11,7 +11,6 @@ Agent memory for coding sessions. These pages are meant to be read on GitHub.
 | [ask.md](ask.md) | Portable `ask` / `remember` / `get_record` contract |
 | [retrieval.md](retrieval.md) | Read-path spec (jobs, features, pack) |
 | [harnesses.md](harnesses.md) | Grok, Claude, Codex, Pi, OpenCode adapters |
-| [install-prompt.md](install-prompt.md) | Paste-into-the-agent install |
 | [deploy.md](deploy.md) | REST + MCP, local default, optional remote home |
 | [stack.md](stack.md) | Language and environment |
 | [eval.md](eval.md) | Benchmark and sims |
