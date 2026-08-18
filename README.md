@@ -92,6 +92,26 @@ Codex  --+
 
 # Quickstart
 
+### Tell the agent
+
+Open a coding agent and paste this. The agent does the rest.
+
+```
+Install lossless from https://github.com/jbgh/lossless.
+
+1. curl -fsSL https://github.com/jbgh/lossless/releases/latest/download/install.sh | sh
+2. lossless setup && lossless doctor
+3. If doctor is not all ok, fix what it reports. Do not skip the daemon.
+4. Tell the user to start a new agent session so MCP tools appear (Grok: /hooks then r).
+5. On later real work, call the lossless MCP tool ask before implementing. Send workspace_root, goal, and paths. Do not wait for /lossless.
+
+Default install is this machine only. Nothing is uploaded.
+```
+
+Full prompt: [docs/install-prompt.md](docs/install-prompt.md).
+
+### Manual
+
 ```bash
 curl -fsSL https://github.com/jbgh/lossless/releases/latest/download/install.sh | sh
 lossless setup
@@ -178,6 +198,7 @@ Any other agent that can call authenticated `/mcp` or `POST /v1/ask` can use the
 # Documentation
 
 - [docs/README.md](docs/README.md): index
+- [docs/install-prompt.md](docs/install-prompt.md): paste-into-the-agent install
 - [docs/architecture.md](docs/architecture.md): loop and store
 - [docs/algorithm.md](docs/algorithm.md): how retrieve picks five records
 - [docs/pipeline.md](docs/pipeline.md): who asks, what happens after
