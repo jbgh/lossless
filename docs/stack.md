@@ -1,5 +1,7 @@
 # Language and environment
 
+[Docs](README.md) · [deploy](deploy.md)
+
 **Decision: Go.** One static binary.
 
 Rust is the runner-up. We are not picking it.
@@ -78,7 +80,7 @@ Concurrency: one human, a handful of harness hooks. Session file locks already s
 
 **Rule:** if a blob will still matter in 10 years and is large, it is a file in `raw/`. If it is a small derived fact we query in 50ms, it may live in SQLite. SQLite files stay **replaceable** (rebuild) and **bounded** (claims all-time is small; excerpts are monthly).
 - **Compression:** `github.com/klauspost/compress/zstd`.
-- **HTTP:** `net/http` on `127.0.0.1:7432` by default. `--listen` + bearer only for a box you own (`docs/deploy.md`). No framework.
+- **HTTP:** `net/http` on `127.0.0.1:7432` by default. `--listen` + bearer only for a box you own ([deploy.md](deploy.md)). No framework.
 - **No** required container, CGO, or Node at runtime.
 - Cross-compile: `GOOS=darwin GOARCH=arm64` and `GOOS=linux GOARCH=amd64`.
 - Tests: `go test ./...` plus the write/ask fixture suites.

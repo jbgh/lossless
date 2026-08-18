@@ -1,5 +1,7 @@
 # `ask` contract
 
+[Docs](README.md) · [architecture](architecture.md) · [algorithm](algorithm.md) · [retrieval](retrieval.md)
+
 This is the portable read surface. Any harness or model sends current work. lossless retrieves the past into `context`. The caller does not search or rank.
 
 Default: `POST http://127.0.0.1:7432/v1/ask`  

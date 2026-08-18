@@ -1,6 +1,8 @@
 # Retrieval engine
 
-This is the read-path spec. `docs/ask.md` is the I/O contract. This file is how we pick the ≤5 records that go in `context`.
+[Docs](README.md) · [architecture](architecture.md) · [algorithm](algorithm.md) · [ask](ask.md)
+
+This is the read-path spec. [ask.md](ask.md) is the I/O contract. This file is how we pick the ≤5 records that go in `context`.
 
 No LLM on the retrieve path. No network. Embeddings, when used, are **on-box** and only on **claims**.
 
@@ -68,7 +70,7 @@ Posting lists (all scoped by `project_key`, `status = active`):
 
 ### Excerpts (`chunks`)
 
-One row per redacted transcript span (session id + byte range). Built by the write path (`docs/write.md`). Used for `GET /v1/records/:id` and as a last-resort candidate source when claims FTS is empty.
+One row per redacted transcript span (session id + byte range). Built by the write path ([write.md](write.md)). Used for `GET /v1/records/:id` and as a last-resort candidate source when claims FTS is empty.
 
 Monthly partitions (`excerpts-YYYY-MM.sqlite`). `ask` opens the last 12 months plus the current session's partition. Older partitions attach only if claims miss.
 

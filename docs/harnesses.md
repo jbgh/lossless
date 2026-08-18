@@ -1,8 +1,10 @@
 # Harness adapters (write)
 
+[Docs](README.md) · [write](write.md) · [deploy](deploy.md)
+
 Yes: start with writes, and yes: treat Grok, Claude Code, Pi, OpenCode, and Codex as **adapters**, not as five products.
 
-The wrong version of that idea is five memory systems. The right version is one catch-up core (`docs/write.md`) and a thin adapter per harness that answers only three questions:
+The wrong version of that idea is five memory systems. The right version is one catch-up core ([write.md](write.md)) and a thin adapter per harness that answers only three questions:
 
 1. **Where** is the session file?
 2. **When** do we catch up? (map native events → `turn` | `compact` | `session_end`)

@@ -1,5 +1,7 @@
 # Memory benchmark
 
+[Docs](README.md) · [retrieval](retrieval.md)
+
 This is our eval, not LoCoMo. Cases ingest simulated Grok/Claude session files,
 then score whether `ask` packs the gold context. No LLM judge.
 

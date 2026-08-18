@@ -15,7 +15,7 @@ ask({ question, project, paths, goal })
   → context + warnings
 ```
 
-See [docs/architecture.html](docs/architecture.html) for a one-page map of the loop and store, and [docs/algorithm.html](docs/algorithm.html) for the retrieve algorithm with diagrams. [docs/pipeline.md](docs/pipeline.md) is the loop in prose, [docs/deploy.md](docs/deploy.md) is the portable REST + MCP contract (local by default; a remote home is manual). Then [docs/write.md](docs/write.md), [docs/ask.md](docs/ask.md), [docs/retrieval.md](docs/retrieval.md), [docs/harnesses.md](docs/harnesses.md), [docs/stack.md](docs/stack.md).
+Docs (markdown, for GitHub): [index](docs/README.md), [architecture](docs/architecture.md), [algorithm](docs/algorithm.md), [pipeline](docs/pipeline.md), [deploy](docs/deploy.md), [write](docs/write.md), [ask](docs/ask.md), [retrieval](docs/retrieval.md), [harnesses](docs/harnesses.md), [stack](docs/stack.md).
 
 ## What it is
 

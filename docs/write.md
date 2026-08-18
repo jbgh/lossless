@@ -1,6 +1,8 @@
 # Write path
 
-This is how memory gets in. `docs/ask.md` is how it comes out. `docs/retrieval.md` ranks what is already stored.
+[Docs](README.md) · [architecture](architecture.md) · [ask](ask.md) · [retrieval](retrieval.md)
+
+This is how memory gets in. [ask.md](ask.md) is how it comes out. [retrieval.md](retrieval.md) ranks what is already stored.
 
 Claude deletes JSONL after 30 days. If we only point at harness files, we do not remember everything. Catch-up copies into owned `raw/`.
 
@@ -233,7 +235,7 @@ From new messages only:
 
 Same heuristic extract as the spike (`failed` / `decision` / `constraint` / `state` / `thread`), same 12-per-batch cap, same `claim_hash` supersede.
 
-**Skip on ingest:** `system`, `reasoning`, synthetic user dumps (`synthetic_reason`, or user text that is only a `<system-reminder>` / skills catalog), and any tool call/result named `ask`, `remember`, or `catch-up`. Those stay in raw. They must not become claims (see `docs/pipeline.md`).
+**Skip on ingest:** `system`, `reasoning`, synthetic user dumps (`synthetic_reason`, or user text that is only a `<system-reminder>` / skills catalog), and any tool call/result named `ask`, `remember`, or `catch-up`. Those stay in raw. They must not become claims (see [pipeline.md](pipeline.md)).
 
 `remember` bypasses heuristics: the payload *is* the claim. Still redacted. Still gets a raw line in a `manual/<date>.jsonl` so it is part of "everything."
 

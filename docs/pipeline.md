@@ -1,6 +1,8 @@
 # Pipeline: who asks, what memory does, what happens after
 
-Write path (`docs/write.md`) gets bytes in. Retrieval (`docs/retrieval.md`) ranks rows. This file is the **loop**: when a query is formed, who forms it, what lossless is allowed to be, and what the harness does with the context.
+[Docs](README.md) · [architecture](architecture.md) · [algorithm](algorithm.md) · [write](write.md) · [ask](ask.md)
+
+Write path ([write.md](write.md)) gets bytes in. [retrieval.md](retrieval.md) ranks rows. This file is the **loop**: when a query is formed, who forms it, what lossless is allowed to be, and what the harness does with the context.
 
 This is the decision that decides whether we are a database or a second agent. We are neither a chatbot nor cass. We are a **work-context index**.
 
@@ -67,7 +69,7 @@ We take Grok/claude-mem's **obligation** (something must call) and cass's **hone
     ├─► READ (only when someone asks)
     │     1. Work context is assembled   ← harness or model
     │     2. POST /v1/ask                ← one round trip
-    │     3. Memory pipeline             ← docs/retrieval.md
+    │     3. Memory pipeline             ← retrieval.md
     │     4. Packet lands in the window  ← tool result or inject
     │     5. Agent acts                  ← obey warnings
     │     6. Later catch_up copies this turn, minus our ask I/O
@@ -130,7 +132,7 @@ The adapter **never** invents a clever search string. It copies last user text a
 
 ## Once the request hits lossless
 
-This is a database lookup plus a packer. Exact steps: `docs/retrieval.md`. In one picture:
+This is a database lookup plus a packer. Exact steps: [retrieval.md](retrieval.md). In one picture:
 
 ```
 ask(work context)

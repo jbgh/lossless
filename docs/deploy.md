@@ -1,5 +1,7 @@
 # Deploy: one binary, any box
 
+[Docs](README.md) · [ask](ask.md) · [harnesses](harnesses.md)
+
 lossless is a process with two surfaces:
 
 | Surface | Where | What it is |
