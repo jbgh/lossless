@@ -2,11 +2,19 @@
 
 Agent memory for coding sessions.
 
-The session log is the memory. Compact is lossy. We are not.
+The session log is the memory. Compact is lossy. lossless is not.
 
-When you work with a coding agent, the *window* is rebuilt every turn. Early failed approaches, library choices, and “don’t do that again” get crushed into a summary. The session file on disk is still there. lossless is how the next turn checks out the parts that still matter.
+## Why compact forgets
 
-It is memory for *this* kind of work: one repo, one problem, a trail of tries. The agent calls `ask` with what it is about to do. lossless returns up to five records and a few warnings — failed first, then what you already shipped. Transcripts stay on your machine. Apache-2.0.
+A coding agent does not keep the whole session in mind. Each turn the *window* is rebuilt: system prompt, recent turns, whatever still fits. When that fills up, the harness **compacts** — early work is replaced by a summary so the next call fits the context limit.
+
+A summary is not the work. Failed approaches become a clause. “Use jose, not jsonwebtoken” becomes “picked a JWT library.” A constraint disappears. Over a long project that happens again and again. Each compact is thinner than the last. A new session starts from the latest summary. A new model or a new harness has none of it. That is how a limiter that already burned in staging gets rebuilt, and how a shipped decision gets undone: the model and the harness simply do not have the record anymore.
+
+The session *file* on disk is still append-only. The window is not. lossless copies that file, derives a small index, and lets the next turn check out what must not be forgotten.
+
+## What lossless is
+
+Memory for *this* kind of work: one repo, one problem, a trail of tries. The agent calls `ask` with what it is about to do. lossless returns up to five records and a few warnings — failed first, then what already shipped. Transcripts stay on this machine. Apache-2.0.
 
 **0.1.0** is the first public cut — [release notes](CHANGELOG.md), [GitHub Releases](https://github.com/jbgh/lossless/releases/tag/v0.1.0).
 
@@ -15,30 +23,32 @@ ask({ question, project, paths, goal })
   → context + warnings
 ```
 
-Docs (markdown, for GitHub): [index](docs/README.md), [architecture](docs/architecture.md), [algorithm](docs/algorithm.md), [pipeline](docs/pipeline.md), [deploy](docs/deploy.md), [write](docs/write.md), [ask](docs/ask.md), [retrieval](docs/retrieval.md), [harnesses](docs/harnesses.md), [stack](docs/stack.md).
-
-## What it is
-
-lossless sits next to Grok, Claude, Codex, Pi, or OpenCode and keeps a work log those models can check out.
-
-- **The tape.** Hooks copy the harness session file into `~/.lossless/raw`. That copy is the corpus. Full JSONL. Yours. Kept.
+- **The tape.** Hooks copy the harness session file into `~/.lossless/raw`. That copy is the corpus. Full JSONL. Kept.
 - **Claims.** A small derived index — failed, decision, constraint, state, thread. Rebuildable. Not a substitute for the tape.
-- **ask.** The checkout: at most five records for *this* goal and these files. Warnings if you are about to repeat a failed approach. The agent decides what to do; lossless does not write the next reply.
+- **ask.** The checkout: at most five records for *this* goal and these files. Warnings if a failed approach is about to be repeated. The agent writes the next reply; lossless does not.
 
 Same shape as a log stream or git: keep the event log, build indexes, check out a few records. Do not paste the stream into the next prompt.
 
 Write is push (hooks on compact, stop, session end). Read is pull (`ask`). Nothing is retrieved until someone asks. Compact hooks copy the tape; they do not inject a pack.
 
+## Across models and harnesses
+
+lossless is model-agnostic and harness-agnostic. Claims are keyed by project (`owner/repo`), not by Grok, Claude, Codex, Pi, or OpenCode, and not by which model ran the turn.
+
+Switch harnesses or models on the same repo and `ask` still returns the Redis failed and the jose decision. The action tape — what *this* session already asked — stays on that session so a thin “ok continue” does not inherit another agent’s last pack.
+
+`lossless setup` writes hooks, MCP, a skill, and a short rule for every supported harness so the agent calls `ask` without anyone typing `/lossless`.
+
+Docs: [index](docs/README.md), [architecture](docs/architecture.md), [algorithm](docs/algorithm.md), [pipeline](docs/pipeline.md), [deploy](docs/deploy.md), [write](docs/write.md), [ask](docs/ask.md), [retrieval](docs/retrieval.md), [harnesses](docs/harnesses.md), [stack](docs/stack.md).
+
 ## What it isn't
 
-- **Not a hosted fact cache.** Tools like Mem0 extract facts with an LLM and throw the transcript away. That is a good cache of “preferences.” It is a bad record of work: the failed path disappears into a summary, and you cannot replay.
+- **Not a hosted fact cache.** Tools like Mem0 extract facts with an LLM and throw the transcript away. That is a good cache of preferences. It is a bad record of work: the failed path disappears into a summary, and it cannot be replayed.
 - **Not a second brain.** There is no LLM inside retrieve. No hosted embeddings. Ranking is a fixed packer, the same for every model. Missing an on-box embedder is degraded mode, not a hard failure.
-- **Not a dump.** It will not stuff months of session text into the window. Five records. Failed and shipped first — not a grep over ten years of `cat`.
-- **Not auto-injection.** We do not nag, and we do not paste memory into every turn. If the skill is ignored, the store is a diary.
-- **Not a cloud.** Default install is this machine (`127.0.0.1`, no token, nothing uploaded). We do not host your transcripts. A remote home is documented and manual.
-- **Not company RAG.** It is not a wiki, a ticket search, or a general knowledge base. It is memory for coding sessions on a repo.
-
-Claims are shared by project (`owner/repo`) across harnesses. The action tape — what this session already asked — stays on that session.
+- **Not a dump.** lossless will not stuff months of session text into the window. Five records. Failed and shipped first — not a grep over ten years of `cat`.
+- **Not auto-injection.** lossless does not nag, and does not paste memory into every turn. If the skill is ignored, the store is a diary.
+- **Not a cloud.** Default install is this machine (`127.0.0.1`, no token, nothing uploaded). lossless does not host transcripts. A remote home is documented and manual.
+- **Not company RAG.** Not a wiki, a ticket search, or a general knowledge base. Memory for coding sessions on a repo.
 
 ## Install
 
@@ -58,7 +68,7 @@ lossless update --check  # look only
 lossless version
 ```
 
-`update` is the only command that calls GitHub. `doctor` and the daemon do not phone home. The repo is public; a token is only needed if you point `LOSSLESS_UPDATE_REPO` at a private fork.
+`update` is the only command that calls GitHub. `doctor` and the daemon do not phone home. The repo is public; a token is only needed if `LOSSLESS_UPDATE_REPO` points at a private fork.
 
 From source:
 
@@ -84,7 +94,7 @@ lossless mcp                # stdio MCP (talks to the daemon)
 lossless bench --root testdata/bench
 ```
 
-A remote home is optional and manual: run `serve` on any box, put TLS in front, set `LOSSLESS_URL` + `LOSSLESS_TOKEN`, point MCP at `/mcp`. We do not provision a cloud or ship your store for you. See [docs/deploy.md](docs/deploy.md).
+A remote home is optional and manual: run `serve` on any box, put TLS in front, set `LOSSLESS_URL` + `LOSSLESS_TOKEN`, point MCP at `/mcp`. lossless does not provision a cloud or ship the store. See [docs/deploy.md](docs/deploy.md).
 
 ## Data
 
