@@ -8,7 +8,7 @@ The session log is the memory. Compact is lossy. lossless is not.
 
 A coding agent does not keep the whole session in mind. Each turn the *window* is rebuilt: system prompt, recent turns, whatever still fits. When that fills up, the harness **compacts** — early work is replaced by a summary so the next call fits the context limit.
 
-A summary is not the work. Failed approaches become a clause. “Use jose, not jsonwebtoken” becomes “picked a JWT library.” A constraint disappears. Over a long project that happens again and again. Each compact is thinner than the last. A new session starts from the latest summary. A new model or a new harness has none of it. That is how a limiter that already burned in staging gets rebuilt, and how a shipped decision gets undone: the model and the harness simply do not have the record anymore.
+A summary is not the work. Failed approaches become a clause. A library choice becomes “picked something.” A constraint disappears. Over a long project that happens again and again. Each compact is thinner than the last. A new session starts from the latest summary. A new model or a new harness has none of it. That is how burned work gets retried, and how a shipped decision gets undone: the model and the harness simply do not have the record anymore.
 
 The session *file* on disk is still append-only. The window is not. lossless copies that file, derives a small index, and lets the next turn check out what must not be forgotten.
 
@@ -35,7 +35,7 @@ Write is push (hooks on compact, stop, session end). Read is pull (`ask`). Nothi
 
 lossless is model-agnostic and harness-agnostic. Claims are keyed by project (`owner/repo`), not by Grok, Claude, Codex, Pi, or OpenCode, and not by which model ran the turn.
 
-Switch harnesses or models on the same repo and `ask` still returns the Redis failed and the jose decision. The action tape — what *this* session already asked — stays on that session so a thin “ok continue” does not inherit another agent’s last pack.
+Switch harnesses or models on the same repo and `ask` still returns the same faileds and decisions. The action tape — what *this* session already asked — stays on that session so a thin continue does not inherit another agent’s last pack.
 
 `lossless setup` writes hooks, MCP, a skill, and a short rule for every supported harness so the agent calls `ask` without anyone typing `/lossless`.
 
@@ -109,6 +109,6 @@ Data dir: `~/.lossless/` (`LOSSLESS_HOME` to override).
 
 Default config makes **zero outbound network calls**. SQLite is not the corpus.
 
-`ask` is hybrid retrieve (path/type/FTS first; claim vectors when an on-box embedder is attached). Cosine cannot beat a failed-on-path record.
+`ask` is hybrid retrieve (path and type first; claim vectors only if an on-box embedder is attached).
 
 Reload Grok hooks after install: `/hooks` then `r`.
