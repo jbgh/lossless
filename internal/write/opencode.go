@@ -4,9 +4,54 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	_ "modernc.org/sqlite"
 )
+
+type OpenCodeSession struct {
+	ID        string
+	Directory string
+	Updated   int64
+}
+
+// ListOpenCodeSessions reads id/directory/time_updated from opencode.db.
+// Fail-open: missing db, symlink, or missing table returns nil.
+func ListOpenCodeSessions(dbPath string) []OpenCodeSession {
+	if dbPath == "" {
+		return nil
+	}
+	if fi, err := os.Lstat(dbPath); err != nil {
+		return nil
+	} else if fi.Mode()&os.ModeSymlink != 0 {
+		return nil
+	}
+	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
+	if err != nil {
+		return nil
+	}
+	defer db.Close()
+	rows, err := db.Query(`SELECT id, COALESCE(directory, ''), COALESCE(time_updated, 0) FROM session ORDER BY time_updated DESC LIMIT 5000`)
+	if err != nil {
+		rows, err = db.Query(`SELECT id, COALESCE(directory, ''), 0 FROM session LIMIT 5000`)
+	}
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []OpenCodeSession
+	for rows.Next() {
+		var s OpenCodeSession
+		if err := rows.Scan(&s.ID, &s.Directory, &s.Updated); err != nil {
+			return out
+		}
+		if s.ID == "" {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
 
 // ReadOpenCodeSession dumps one session from OpenCode's SQLite store
 // (message.data + part.data) into generic {role, content} objects.

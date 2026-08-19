@@ -61,7 +61,7 @@ We take Grok/claude-mem's **obligation** (something must call) and cass's **hone
  harness running
     │
     ├─► WRITE (always, no query)
-    │     Stop / PreCompact / SessionEnd / watcher
+    │     Stop / UserPromptSubmit (observe) / PreCompact / SessionEnd / watcher
     │     → sidecar spools new JSONL bytes (local, fast)
     │     → sidecar POST /v1/append to home (async)
     │     → home appends raw/, derives excerpts + claims
@@ -111,7 +111,7 @@ Risk: the model forgets to call. Mitigation: skill is global and short; Claude S
 
 ### Caller B — the adapter (when the harness allows)
 
-Claude `additionalContext` is specified, not shipped. After compact, `~/.lossless/active/<owner__repo>.md` is written from a real ask (0.1.5). Stop hooks stay write-only. See [roadmap.md](roadmap.md).
+Claude `additionalContext` is specified, not shipped. After compact, `~/.lossless/active/<owner__repo>.md` is written from a real ask (0.1.5). Stop and `UserPromptSubmit` stay write-only. See [roadmap.md](roadmap.md).
 
 Used for **cold** moments when the model has not spoken yet or just lost the window.
 

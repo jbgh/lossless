@@ -18,6 +18,7 @@ type Options struct {
 	ClaudeRoot string
 	CodexRoot  string
 	PiRoot     string
+	OpenCodeDB string
 	Interval   time.Duration
 	IdleSeal   time.Duration // 0 = 24h
 }
@@ -34,7 +35,11 @@ type Target struct {
 	SessionID string
 	Workspace string
 	Project   string
+	UpdatedAt int64
+	Messages  []map[string]any
 }
+
+const sqliteTickCap = 16
 
 func Defaults() Options {
 	home := os.Getenv("HOME")
@@ -59,6 +64,7 @@ func Defaults() Options {
 		ClaudeRoot: filepath.Join(claude, "projects"),
 		CodexRoot:  filepath.Join(codex, "sessions"),
 		PiRoot:     filepath.Join(pi, "agent", "sessions"),
+		OpenCodeDB: harness.OpenCodeDB(),
 		Interval:   time.Second,
 	}
 }
@@ -67,10 +73,17 @@ func Discover(opts Options, known []store.Session) []Target {
 	seen := map[string]bool{}
 	var out []Target
 	add := func(t Target) {
-		if t.JSONL == "" || seen[t.JSONL] {
+		key := t.JSONL
+		if key == "" {
+			if t.SessionID == "" || t.Harness == "" {
+				return
+			}
+			key = t.Harness + ":" + t.SessionID
+		}
+		if seen[key] {
 			return
 		}
-		seen[t.JSONL] = true
+		seen[key] = true
 		out = append(out, t)
 	}
 	for _, s := range known {
@@ -109,7 +122,7 @@ func Discover(opts Options, known []store.Session) []Target {
 				return nil
 			}
 			sid := strings.TrimSuffix(filepath.Base(path), ".jsonl")
-			add(Target{JSONL: path, Harness: "claude", SessionID: sid})
+			add(Target{JSONL: path, Harness: "claude", SessionID: sid, Workspace: harness.PeekClaudeCWD(path)})
 			return nil
 		})
 	}
@@ -127,10 +140,26 @@ func Discover(opts Options, known []store.Session) []Target {
 			add(Target{JSONL: path, Harness: "codex", SessionID: sid, Workspace: cwd})
 			return nil
 		})
-		for _, p := range harness.CodexStateRollouts(filepath.Dir(opts.CodexRoot)) {
-			sid := harness.CodexSessionIDFromPath(p)
-			_, cwd := harness.PeekCodexMeta(p)
-			add(Target{JSONL: p, Harness: "codex", SessionID: sid, Workspace: cwd})
+		for _, th := range harness.CodexStateThreads(filepath.Dir(opts.CodexRoot)) {
+			if th.Rollout != "" {
+				sid := th.ID
+				if sid == "" {
+					sid = harness.CodexSessionIDFromPath(th.Rollout)
+				}
+				cwd := th.CWD
+				if cwd == "" {
+					_, cwd = harness.PeekCodexMeta(th.Rollout)
+				}
+				add(Target{JSONL: th.Rollout, Harness: "codex", SessionID: sid, Workspace: cwd, UpdatedAt: th.Updated})
+				continue
+			}
+			if th.ID == "" || th.CWD == "" || th.FirstUser == "" {
+				continue
+			}
+			add(Target{
+				Harness: "codex", SessionID: th.ID, Workspace: th.CWD, UpdatedAt: th.Updated,
+				Messages: []map[string]any{{"type": "message", "role": "user", "content": th.FirstUser}},
+			})
 		}
 	}
 	if opts.PiRoot != "" {
@@ -146,6 +175,14 @@ func Discover(opts Options, known []store.Session) []Target {
 			add(Target{JSONL: path, Harness: "pi", SessionID: sid, Workspace: cwd})
 			return nil
 		})
+	}
+	if opts.OpenCodeDB != "" {
+		for _, s := range write.ListOpenCodeSessions(opts.OpenCodeDB) {
+			if s.Directory == "" {
+				continue
+			}
+			add(Target{Harness: "opencode", SessionID: s.ID, Workspace: s.Directory, UpdatedAt: s.Updated})
+		}
 	}
 	return out
 }
@@ -191,6 +228,28 @@ func needsCatchUp(st *store.Store, jsonl string) bool {
 	return st.Cursor(jsonl) != fi.Size()
 }
 
+func sqliteCursorKey(harness, sessionID string) string {
+	return "sqlite:" + harness + ":" + sessionID
+}
+
+func needsSQLiteCatchUp(st *store.Store, key string, updated int64) bool {
+	if key == "" {
+		return false
+	}
+	cur := st.Cursor(key)
+	if cur == 0 {
+		return true
+	}
+	return cur < updated
+}
+
+func markSQLiteCaught(st *store.Store, key string, updated int64) {
+	if updated < 1 {
+		updated = 1
+	}
+	_ = st.SetCursor(key, updated)
+}
+
 func Tick(st *store.Store, opts Options) (Result, error) {
 	known, err := st.ListSessions()
 	if err != nil {
@@ -199,28 +258,53 @@ func Tick(st *store.Store, opts Options) (Result, error) {
 	targets := Discover(opts, known)
 	var res Result
 	res.Seen = len(targets)
+	sqliteCatchUps := 0
 	for _, t := range targets {
-		if t.Workspace == "" && t.Project == "" && t.Harness == "codex" {
+		if t.Workspace == "" && t.Project == "" && t.Harness == "codex" && t.JSONL != "" {
 			_, t.Workspace = harness.PeekCodexMeta(t.JSONL)
 		}
+		if t.Workspace == "" && t.Project == "" && t.Harness == "claude" && t.JSONL != "" {
+			t.Workspace = harness.PeekClaudeCWD(t.JSONL)
+		}
 		if t.Workspace == "" && t.Project == "" {
-			// Claude files we have never hooked: do not guess a project
-			if t.Harness == "claude" {
+			// Do not guess a project. Claude/OpenCode/empty-Codex stay
+			// skipped until cwd is known. Do not rewrite cleanupPeriodDays.
+			if t.Harness == "claude" || t.Harness == "opencode" || (t.Harness == "codex" && t.JSONL == "") {
 				continue
 			}
 		}
-		if !needsCatchUp(st, t.JSONL) {
+		sqliteKey := ""
+		if (t.Harness == "opencode" || (t.Harness == "codex" && t.JSONL == "")) && t.SessionID != "" {
+			sqliteKey = sqliteCursorKey(t.Harness, t.SessionID)
+		}
+		if sqliteKey != "" {
+			if !needsSQLiteCatchUp(st, sqliteKey, t.UpdatedAt) {
+				if sealed := idleSeal(st, t, opts); sealed {
+					res.Sealed++
+				}
+				continue
+			}
+			if sqliteCatchUps >= sqliteTickCap {
+				continue
+			}
+		} else if !needsCatchUp(st, t.JSONL) {
 			if sealed := idleSeal(st, t, opts); sealed {
 				res.Sealed++
 			}
 			continue
 		}
-		out, err := write.CatchUp(st, write.CatchUpRequest{
+		req := write.CatchUpRequest{
 			JSONL: t.JSONL, Project: t.Project, WorkspaceRoot: t.Workspace,
 			Harness: t.Harness, SessionID: t.SessionID, Source: "turn",
-		})
+			Messages: t.Messages,
+		}
+		out, err := write.CatchUp(st, req)
 		if err != nil {
 			continue
+		}
+		if sqliteKey != "" {
+			markSQLiteCaught(st, sqliteKey, t.UpdatedAt)
+			sqliteCatchUps++
 		}
 		if !out.Noop && out.Copied > 0 {
 			res.CatchUps++

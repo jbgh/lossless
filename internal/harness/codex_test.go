@@ -1,11 +1,14 @@
 package harness
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestCodexSessionIDFromPath(t *testing.T) {
@@ -78,6 +81,56 @@ func TestPeekCodexLegacyItem(t *testing.T) {
 	id, cwd := PeekCodexMeta(p)
 	if id != "abc" || cwd != "/ws" {
 		t.Fatalf("%q %q", id, cwd)
+	}
+}
+
+func TestCodexStateThreadsEmptyRollout(t *testing.T) {
+	root := t.TempDir()
+	dbPath := filepath.Join(root, "state_5.sqlite")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`
+CREATE TABLE threads (
+  id TEXT PRIMARY KEY,
+  rollout_path TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  model_provider TEXT NOT NULL,
+  cwd TEXT NOT NULL,
+  title TEXT NOT NULL,
+  sandbox_policy TEXT NOT NULL,
+  approval_mode TEXT NOT NULL,
+  first_user_message TEXT NOT NULL DEFAULT ''
+);
+INSERT INTO threads(id, rollout_path, created_at, updated_at, source, model_provider, cwd, title, sandbox_policy, approval_mode, first_user_message)
+VALUES('thread-empty', '', 1, 9, 'desktop', 'openai', '/Users/jay/dev/api', 't', 'danger', 'on', 'Use jose, not jsonwebtoken.');
+INSERT INTO threads(id, rollout_path, created_at, updated_at, source, model_provider, cwd, title, sandbox_policy, approval_mode, first_user_message)
+VALUES('thread-missing-file', '/no/such/rollout.jsonl', 1, 8, 'desktop', 'openai', '/Users/jay/dev/api', 't', 'danger', 'on', 'Never log Authorization headers.');
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+
+	got := CodexStateThreads(root)
+	if len(got) != 2 {
+		t.Fatalf("%+v", got)
+	}
+	byID := map[string]CodexThread{}
+	for _, th := range got {
+		byID[th.ID] = th
+	}
+	if byID["thread-empty"].CWD != "/Users/jay/dev/api" || byID["thread-empty"].Rollout != "" || byID["thread-empty"].FirstUser == "" {
+		t.Fatalf("%+v", byID["thread-empty"])
+	}
+	if byID["thread-missing-file"].Rollout != "" {
+		t.Fatal("missing file must not count as a rollout")
+	}
+	if len(CodexStateRollouts(root)) != 0 {
+		t.Fatal("no live rollout files")
 	}
 }
 

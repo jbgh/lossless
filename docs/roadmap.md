@@ -4,7 +4,7 @@
 
 Reviewed against the shipped 0.1.1 surface, the standing decisions, and the holes the docs already name. This is the product order. It is not a dump of every later sentence in the specs.
 
-The store is done. The roadmap is: make `ask` happen, keep extract honest, then close the harness holes. Not more ranking.
+The store is done. The roadmap is: make `ask` happen, keep extract honest, close the harness holes, then child sessions. Not more ranking.
 
 ## What lossless is
 
@@ -40,13 +40,13 @@ If a later idea needs one of those to work, it is the wrong idea.
 
 3. **Stop-inject is forbidden, not deferred.** "Do not use Stop hooks to nag or auto-inject packs" is a decision. 0.2 may add a pack only at session start and just-compacted, and only where the harness can do that honestly. Stop stays write-only.
 
-4. **OpenCode has no watcher.** The plugin POSTs catch-up. `watch.Discover` covers Grok, Claude, Codex, Pi. A missed OpenCode plugin loses the tape.
+4. **OpenCode watcher is on `opencode.db` (0.1.6).** The plugin still POSTs catch-up. A missed plugin no longer loses the tape.
 
-5. **Codex desktop can look installed and remember nothing.** Watcher follows `state_*.sqlite` `threads.rollout_path` only when that JSONL exists. `sessions/` may be empty.
+5. **Codex desktop empty rollout is a sqlite dump (0.1.6).** Watcher follows `state_*.sqlite` rollouts when the file exists, else `first_user_message` when cwd is known. `sessions/` may be empty.
 
 6. **`archive`, `scrub`, excerpt-as-last-resort-ask, extract queue, in-process MiniLM, RRF** are specified and unbuilt. They are operator or index work. They are not the product.
 
-7. **`UserPromptSubmit` as a write observe** is in `write.md` and not installed. That is write completeness, not inject. It belongs with harness holes, not with ranking.
+7. **`UserPromptSubmit` is write observe (0.1.6).** Installed on Claude and Grok. Fail-open. Does not retrieve. Not inject.
 
 8. **Do not schedule more dogfood waves, weight knobs, Windows, Homebrew, a marketing site, or company RAG.**
 
@@ -61,14 +61,17 @@ If a later idea needs one of those to work, it is the wrong idea.
 ## Order
 
 ```
-0.2a ask is complete when someone asks
+0.2a ask is complete when someone asks     (shipped 0.1.2)
+  → 0.4 harness holes                      (shipped 0.1.6)
   → 0.3 extract / inspect-clean
-  → 0.2b session-start checkout (only after README "Not auto-injection" is rewritten)
-  → 0.4 harness holes
+  → 0.2b Claude inject                     (active file already 0.1.5; inject after README rewrite)
+  → 0.6 child-session locate
   → 0.5 indexes, only after a named miss
 ```
 
-0.2a is the only slice that should start now. It does not auto-inject. 0.3 comes before 0.2b so a session-start pack cannot inject extract residue. Claude `additionalContext` is a copy change, not a silent exception to "if the skill is ignored, the store is a diary."
+The tape is infinite. The checkout is five records. Infinite context is not a bigger pack and not retuned 4.0 / 2.5. It is: catch-up every harness file (including children), extract only obey-worthy claims, check out after compact. Multi-model is already `owner/repo`. Multi-agent is still parent-only locate — that is 0.6.
+
+0.3 comes before 0.2b Claude inject so a session-start pack cannot inject extract residue. Claude `additionalContext` is a copy change, not a silent exception to "if the skill is ignored, the store is a diary." Do not start 0.5 without a named paraphrase miss. Publish 0.1.6 before starting 0.3 if that tag is still local.
 
 ---
 
@@ -116,13 +119,26 @@ One catch-up core. These are locate bugs.
 
 | Gap | Why it matters |
 |-----|----------------|
-| OpenCode watcher on `opencode.db` | Plugin miss currently loses the tape. |
-| Codex desktop when `sessions/` is empty and sqlite has no rollout file | Desktop looks installed and remembers nothing. |
-| Claude watcher skip when cwd is unknown | `watch.Discover` lists Claude JSONL with no workspace; `Tick` continues. Hooks register cwd. If hooks never fire, Claude's 30-day delete drops the only copy. Owned raw is the mitigation; the watcher must learn cwd or stay honest that Claude needs a hook. Do not rewrite `cleanupPeriodDays` in setup. |
-| `UserPromptSubmit` observe (write only) | Long turns with no Stop yet. Fail-open. Does not retrieve. |
-| Cross-harness check on one real repo | The pitch is switch tools, same pack. Prove it live once. |
+| OpenCode watcher on `opencode.db` | Shipped 0.1.6. Plugin miss no longer loses the tape. 16 sqlite sessions per tick. |
+| Codex desktop when `sessions/` is empty and sqlite has no rollout file | Shipped 0.1.6. Threads with cwd + `first_user_message` catch-up when the rollout file is missing. |
+| Claude watcher skip when cwd is unknown | Shipped 0.1.6. Watcher peeks `cwd` from the transcript. Unknown-cwd still skips. Do not rewrite `cleanupPeriodDays` in setup. |
+| `UserPromptSubmit` observe (write only) | Shipped 0.1.6. Claude and Grok. Fail-open. Does not retrieve. No `additionalContext`. |
+| Cross-harness check on one real repo | Shipped 0.1.6. Watcher catch-up from two harnesses; `ask` in one session packs the other's claim. |
 
 A new harness after that is still: locate + event map + line parser + installer.
+
+### 0.6 — Child sessions are tape
+
+The pitch is multi-agent: a parent that spawns reviewers still has one project pack. Today locate follows the parent JSONL. Grok `spawn_subagent`, Claude subagents, and Codex child threads write their own files. If those are not catch-up, the child's failed work dies when the parent window thins.
+
+| Feature | What it is | What it is not |
+|---------|------------|----------------|
+| Locate child transcripts | Same catch-up core. Discover the child's JSONL / sqlite row. Claims stay `owner/repo`. | Not a per-agent store. Not newest-mtime across children. Not injecting the child's raw log. |
+| Session id stays the child's | Action tape per `session_id`. Ask in the parent still packs project claims. | Not merging two conversations into one session file. |
+
+Success: a child session that burned Redis is in the project pack when the parent asks. A sibling child's shop claims do not leak.
+
+Do not start until 0.3 has cleaned recent claims so child ingest does not flood residue.
 
 ### 0.5 — Indexes, not a brain
 
@@ -163,4 +179,4 @@ Remote home stays manual: TLS + token + local sidecar. No cloud image, no org AC
 
 ## How to use this file
 
-Visibility is the loop. After each slice: `lossless inspect --project <owner/repo>` and `lossless doctor`. Do not retune 4.0 / 2.5. Do not start 0.5 without a named miss. Do not start 0.2b until 0.2a is on the channel and 0.3 has cleaned recent claims.
+Visibility is the loop. After each slice: `lossless inspect --project <owner/repo>` and `lossless doctor`. Do not retune 4.0 / 2.5. Do not start 0.5 without a named miss. Do not start 0.2b Claude inject until 0.3 has cleaned recent claims. Do not start 0.6 until 0.3 is clean.

@@ -1,6 +1,8 @@
 package harness
 
 import (
+	"bufio"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,6 +32,29 @@ func LocateClaude(transcript, sessionID, cwd string) Locate {
 	}
 	p := filepath.Join(home, "projects", ClaudeProjectSlug(cwd), sessionID+".jsonl")
 	return Locate{JSONL: p, SessionID: sessionID, CWD: cwd}
+}
+
+// PeekClaudeCWD reads cwd from a Claude transcript. User and attachment
+// lines carry it. The project-dir slug is not reversible (hyphens in
+// path components), so the watcher must peek instead of guessing.
+func PeekClaudeCWD(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for i := 0; i < 80 && sc.Scan(); i++ {
+		var o map[string]any
+		if json.Unmarshal(sc.Bytes(), &o) != nil {
+			continue
+		}
+		if cwd, _ := o["cwd"].(string); cwd != "" {
+			return cwd
+		}
+	}
+	return ""
 }
 
 func DecodeGrokSessionDir(name string) string {

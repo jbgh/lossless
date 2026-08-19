@@ -46,7 +46,7 @@ A summary is not the work. Failed approaches become a clause. A library choice b
 
 The session *file* on disk is still append-only. The window is not. lossless copies that file, builds an index, and lets the next turn check out what must not be forgotten.
 
-Write is push (hooks on compact, stop, session end). Read is pull (`ask`). Compact hooks copy the tape. They do not inject a pack.
+Write is push (hooks on compact, stop, prompt submit, session end). Read is pull (`ask`). Compact hooks copy the tape. They do not inject a pack.
 
 ### Compact only
 

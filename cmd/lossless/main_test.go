@@ -447,6 +447,9 @@ func TestHookSource(t *testing.T) {
 	if hookSource("stop", "compact") != "turn" || hookSource("session.idle", "compact") != "turn" {
 		t.Fatal("turn")
 	}
+	if hookSource("UserPromptSubmit", "compact") != "turn" || hookSource("user_prompt_submit", "compact") != "turn" {
+		t.Fatal("user prompt submit is write observe, not compact")
+	}
 	if hookSource("session_end", "turn") != "session_end" {
 		t.Fatal("end")
 	}
@@ -499,7 +502,7 @@ func TestMainDispatch(t *testing.T) {
 		t.Fatalf("unknown %d %s", code, out)
 	}
 	out, code = run("version")
-	if code != 0 || !strings.Contains(out, "lossless") || !strings.Contains(out, "0.1.5") {
+	if code != 0 || !strings.Contains(out, "lossless") || !strings.Contains(out, "0.1.6") {
 		t.Fatalf("version %d %s", code, out)
 	}
 	out, code = run("help")

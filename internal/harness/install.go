@@ -29,10 +29,11 @@ func GrokHookFile(exe string) []byte {
     "PreCompact": [{ "hooks": [{ "type": "command", "command": %s, "timeout": 6 }] }],
     "PostCompact": [{ "hooks": [{ "type": "command", "command": %s, "timeout": 6 }] }],
     "Stop": [{ "hooks": [{ "type": "command", "command": %s, "timeout": 2 }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": %s, "timeout": 2 }] }],
     "SessionEnd": [{ "hooks": [{ "type": "command", "command": %s, "timeout": 4 }] }]
   }
 }
-`, q, q, q, q)
+`, q, q, q, q, q)
 	return []byte(body)
 }
 
@@ -62,7 +63,7 @@ func MergeClaudeSettings(existing []byte, exe string) ([]byte, error) {
 		root["hooks"] = hooks
 	}
 	cmd := ClaudeHookCommand(exe)
-	for ev, timeout := range map[string]int{"PreCompact": 6, "PostCompact": 6, "Stop": 2, "SessionEnd": 4} {
+	for ev, timeout := range map[string]int{"PreCompact": 6, "PostCompact": 6, "Stop": 2, "UserPromptSubmit": 2, "SessionEnd": 4} {
 		if err := ensureClaudeEvent(hooks, ev, cmd, timeout); err != nil {
 			return nil, err
 		}

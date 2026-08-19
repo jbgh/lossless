@@ -14,6 +14,29 @@ func TestClaudeProjectSlug(t *testing.T) {
 	}
 }
 
+func TestPeekClaudeCWD(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "sess.jsonl")
+	body := `{"type":"last-prompt","sessionId":"s"}` + "\n" +
+		`{"type":"attachment","cwd":"/Users/jay/dev/memora-v2"}` + "\n" +
+		`{"type":"user","cwd":"/Users/jay/dev/memora-v2","message":{"role":"user","content":"hi"}}` + "\n"
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := PeekClaudeCWD(p); got != "/Users/jay/dev/memora-v2" {
+		t.Fatal(got)
+	}
+	if PeekClaudeCWD("/no/such") != "" {
+		t.Fatal("missing")
+	}
+	empty := filepath.Join(t.TempDir(), "empty.jsonl")
+	if err := os.WriteFile(empty, []byte(`{"type":"assistant","content":"hi"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if PeekClaudeCWD(empty) != "" {
+		t.Fatal("no cwd")
+	}
+}
+
 func TestLocateClaudeTranscriptWins(t *testing.T) {
 	loc := LocateClaude("/tmp/sess.jsonl", "", "/ws")
 	if loc.JSONL != "/tmp/sess.jsonl" || loc.SessionID != "sess" || loc.CWD != "/ws" {
@@ -73,6 +96,12 @@ func TestMergeClaudeSettingsPreservesExisting(t *testing.T) {
 	if !strings.Contains(s, "hook-claude") || !strings.Contains(s, "echo hi") {
 		t.Fatal(s)
 	}
+	if !strings.Contains(s, "UserPromptSubmit") {
+		t.Fatal("UserPromptSubmit observe missing")
+	}
+	if strings.Contains(s, "additionalContext") {
+		t.Fatal("UserPromptSubmit must not inject")
+	}
 	again, err := MergeClaudeSettings(got, "/bin/am")
 	if err != nil {
 		t.Fatal(err)
@@ -84,8 +113,11 @@ func TestMergeClaudeSettingsPreservesExisting(t *testing.T) {
 
 func TestMergeClaudeSettingsEmptyAndInvalid(t *testing.T) {
 	got, err := MergeClaudeSettings(nil, "/bin/am")
-	if err != nil || !strings.Contains(string(got), "PreCompact") || !strings.Contains(string(got), "PostCompact") {
+	if err != nil || !strings.Contains(string(got), "PreCompact") || !strings.Contains(string(got), "PostCompact") || !strings.Contains(string(got), "UserPromptSubmit") {
 		t.Fatal(string(got), err)
+	}
+	if strings.Contains(string(got), "additionalContext") || strings.Contains(string(got), "cleanupPeriodDays") {
+		t.Fatal("setup must not inject or rewrite cleanup")
 	}
 	if _, err := MergeClaudeSettings([]byte("{"), "/bin/am"); err == nil {
 		t.Fatal("invalid")
@@ -170,8 +202,11 @@ func TestWriteHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(g)
-	if !strings.Contains(string(b), "hook-grok") || !strings.Contains(string(b), "PreCompact") || !strings.Contains(string(b), "PostCompact") {
+	if !strings.Contains(string(b), "hook-grok") || !strings.Contains(string(b), "PreCompact") || !strings.Contains(string(b), "PostCompact") || !strings.Contains(string(b), "UserPromptSubmit") {
 		t.Fatal(string(b))
+	}
+	if strings.Contains(string(b), "additionalContext") {
+		t.Fatal("grok UserPromptSubmit must not inject")
 	}
 	if err := os.WriteFile(filepath.Join(home, ".claude", "settings.json"), []byte(`{"model":"x"}`), 0o644); err != nil {
 		// dir may not exist

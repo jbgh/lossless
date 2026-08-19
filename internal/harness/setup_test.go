@@ -60,6 +60,16 @@ func TestSetupWritesHooksAndMCP(t *testing.T) {
 	if !strings.Contains(string(g), "127.0.0.1") || strings.Contains(string(g), "Authorization") {
 		t.Fatalf("setup must be local: %s", g)
 	}
+	claude, err := os.ReadFile(filepath.Join(user, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(claude), "UserPromptSubmit") {
+		t.Fatal("claude observe hook")
+	}
+	if strings.Contains(string(claude), "additionalContext") || strings.Contains(string(claude), "cleanupPeriodDays") {
+		t.Fatal("setup must not inject or rewrite cleanupPeriodDays")
+	}
 }
 
 func TestDoctorBeforeAndAfterSetup(t *testing.T) {

@@ -192,9 +192,19 @@ func queryCodexRollout(dbPath, sessionID string) string {
 	return ""
 }
 
-// CodexStateRollouts lists rollout_path values from the desktop/CLI state DB.
-func CodexStateRollouts(home string) []string {
-	var out []string
+type CodexThread struct {
+	ID        string
+	CWD       string
+	Rollout   string
+	FirstUser string
+	Updated   int64
+}
+
+// CodexStateThreads lists desktop/CLI threads, including rows whose
+// rollout_path is empty or the file is gone. sessions/ may not exist.
+func CodexStateThreads(home string) []CodexThread {
+	var out []CodexThread
+	seen := map[string]bool{}
 	for _, name := range []string{"state_5.sqlite", "state_4.sqlite", "state.sqlite"} {
 		p := filepath.Join(home, name)
 		if !fileExists(p) {
@@ -204,19 +214,38 @@ func CodexStateRollouts(home string) []string {
 		if err != nil {
 			continue
 		}
-		rows, err := db.Query(`SELECT rollout_path FROM threads WHERE rollout_path IS NOT NULL AND rollout_path != ''`)
+		rows, err := db.Query(`SELECT id, COALESCE(cwd, ''), COALESCE(rollout_path, ''), COALESCE(first_user_message, ''), COALESCE(updated_at, 0) FROM threads`)
 		if err != nil {
 			_ = db.Close()
 			continue
 		}
 		for rows.Next() {
-			var path string
-			if rows.Scan(&path) == nil && fileExists(path) {
-				out = append(out, path)
+			var t CodexThread
+			if rows.Scan(&t.ID, &t.CWD, &t.Rollout, &t.FirstUser, &t.Updated) != nil {
+				continue
 			}
+			if t.ID == "" || seen[t.ID] {
+				continue
+			}
+			if t.Rollout != "" && !fileExists(t.Rollout) {
+				t.Rollout = ""
+			}
+			seen[t.ID] = true
+			out = append(out, t)
 		}
 		_ = rows.Close()
 		_ = db.Close()
+	}
+	return out
+}
+
+// CodexStateRollouts lists rollout files that still exist.
+func CodexStateRollouts(home string) []string {
+	var out []string
+	for _, t := range CodexStateThreads(home) {
+		if t.Rollout != "" {
+			out = append(out, t.Rollout)
+		}
 	}
 	return out
 }

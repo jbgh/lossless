@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6 — 2026-08-19
+
+- Watcher locates Claude cwd from the transcript (do not guess the project-dir slug). Unknown-cwd files still skip. `cleanupPeriodDays` is unchanged.
+- Watcher tails OpenCode `opencode.db` so a missed plugin still copies the tape. Cap 16 sqlite sessions per tick.
+- Codex desktop threads with empty or missing `rollout_path` still catch-up `first_user_message` when cwd is known. `sessions/` may be missing.
+- Claude and Grok install `UserPromptSubmit` as write-only observe (fail-open, no retrieve, no `additionalContext`).
+
 ## 0.1.5 — 2026-08-19
 
 - After compact catch-up, write `~/.lossless/active/<owner__repo>.md` from a real `ask`. Skill/rule: if that file exists and this turn has not asked, read it or call ask. Stop stays write-only. No Claude inject.

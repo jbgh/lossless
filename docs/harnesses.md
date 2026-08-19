@@ -39,8 +39,8 @@ Universal fallback, every harness: a **directory watch** on that harness's sessi
 
 | | Grok | Claude Code | Pi | OpenCode | Codex |
 |--|------|-------------|----|----------|-------|
-| Session file we can tail | `~/.grok/sessions/<enc-cwd>/<id>/chat_history.jsonl` | `~/.claude/projects/<slug>/<id>.jsonl` (`transcript_path` on hooks) | `~/.pi/agent/sessions/--<cwd / as ->--/<ts>_<uuid>.jsonl` | none — SQLite `opencode.db` (`session`/`message`/`part`) | CLI: `~/.codex/sessions/**/rollout-*.jsonl`. Desktop app (this machine: Codex.app 26.810, CLI 0.148.0-alpha.9): `state_5.sqlite` `threads.rollout_path`; `sessions/` may be empty |
-| As they go | `Stop` (`end_turn`) | `Stop` | extension `turn_end` / session events | plugin `session.idle` | plugin **Stop** |
+| Session file we can tail | `~/.grok/sessions/<enc-cwd>/<id>/chat_history.jsonl` | `~/.claude/projects/<slug>/<id>.jsonl` (`transcript_path` on hooks). Watcher peeks `cwd` from the transcript; unknown-cwd files skip. Do not rewrite `cleanupPeriodDays`. | `~/.pi/agent/sessions/--<cwd / as ->--/<ts>_<uuid>.jsonl` | SQLite `opencode.db` (`session`/`message`/`part`). Watcher dumps sessions the plugin missed. | CLI: `~/.codex/sessions/**/rollout-*.jsonl`. Desktop: `state_*.sqlite` threads; empty `rollout_path` still catch-up `first_user_message` when cwd is known. `sessions/` may be missing |
+| As they go | `Stop` (`end_turn`) + `UserPromptSubmit` (write observe) | `Stop` + `UserPromptSubmit` (write observe, no retrieve) | extension `turn_end` / session events | plugin `session.idle` | plugin **Stop** |
 | Before compact | **`PreCompact`** (+ `PostCompact`) | **`PreCompact`** (+ `PostCompact`) | `session_before_compact` (sync wait) | `experimental.session.compacting` (await) / `session.compacted` | **`PreCompact`** (+ `PostCompact`) |
 | Session end | `SessionEnd` | `SessionEnd` | `session_end` | `session.deleted` / idle | Stop + process exit |
 | Hook shape | JSON stdin, camelCase (Claude files also load) | JSON stdin, snake_case | in-process TS extension | in-process TS plugin | Codex plugin hooks (Stop) |
@@ -73,16 +73,16 @@ Install order: **Grok → Claude → Codex → Pi → OpenCode**. That is popula
 
 ### Claude Code
 
-- Locate: hook field `transcript_path`. Do not guess if it is present.
-- Fire: `Stop`, `PreCompact`, `SessionEnd`.
+- Locate: hook field `transcript_path`. Do not guess if it is present. The watcher peeks `cwd` from user/attachment lines so Claude JSONL catch-up without a prior hook. The project-dir slug is not reversible. Unknown-cwd files still skip. Do not rewrite `cleanupPeriodDays`.
+- Fire: `Stop`, `UserPromptSubmit` (write observe only), `PreCompact`, `SessionEnd`. No `additionalContext`.
 - Normalize: `message.role` / `message.content` (string or parts).
 - Install: `~/.claude/settings.json` hooks (user scope) so it is not per-repo.
 - Why this is second: same hook names as Grok, best path field, and the 30-day delete makes owned raw mandatory.
 
 ### Codex
 
-- Locate: hook `transcript_path` when present. Else `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`. Desktop app (local install: `/Applications/Codex.app`, CLI `0.148.0-alpha.9`) stores threads in `~/.codex/state_5.sqlite` (`threads.rollout_path`); `sessions/` can be empty on a fresh desktop install. Peek `session_meta` / `SessionMeta` for cwd.
-- Fire: **Stop**, **SessionEnd**, and **PreCompact** (Codex hooks now include PreCompact / PostCompact; confirmed in current hook docs). Watcher is still load-bearing when `sessions/` or `rollout_path` exists.
+- Locate: hook `transcript_path` when present. Else `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`. Desktop app stores threads in `~/.codex/state_*.sqlite`. `sessions/` can be missing. Watcher catch-up a thread with cwd and `first_user_message` when `rollout_path` is empty or the file is gone. Peek `session_meta` / `SessionMeta` for cwd when a rollout exists.
+- Fire: **Stop**, **SessionEnd**, and **PreCompact** (Codex hooks now include PreCompact / PostCompact; confirmed in current hook docs). Watcher is still load-bearing.
 - Normalize: rollout `event_msg` / `response_item` payload types.
 - Install: `~/.codex/hooks.json` (Stop / PreCompact / SessionEnd) plus `[features] hooks = true` if no `[features]` block exists. Hooks are on by default.
 
@@ -95,8 +95,8 @@ Install order: **Grok → Claude → Codex → Pi → OpenCode**. That is popula
 
 ### OpenCode
 
-- Locate: **no tail-able JSONL**. Live install (1.4.3) is `~/.local/share/opencode/opencode.db` (Drizzle): `session.directory`, `message.data` (role), `part.data` (text / tool / reasoning). `storage/` is not a session log.
-- Fire: plugin `session.idle`, `experimental.session.compacting`, `session.compacted`, `session.deleted`.
+- Locate: **no tail-able JSONL**. Live install is `~/.local/share/opencode/opencode.db` (Drizzle): `session.directory`, `message.data` (role), `part.data` (text / tool / reasoning). `storage/` is not a session log.
+- Fire: plugin `session.idle`, `experimental.session.compacting`, `session.compacted`, `session.deleted`. The watcher lists `session` rows and dumps those whose `time_updated` is ahead of the cursor (16 per tick) so a missed plugin still copies the tape.
 - Normalize: dump message+parts to `{role, content}` and catch-up. HTTP `POST /v1/catch-up` with `harness=opencode` + `session_id` reads the DB; `messages[]` is the no-file fallback.
 - Install: `~/.config/opencode/plugins/lossless.ts` (auto-loaded).
 
@@ -132,6 +132,6 @@ Grok first because we can dogfood in this TUI the same day the core lands.
 
 ## Watcher (all five)
 
-Poll or fs-events on each known session root. On file grow: `catch_up`. Debounce 200ms. Ignore files we already sealed (cursor at EOF and mtime stale).
+Poll or fs-events on each known session root, plus OpenCode `opencode.db` and Codex desktop `state_*.sqlite`. On file grow or sqlite `time_updated`: `catch_up`. Debounce 200ms. Ignore files we already sealed (cursor at EOF and mtime stale). Claude files with no peeked cwd skip (do not guess the slug).
 
 This is how "everything is remembered" survives missing compact hooks and crashed hook processes. Hooks make it timely. The watcher makes it complete.

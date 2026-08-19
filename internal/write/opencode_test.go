@@ -58,6 +58,13 @@ INSERT INTO part(id, message_id, time_created, data) VALUES
 	if !strings.Contains(string(raw), "jose") {
 		t.Fatal(string(raw))
 	}
+	listed := ListOpenCodeSessions(dbPath)
+	if len(listed) != 1 || listed[0].ID != "ses_1" || listed[0].Directory != "/Users/jay/dev/api" {
+		t.Fatalf("%+v", listed)
+	}
+	if ListOpenCodeSessions("") != nil || ListOpenCodeSessions("/no/such.db") != nil {
+		t.Fatal("missing db")
+	}
 	if _, _, err := ReadOpenCodeSession(dbPath, "missing"); err == nil {
 		t.Fatal("missing")
 	}

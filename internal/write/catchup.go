@@ -338,7 +338,12 @@ func dumpOpenCode(st *store.Store, req *CatchUpRequest) (string, error) {
 		if data == "" {
 			data = filepath.Join(os.Getenv("HOME"), ".local", "share")
 		}
-		db = filepath.Join(data, "opencode", "opencode.db")
+		if home := os.Getenv("OPENCODE_HOME"); home != "" {
+			data = home
+			db = filepath.Join(data, "opencode.db")
+		} else {
+			db = filepath.Join(data, "opencode", "opencode.db")
+		}
 	}
 	if fi, err := os.Lstat(db); err != nil {
 		return "", err

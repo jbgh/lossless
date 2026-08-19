@@ -846,6 +846,8 @@ func hookSource(name, fallback string) string {
 		return "session_end"
 	case n == "stop" || n == "turn" || n == "turn_end" || n == "agent_settled" || n == "session.idle":
 		return "turn"
+	case n == "userpromptsubmit" || n == "user_prompt_submit" || n == "prompt_submit":
+		return "turn"
 	case strings.Contains(n, "compact"):
 		return "compact"
 	default:
