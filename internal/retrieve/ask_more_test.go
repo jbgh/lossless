@@ -452,3 +452,76 @@ func TestAskDropsExtractNoiseAndKeepsRealWork(t *testing.T) {
 		t.Fatalf("faileds=%d %+v", nFail, out.Context)
 	}
 }
+
+func TestAskDropsLiveRecapKeepsRedis(t *testing.T) {
+	st := tmpStore(t)
+	writeRec(t, st, claim.Record{
+		ID: "RECAP1909", Type: "failed", SessionID: "live",
+		Text:      "tree: productCopy slogans not bare never; space-form Same failure twice Redis still extracts; 0.1.",
+		CreatedAt: "2026-08-10T19:09:59Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP1915", Type: "failed", SessionID: "live",
+		Text:      "e_test.go lock the recap row, not a pathful named-lock failed (contrast Redis token bucket).",
+		CreatedAt: "2026-08-10T19:15:38Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP1743", Type: "failed", SessionID: "live",
+		Text:      "They found real control-flow holes: budget headroom too small, a failed semver check aborting the whole batch, and a “shipped N” summary when the run just ran out of slots.",
+		CreatedAt: "2026-08-10T17:43:55Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2010", Type: "failed", SessionID: "live",
+		Text:      "Live recent 8 are slice-loop / 0.1.5 decisions and version state; `recent_noise=0`; 17:43 is not a packed failed.",
+		CreatedAt: "2026-08-10T20:10:28Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2013", Type: "failed", SessionID: "live",
+		Text:      "Inspect recent on the live store still includes the recap failed “Live recent 8 are slice-loop…”, which the uncommitted 0.1.7 gates already skip (`a packed failed` / `inspect recent 8`).",
+		CreatedAt: "2026-08-10T20:13:51Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "REDIS", Type: "failed", SessionID: "live",
+		Text:      "Redis token bucket failed in src/middleware/auth.ts staging.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-08-10T18:51:54Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "THEYREDIS", Type: "failed", SessionID: "live",
+		Text:      "They found Redis token bucket failed in src/middleware/auth.ts staging.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-08-10T20:18:47Z",
+	})
+	out := askAt(t, st, Request{
+		Project:   "acme/api",
+		SessionID: "live",
+		Goal:      "fix the limiter",
+		Question:  "what failed on auth",
+		Paths:     []string{"src/middleware/auth.ts"},
+	})
+	if containsID(out, "RECAP1909") || containsID(out, "RECAP1915") || containsID(out, "RECAP1743") ||
+		containsID(out, "RECAP2010") || containsID(out, "RECAP2013") {
+		t.Fatalf("live recap packed: %+v", out.Context)
+	}
+	if !containsID(out, "REDIS") {
+		t.Fatalf("Redis failed missed: %+v", out.Context)
+	}
+	for _, w := range out.Warnings {
+		if strings.Contains(w, "RECAP1909") || strings.Contains(w, "RECAP1915") ||
+			strings.Contains(w, "RECAP1743") || strings.Contains(w, "RECAP2010") ||
+			strings.Contains(w, "RECAP2013") || strings.Contains(w, "still extracts") ||
+			strings.Contains(w, "lock the recap row") || strings.Contains(w, "control-flow holes") ||
+			strings.Contains(w, "recent_noise=0") {
+			t.Fatalf("live recap warned: %v", out.Warnings)
+		}
+	}
+	warnedRedis := false
+	for _, w := range out.Warnings {
+		if strings.Contains(w, "REDIS") {
+			warnedRedis = true
+		}
+	}
+	if !warnedRedis {
+		t.Fatalf("Redis job-1 warning missed: %v pack=%+v", out.Warnings, out.Context)
+	}
+}

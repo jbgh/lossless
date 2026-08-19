@@ -118,3 +118,111 @@ func TestBuildAndAskInspect(t *testing.T) {
 		t.Fatal("passwd")
 	}
 }
+
+func TestInspectRecentResidueIsNoise(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	recs := []claim.Record{
+		{ID: "R2019", Type: "decision", Text: "Live export still has recap-faileds in the recent window, and the tests gold yesterday’s skip phrases instead of proving that window is obey-worthy.", CreatedAt: "2026-08-19T20:19:11Z"},
+		{ID: "R2013", Type: "failed", Text: "Inspect recent on the live store still includes the recap failed “Live recent 8 are slice-loop…”, which the uncommitted 0.1.7 gates already skip (`a packed failed` / `inspect recent 8`).", CreatedAt: "2026-08-19T20:13:51Z"},
+		{ID: "R2010", Type: "failed", Text: "Live recent 8 are slice-loop / 0.1.5 decisions and version state; `recent_noise=0`; 17:43 is not a packed failed.", CreatedAt: "2026-08-19T20:10:28Z"},
+		{ID: "R1915", Type: "failed", Text: "e_test.go lock the recap row, not a pathful named-lock failed (contrast Redis token bucket).", CreatedAt: "2026-08-19T19:15:38Z"},
+		{ID: "R1909", Type: "failed", Text: "tree: productCopy slogans not bare never; space-form Same failure twice Redis still extracts; 0.1.", CreatedAt: "2026-08-19T19:09:59Z"},
+		{ID: "THEYREDIS", Type: "failed", Text: "They found Redis token bucket failed in src/middleware/auth.ts staging.", Paths: []string{"src/middleware/auth.ts"}, CreatedAt: "2026-08-19T20:18:47Z"},
+		{ID: "REAL01", Type: "failed", Text: "Redis token bucket failed in src/middleware/auth.ts staging.", Paths: []string{"src/middleware/auth.ts"}, CreatedAt: "2026-08-19T18:51:54Z"},
+		{ID: "NAMED", Type: "failed", Text: "Named locks in catchup.go stay on the session JSONL.", CreatedAt: "2026-08-19T18:40:00Z"},
+	}
+	for _, r := range recs {
+		r.ProjectKey = "acme/api"
+		r.Status = "active"
+		r.Source = "import"
+		r.Harness = "grok"
+		r.SessionID = "s-live"
+		if _, err := st.WriteClaim(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	det, err := Build(st, "acme/api")
+	if err != nil || det.Detail == nil || det.Detail.RecentNoise != 5 {
+		t.Fatalf("recent_noise want 5 (mixed 8) got %+v %v", det.Detail, err)
+	}
+	var inWindowRedis, inWindowNoise, inWindowKeep, saw2010, saw2013 int
+	for _, c := range det.Detail.Recent {
+		if strings.Contains(c.Text, "`recent_noise=0`") {
+			saw2010++
+			if !retrieve.ExtractNoise(c) {
+				t.Fatal("20:10 recap not noise")
+			}
+		}
+		if strings.Contains(c.Text, "Inspect recent on the live store") {
+			saw2013++
+			if !retrieve.ExtractNoise(c) {
+				t.Fatal("20:13 recap not noise")
+			}
+		}
+		if strings.Contains(c.Text, "token bucket failed in src/middleware/auth.ts staging") {
+			inWindowRedis++
+			if retrieve.ExtractNoise(c) {
+				t.Fatal("redis counted as noise")
+			}
+			continue
+		}
+		if retrieve.ExtractNoise(c) {
+			inWindowNoise++
+			continue
+		}
+		inWindowKeep++
+	}
+	if saw2010 != 1 || saw2013 != 1 || inWindowRedis != 2 || inWindowNoise != 5 || inWindowKeep != 1 {
+		t.Fatalf("mixed window 2010=%d 2013=%d redis=%d noise=%d keep=%d recent=%+v", saw2010, saw2013, inWindowRedis, inWindowNoise, inWindowKeep, det.Detail.Recent)
+	}
+	var buf strings.Builder
+	Format(&buf, det)
+	if !strings.Contains(buf.String(), "ask-would-drop") {
+		t.Fatal(buf.String())
+	}
+	if !strings.Contains(buf.String(), "e_test.go") || !strings.Contains(buf.String(), "Inspect recent on") {
+		t.Fatalf("format missing live recaps %s", buf.String())
+	}
+	now := time.Date(2026, 8, 19, 20, 30, 0, 0, time.UTC)
+	ask, err := Ask(st, retrieve.Request{
+		Project: "acme/api", Question: "what failed on auth",
+		Goal:  "fix the limiter",
+		Paths: []string{"src/middleware/auth.ts"},
+	}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packedRedis := false
+	for _, h := range ask.Hits {
+		if strings.Contains(h.Text, "still extracts") || strings.Contains(h.Text, "lock the recap row") ||
+			strings.Contains(h.Text, "still store and pack") || strings.Contains(h.Text, "recap-as-failed") ||
+			strings.Contains(h.Text, "control-flow holes") || strings.Contains(h.Text, "recap-like") ||
+			strings.Contains(h.Text, "recent_noise=0") || strings.Contains(h.Text, "Inspect recent on the live store") {
+			t.Fatalf("residue packed: %+v", ask.Hits)
+		}
+		if strings.Contains(h.Text, "token bucket failed in src/middleware/auth.ts staging") {
+			packedRedis = true
+		}
+	}
+	if !packedRedis {
+		t.Fatalf("Redis failed missed: %+v", ask.Hits)
+	}
+	droppedRecap := false
+	for _, d := range ask.Dropped {
+		if !strings.Contains(d.Why, "extract-noise") {
+			continue
+		}
+		if strings.Contains(d.Text, "still extracts") || strings.Contains(d.Text, "lock the recap row") ||
+			strings.Contains(d.Text, "recent_noise=0") || strings.Contains(d.Text, "Inspect recent on the live store") ||
+			strings.Contains(d.Text, "recap-faileds") {
+			droppedRecap = true
+		}
+	}
+	if !droppedRecap {
+		t.Fatalf("expected extract-noise drop of a live recap %+v", ask.Dropped)
+	}
+}

@@ -316,8 +316,89 @@ func TestExtractNoiseKeepsPointOneThreeRemember(t *testing.T) {
 	if retrieveNoise("0.1.3 / 0.3 extract-clean: gate failed-work-first. Real pathful faileds stay.") {
 		t.Fatal("0.1.3 remember is not residue")
 	}
+	if extractNoise(claim.Record{Type: "decision", Text: "slice-loop is autonomous."}) {
+		t.Fatal("slice-loop remember is not residue")
+	}
+	if retrieveNoise("Redis token bucket failed in staging.") {
+		t.Fatal("Redis failed lock")
+	}
 	if !retrieveNoise("The next product is: the model sees it before it retries the failed work.") {
 		t.Fatal("roadmap next-product")
+	}
+	if !retrieveNoise("You can switch between them and never lose memory.") {
+		t.Fatal("slogan residue")
+	}
+	if !retrieveNoise("Intended gap: Shipped channel is still 0.1.5: leftover.") {
+		t.Fatal("intended-gap residue")
+	}
+	if !retrieveNoise("Same failure twice pauses as no-progress.") {
+		t.Fatal("same-failure residue")
+	}
+	if retrieveNoise("Same failure twice: Redis token bucket still 429 in staging.") {
+		t.Fatal("same-failure job-1 lock")
+	}
+	if !retrieveNoise("ProcessState is in SkipProse as planned; Working on … next is no longer a required kept state.") {
+		t.Fatal("process-state recap")
+	}
+	if retrieveNoise("Tests failed to connect after we raised the pool.") {
+		t.Fatal("pathless Tests failed to lock")
+	}
+	if !retrieveNoise("The SQLITE_BUSY failure looks flaky; I'll rerun the full eval suite to confirm.") {
+		t.Fatal("i'll rerun residue")
+	}
+	if !retrieveNoise("0.1.7 extract-clean tree: slogans, I'll-run, intended-gap, same-failure-twice, process-state gated.") {
+		t.Fatal("hyphenated operator labels")
+	}
+	if !retrieveNoise("Tests failed on the live residue as expected.") {
+		t.Fatal("live residue recap")
+	}
+	if !retrieveNoise("Slogans, I'll-run, intended-gap, right-next-step, same-failure-twice, and the test-pass recap are gone.") {
+		t.Fatal("slogans recap")
+	}
+	if !retrieveNoise("tree: productCopy slogans not bare never; space-form Same failure twice Redis still extracts; 0.1.") {
+		t.Fatal("19:09 recap")
+	}
+	if !retrieveNoise("e_test.go lock the recap row, not a pathful named-lock failed (contrast Redis token bucket).") {
+		t.Fatal("19:15 recap")
+	}
+	if !retrieveNoise("Redis faileds, stick-with decisions, space-form “same failure twice” job-1, and pathless `Tests failed to` still store and pack.") {
+		t.Fatal("19:03 recap")
+	}
+	if !retrieveNoise("Shipping the current tree would lock fail-close skips and recap-as-failed.") {
+		t.Fatal("19:22 recap")
+	}
+	if !retrieveNoise("They found real control-flow holes: budget headroom too small, a failed semver check aborting the whole batch, and a “shipped N” summary when the run just ran out of slots.") {
+		t.Fatal("17:43 recap")
+	}
+	if !retrieveNoise("One remaining active failed looks recap-like.") {
+		t.Fatal("19:57 recap")
+	}
+	if !retrieveNoise("Live recent 8 are slice-loop / 0.1.5 decisions and version state; `recent_noise=0`; 17:43 is not a packed failed.") {
+		t.Fatal("20:10 recap")
+	}
+	if !retrieveNoise("Inspect recent on the live store still includes the recap failed “Live recent 8 are slice-loop…”, which the uncommitted 0.1.7 gates already skip (`a packed failed` / `inspect recent 8`).") {
+		t.Fatal("20:13 recap")
+	}
+	if retrieveNoise("Named locks in catchup.go stay on the session JSONL.") {
+		t.Fatal("named-lock keep")
+	}
+	if retrieveNoise("File locks are tested in concurrent_test.go.") {
+		t.Fatal("file-lock keep")
+	}
+	if retrieveNoise("concurrent_test.go File locks failed to acquire.") {
+		t.Fatal("concurrent_test.go-first keep")
+	}
+	if retrieveNoise("They found Redis token bucket failed in src/middleware/auth.ts staging.") {
+		t.Fatal("they-found Redis keep")
+	}
+	if retrieveNoise("They found Redis token bucket failed in this session in src/middleware/auth.ts.") {
+		t.Fatal("they-found Redis in this session keep")
+	}
+	if !retrieveNoise("A They-found + Redis/path failed still stores and packs.") {
+		t.Fatal("still stores and packs meta")
+	}
+	if !retrieveNoise(`{"diff_stat":"13 files changed, 322 insertions(+), 6 deletions(-)","ok":true,"summary":"Gate SkipProse now treats hyphenated I'll-run."}`) {
+		t.Fatal("eval json dump")
 	}
 }
 

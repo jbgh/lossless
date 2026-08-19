@@ -95,6 +95,10 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			}
 			paths := redact.FilterPaths(claim.Uniq(append(findPaths(sent), near...)))
 			typ := classify(sent, msg)
+			if typ == "state" && gate.ProcessState(sent) {
+				tr.skip("process-state", sent)
+				continue
+			}
 			if typ == "failed" && (gate.StatusFailed(sent) || gate.FailedAsObject(sent) || !groundedFailed(sent, paths)) {
 				reason := "ungrounded-failed"
 				if gate.StatusFailed(sent) {

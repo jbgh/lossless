@@ -67,7 +67,24 @@ func FailedAsObject(s string) bool {
 }
 
 func MetaFailedTalk(s string) bool {
-	return containsAny(s, metaFailed)
+	if containsAny(s, metaFailed) {
+		return true
+	}
+	if stillExtractsNoObject(Fold(s)) {
+		return true
+	}
+	return InspectStatus(s) || theyFoundReviewList(s)
+}
+
+// stillExtractsNoObject is extract-meta ("still extracts;" / "still extracts.")
+// not "still extracts JWTs".
+func stillExtractsNoObject(low string) bool {
+	for _, p := range []string{"still extracts.", "still extracts;", "still extract.", "still extract;"} {
+		if strings.Contains(low, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func ProcessState(s string) bool {
@@ -136,7 +153,117 @@ func Truncated(s string) bool {
 	if ConstraintFragment(s) && (strings.Contains(s, "`") || strings.Contains(s, "|") || strings.Contains(low, "…")) {
 		return true
 	}
+	if leadingFileFragment(s) || yamlTreeDump(s) || trailingShortVersion(s) {
+		return true
+	}
 	return false
+}
+
+// leadingFileFragment is a chopped test path at the start of a sentence
+// (e_test.go …). A real concurrent_test.go-first failed is not this shape.
+func leadingFileFragment(s string) bool {
+	fields := strings.Fields(strings.TrimSpace(s))
+	if len(fields) == 0 {
+		return false
+	}
+	first := strings.Trim(fields[0], "\"“”'`.,;:()[]")
+	if first == "" || strings.ContainsAny(first, "/\\") {
+		return false
+	}
+	i := strings.LastIndex(first, ".")
+	if i <= 0 || i == len(first)-1 {
+		return false
+	}
+	ext := first[i+1:]
+	if len(ext) < 1 || len(ext) > 4 {
+		return false
+	}
+	for _, r := range ext {
+		if r < 'A' || (r > 'Z' && r < 'a') || r > 'z' {
+			return false
+		}
+	}
+	base := strings.ToLower(first[:i])
+	idx := strings.LastIndex(base, "_test")
+	if idx < 0 {
+		return false
+	}
+	return idx <= 1
+}
+
+func yamlTreeDump(s string) bool {
+	low := Fold(strings.TrimSpace(s))
+	low = strings.TrimPrefix(low, "- ")
+	return strings.HasPrefix(low, "tree:")
+}
+
+var (
+	trailingChoppedZeroVersion = regexp.MustCompile(`(?:^|[^0-9.])0\.\d+\.$`)
+	trailingThreePartVersion   = regexp.MustCompile(`\d+\.\d+\.\d+\.$`)
+)
+
+// trailingShortVersion is a chopped 0.1.x (0.1.) not a complete 0.1.7.
+// or a standing two-part weight (4.0. / 2.5.).
+func trailingShortVersion(s string) bool {
+	s = strings.TrimSpace(s)
+	if trailingThreePartVersion.MatchString(s) {
+		return false
+	}
+	return trailingChoppedZeroVersion.MatchString(s)
+}
+
+var (
+	inspectClock    = regexp.MustCompile(`\b\d{1,2}:\d{2}\b`)
+	liveRecentNAre  = regexp.MustCompile(`^live recent \d+ are\b`)
+	inspectRecentOn = regexp.MustCompile(`^inspect recent on\b`)
+)
+
+// InspectStatus is inspect-window recap, not a product failed.
+// recent_noise= dumps, "Live recent N are" / "Inspect recent on" leads,
+// clock-time recap ids, recap-faileds in the recent window.
+// "They found Redis token bucket failed in src/middleware/auth.ts" is not this.
+func InspectStatus(s string) bool {
+	low := Fold(strings.TrimSpace(s))
+	low = strings.TrimPrefix(low, "- ")
+	if strings.Contains(low, "recent_noise=") || strings.Contains(low, "`recent_noise") {
+		return true
+	}
+	if liveRecentNAre.MatchString(low) || inspectRecentOn.MatchString(low) {
+		return true
+	}
+	if inspectClock.MatchString(s) && recapFailedTalk(low) {
+		return true
+	}
+	if recapFailedTalk(low) && (strings.Contains(low, "recent window") ||
+		strings.Contains(low, "live store") || strings.Contains(low, "live export")) {
+		return true
+	}
+	if strings.Contains(low, "remaining active failed") && strings.Contains(low, "recap") {
+		return true
+	}
+	return false
+}
+
+func recapFailedTalk(low string) bool {
+	return strings.Contains(low, "recap-failed") || strings.Contains(low, "recap failed") ||
+		strings.Contains(low, "recap-as-failed") || strings.Contains(low, "packed failed")
+}
+
+// theyFoundReviewList is "They found X: a, b, and c" review recap, not
+// "They found Redis token bucket failed in src/middleware/auth.ts".
+func theyFoundReviewList(s string) bool {
+	low := Fold(s)
+	i := strings.Index(low, "they found")
+	if i < 0 {
+		return false
+	}
+	rest := low[i+len("they found"):]
+	colon := strings.Index(rest, ":")
+	if colon < 0 {
+		return false
+	}
+	after := rest[colon+1:]
+	return strings.Contains(after, ",") && strings.Contains(after, " and ")
 }
 
 func FixtureTalk(s string) bool {
@@ -217,6 +344,8 @@ func SkipProse(s string) bool {
 	if RememberedProse(t) || YAMLClaimChrome(t) || Truncated(t) || SkillTalk(t) || ProductCopy(t) {
 		return true
 	}
+	// ProcessState is type-scoped in extract and extractNoise. A They-found
+	// Redis failed that contains "in this session" or ends " next." still stores.
 	return false
 }
 
@@ -241,8 +370,11 @@ var (
 		"i'll replace", "i'll swap",
 		"i'll rewrite", "i will rewrite",
 		"i'll migrate", "i'll refactor",
+		"i'll patch",
 		"i'll ask", "i will ask",
 		"i'll load", "i will load",
+		"i'll run", "i will run", "i'll-run",
+		"i'll rerun", "i will rerun",
 		"the next hour", "we will use the next", "we'll use the next",
 	}
 	sessionOp = []string{
@@ -281,12 +413,20 @@ var (
 		"stand-in",
 		"extract residue", "ask-would-drop",
 		"remaining recent residue",
-		"still extracts.", "still extract.",
 		"no i'll-ask", "no failed-work-first",
+		"intended gap:", "intended-gap", "shipped channel is still",
+		"same-failure", "same-failure-twice", "pauses as no-progress",
+		"in skipprose",
+		"live residue", "dump an ask json",
+		"still store and pack",
+		"still stores and pack",
+		"lock the recap row",
+		"recap-as-failed",
 	}
 	processState = []string{
 		"in this session", "the next stop", "next test that matters",
 		"not another fixture", "that row is always there", "i'll inspect",
+		"right next step", "right-next-step",
 	}
 	skillTalk = []string{
 		"ignore a skill", "can ignore a skill",
@@ -300,6 +440,7 @@ var (
 		"failed work first, then", "then what already shipped",
 		"the next product is:", "before it retries the failed work",
 		"harness holes beyond",
+		"never lose memory", "never lose your memory", "switch between them",
 	}
 	yamlChrome = []string{
 		"text: ", "text = ", "text=", "type: failed", "type: decision", "type: constraint",
@@ -307,6 +448,6 @@ var (
 		"[[context]]", "[context]",
 	}
 	chromePrefix = []string{
-		"#", ">", "|", "<!--", "---", "+++", "<<<<<<", ">>>>>>", "======",
+		"#", ">", "|", "{", "<!--", "---", "+++", "<<<<<<", ">>>>>>", "======",
 	}
 )

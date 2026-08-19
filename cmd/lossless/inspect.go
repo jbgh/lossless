@@ -23,7 +23,7 @@ func runInspect(args []string) int {
 	session := fs.String("session", "", "session id")
 	ws := fs.String("workspace", "", "workspace root (derives project if set)")
 	jsonl := fs.String("jsonl", "", "session JSONL to show extract keep/skip")
-	prune := fs.Bool("prune", false, "drop hook-test ingest and supersede extract-noise")
+	prune := fs.Bool("prune", false, "drop hook-test ingest and supersede extract-noise (this --project if set)")
 	var paths stringsFlag
 	fs.Var(&paths, "path", "repo-relative path for --ask (repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -41,7 +41,7 @@ func runInspect(args []string) int {
 	defer st.Close()
 	var pruned *inspect.PruneResult
 	if *prune {
-		res, err := inspect.Prune(st)
+		res, err := inspect.Prune(st, *project)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1

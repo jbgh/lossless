@@ -2,6 +2,7 @@ package inspect
 
 import (
 	"lossless/internal/claim"
+	"lossless/internal/projectkey"
 	"lossless/internal/retrieve"
 	"lossless/internal/store"
 	"lossless/internal/write"
@@ -18,17 +19,21 @@ func testSession(s store.Session) bool {
 	return claim.FixtureSession(s.SessionID) || write.GoTestPath(s.Workspace) || write.GoTestPath(s.JSONL)
 }
 
-func Prune(st *store.Store) (PruneResult, error) {
+func Prune(st *store.Store, project string) (PruneResult, error) {
 	var out PruneResult
+	key := projectkey.Normalize(project)
 	sess, err := st.ListSessions()
 	if err != nil {
 		return out, err
 	}
 	by := map[string][]store.Session{}
 	for _, s := range sess {
+		if key != "" && s.Project != key {
+			continue
+		}
 		by[s.Project] = append(by[s.Project], s)
 	}
-	for key, list := range by {
+	for proj, list := range by {
 		var test, live []store.Session
 		for _, s := range list {
 			if testSession(s) {
@@ -43,19 +48,26 @@ func Prune(st *store.Store) (PruneResult, error) {
 		if err := dropSessions(st, test, &out); err != nil {
 			return out, err
 		}
-		if len(live) == 0 && key != "" {
-			if err := dropOrphanProject(st, key, &out); err != nil {
+		if len(live) == 0 && proj != "" {
+			if err := dropOrphanProject(st, proj, &out); err != nil {
 				return out, err
 			}
 		}
 	}
-	if err := dropFixtureClaims(st, &out); err != nil {
+	if err := dropFixtureClaims(st, key, &out); err != nil {
 		return out, err
 	}
-	if err := supersedeNoise(st, &out); err != nil {
+	if err := supersedeNoise(st, key, &out); err != nil {
 		return out, err
 	}
 	return out, nil
+}
+
+func activeFor(st *store.Store, project string) ([]claim.Record, error) {
+	if project == "" {
+		return st.ListAllActive()
+	}
+	return st.ListActive(project)
 }
 
 func dropSessions(st *store.Store, sess []store.Session, out *PruneResult) error {
@@ -107,8 +119,8 @@ func dropOrphanProject(st *store.Store, key string, out *PruneResult) error {
 	return nil
 }
 
-func dropFixtureClaims(st *store.Store, out *PruneResult) error {
-	recs, err := st.ListAllActive()
+func dropFixtureClaims(st *store.Store, project string, out *PruneResult) error {
+	recs, err := activeFor(st, project)
 	if err != nil {
 		return err
 	}
@@ -124,8 +136,8 @@ func dropFixtureClaims(st *store.Store, out *PruneResult) error {
 	return nil
 }
 
-func supersedeNoise(st *store.Store, out *PruneResult) error {
-	recs, err := st.ListAllActive()
+func supersedeNoise(st *store.Store, project string, out *PruneResult) error {
+	recs, err := activeFor(st, project)
 	if err != nil {
 		return err
 	}

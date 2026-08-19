@@ -63,7 +63,7 @@ If a later idea needs one of those to work, it is the wrong idea.
 ```
 0.2a ask is complete when someone asks     (shipped 0.1.2)
   → 0.4 harness holes                      (shipped 0.1.6)
-  → 0.3 extract / inspect-clean
+  → 0.3 extract / inspect-clean            (shape gates 0.1.7; success bar open)
   → 0.2b Claude inject                     (active file already 0.1.5; inject after README rewrite)
   → 0.6 child-session locate
   → 0.5 indexes, only after a named miss
@@ -71,7 +71,7 @@ If a later idea needs one of those to work, it is the wrong idea.
 
 The tape is infinite. The checkout is five records. Infinite context is not a bigger pack and not retuned 4.0 / 2.5. It is: catch-up every harness file (including children), extract only obey-worthy claims, check out after compact. Multi-model is already `owner/repo`. Multi-agent is still parent-only locate — that is 0.6.
 
-0.3 comes before 0.2b Claude inject so a session-start pack cannot inject extract residue. Claude `additionalContext` is a copy change, not a silent exception to "if the skill is ignored, the store is a diary." Do not start 0.5 without a named paraphrase miss. Publish 0.1.6 before starting 0.3 if that tag is still local.
+0.3 comes before 0.2b Claude inject so a session-start pack cannot inject extract residue. Claude `additionalContext` is a copy change, not a silent exception to "if the skill is ignored, the store is a diary." Do not start 0.5 without a named paraphrase miss. 0.1.7 shipped the shape gates; do not start 0.2b until inspect recent claims are obey-worthy.
 
 ---
 
@@ -105,6 +105,8 @@ SessionStart / just-compacted hooks stay fail-open. Catch-up must still skip own
 ### 0.3 — Extract is the intelligence
 
 Retrieve is already better than write. The only allowed "smarter" is better extract so claims have the right `symbols[]`. Ranking stays dumb.
+
+0.1.7 shipped shape gates (truncated recaps, extract-meta, inspect-status, review-list They-found). ProcessState leftovers skip only as type=state. A They-found + Redis/path failed still stores. The success bar is not closed: live inspect recent can still include operator recap.
 
 - Remaining narration, process-state, product-copy leftovers
 - Stronger symbols from path stems and identifiers (hop and overlap eat these)

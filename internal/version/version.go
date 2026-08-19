@@ -2,7 +2,7 @@ package version
 
 // Version is the release semver. Release builds override it with
 // -X lossless/internal/version.Version=<tag>.
-var Version = "0.1.6"
+var Version = "0.1.7"
 
 // Commit is the short git SHA when set at link time. Empty for a plain go build.
 var Commit = ""

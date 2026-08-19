@@ -25,8 +25,9 @@ func TestExtractClassifiesAndDrops(t *testing.T) {
 		{Role: "assistant", Text: "We decided to use jose, not jsonwebtoken, for Edge.", Offset: 2},
 		{Role: "user", Text: "Always never log Authorization headers in src/middleware/auth.ts.", Offset: 3},
 		{Role: "assistant", Text: "Working on billing invoices export next.", Offset: 4},
-		{Role: "assistant", Text: "short", Offset: 5},
-		{Role: "assistant", Text: "AKIAIOSFODNN7EXAMPLE failed to compile in staging.", Offset: 6},
+		{Role: "assistant", Text: "Now implementing billing invoices export.", Offset: 5},
+		{Role: "assistant", Text: "short", Offset: 6},
+		{Role: "assistant", Text: "AKIAIOSFODNN7EXAMPLE failed to compile in staging.", Offset: 7},
 		{Role: "assistant", Offset: 99, Text: "unrelated no classify words here at all really."},
 	}
 	got := Extract(msgs, ExtractOpts{ProjectKey: "acme/api", WorkspaceRoot: ws, Harness: "grok", SessionID: "s", Source: "import"})
@@ -35,6 +36,9 @@ func TestExtractClassifiesAndDrops(t *testing.T) {
 		types[r.Type] = true
 		if strings.Contains(r.Text, "AKIA") {
 			t.Fatal("secret claim")
+		}
+		if strings.Contains(r.Text, "Working on billing") {
+			t.Fatalf("process-state leftover extracted: %+v", r)
 		}
 		if r.Type == "failed" && r.PathMtime[rel] == 0 {
 			t.Fatalf("expected mtime on %s: %+v", rel, r)
@@ -332,17 +336,238 @@ func TestGroundedFailed(t *testing.T) {
 	if GroundedFailed("Failed work first, then what already shipped.", nil) {
 		t.Fatal("slogan")
 	}
+	if GroundedFailed("Same failure twice pauses as no-progress.", nil) {
+		t.Fatal("Same is not an identifier")
+	}
 	if !GroundedFailed("Failed to connect after we raised the pool.", nil) {
 		t.Fatal("failed to")
 	}
 	if !GroundedFailed("Failure during the token-bucket refill.", nil) {
 		t.Fatal("failure during")
 	}
+	if !GroundedFailed("Tests failed to connect after we raised the pool.", nil) {
+		t.Fatal("pathless Tests failed to")
+	}
+	if GroundedFailed("Ask warnings were treated as blocking for further product edits.", nil) {
+		t.Fatal("Ask is not an identifier")
+	}
+	if GroundedFailed("Live prune superseded eight noise rows.", nil) {
+		t.Fatal("Live is not an identifier")
+	}
+	if GroundedFailed("They found real control-flow holes: budget headroom too small, a failed semver check aborting the whole batch, and a “shipped N” summary when the run just ran out of slots.", nil) {
+		t.Fatal("They is not an identifier")
+	}
+	if GroundedFailed("One remaining active failed looks recap-like.", nil) {
+		t.Fatal("One is not an identifier")
+	}
 	if !GroundedFailed("Redis token bucket failed in staging.", nil) {
 		t.Fatal("Redis")
 	}
 	if !GroundedFailed("the redis pool failed", []string{"src/pool.ts"}) {
 		t.Fatal("path grounds")
+	}
+}
+
+// Live inspect --project jbgh/lossless recap bodies (2026-08-19). Copied in;
+// tests must not read ~/.lossless.
+const (
+	liveRecap1909   = "tree: productCopy slogans not bare never; space-form Same failure twice Redis still extracts; 0.1."
+	liveRecap1915   = "e_test.go lock the recap row, not a pathful named-lock failed (contrast Redis token bucket)."
+	liveRecap1903   = "Redis faileds, stick-with decisions, space-form “same failure twice” job-1, and pathless `Tests failed to` still store and pack."
+	liveRecap1922   = "Shipping the current tree would lock fail-close skips and recap-as-failed."
+	liveRecap1743   = "They found real control-flow holes: budget headroom too small, a failed semver check aborting the whole batch, and a “shipped N” summary when the run just ran out of slots."
+	liveRecap1957   = "One remaining active failed looks recap-like."
+	liveRecap2010   = "Live recent 8 are slice-loop / 0.1.5 decisions and version state; `recent_noise=0`; 17:43 is not a packed failed."
+	liveRecap2013   = "Inspect recent on the live store still includes the recap failed “Live recent 8 are slice-loop…”, which the uncommitted 0.1.7 gates already skip (`a packed failed` / `inspect recent 8`)."
+	liveRecap2019   = "Live export still has recap-faileds in the recent window, and the tests gold yesterday’s skip phrases instead of proving that window is obey-worthy."
+	namedLockKeep   = "Named locks in catchup.go stay on the session JSONL."
+	fileLockKeep    = "File locks are tested in concurrent_test.go."
+	testGoFirstKeep = "concurrent_test.go File locks failed to acquire."
+	theyFoundRedis  = "They found Redis token bucket failed in src/middleware/auth.ts staging."
+	theyFoundLock   = "They found the named-lock race in catchup.go."
+)
+
+func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
+	residue := Extract([]Message{{
+		Role: "user", Offset: 1,
+		Text: "You can switch between them and never lose memory. " +
+			"Intended gap: Shipped channel is still 0.1.5: leftover. " +
+			"I'll run the actual git commands instead of inferring. " +
+			"A first run is the right next step. " +
+			"Same failure twice pauses as no-progress. " +
+			"0.1.7 extract-clean tree: slogans, I'll-run, intended-gap, same-failure-twice, process-state gated. " +
+			"Tests failed on the live residue as expected. " +
+			"Ask warnings were treated as blocking for further product edits: do not dump an ask JSON body as assistant text. " +
+			liveRecap1909 + " " + liveRecap1915 + " " + liveRecap1903 + " " + liveRecap1922 + " " +
+			liveRecap1743 + " " + liveRecap1957 + " " + liveRecap2010 + " " + liveRecap2013 + " " + liveRecap2019 + " " +
+			"ProcessState is in SkipProse as planned; Working on … next is no longer a required kept state.",
+	}}, ExtractOpts{ProjectKey: "jbgh/lossless", SessionID: "s"})
+	if len(residue) != 0 {
+		t.Fatalf("residue extracted: %+v", residue)
+	}
+	for i, recap := range []string{liveRecap1909, liveRecap1915, liveRecap1903, liveRecap1922, liveRecap1743, liveRecap1957, liveRecap2010, liveRecap2013, liveRecap2019} {
+		got := Extract([]Message{{
+			Role: "assistant", Offset: int64(i + 1), Text: recap,
+		}}, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
+		if len(got) != 0 {
+			t.Fatalf("live recap extracted: %q -> %+v", recap, got)
+		}
+	}
+	got := Extract([]Message{
+		{Role: "user", Offset: 1, Text: "You can switch between them and never lose memory."},
+		{Role: "assistant", Offset: 2, Text: "Redis token bucket failed in src/middleware/auth.ts staging."},
+		{Role: "assistant", Offset: 3, Text: "We decided to use jose, not jsonwebtoken, for Edge."},
+		{Role: "user", Offset: 4, Text: "Always never log Authorization headers in src/middleware/auth.ts."},
+		{Role: "assistant", Offset: 5, Text: "I'll run the actual git commands instead of inferring."},
+		{Role: "assistant", Offset: 6, Text: "Same failure twice pauses as no-progress."},
+		{Role: "assistant", Offset: 7, Text: "Intended gap: Shipped channel is still 0.1.5: leftover."},
+		{Role: "assistant", Offset: 8, Text: "0.1.7 extract-clean tree: slogans, I'll-run, intended-gap, same-failure-twice, process-state gated; Redis faileds and stick-with kept."},
+		{Role: "assistant", Offset: 9, Text: "Tests failed on the live residue as expected."},
+		{Role: "assistant", Offset: 10, Text: "Same failure twice: Redis token bucket still 429 in src/middleware/auth.ts."},
+		{Role: "assistant", Offset: 11, Text: "The SQLITE_BUSY failure looks flaky; I'll rerun the full eval suite to confirm."},
+		{Role: "assistant", Offset: 12, Text: liveRecap1903},
+		{Role: "assistant", Offset: 13, Text: "ProcessState is in SkipProse as planned; Working on … next is no longer a required kept state."},
+		{Role: "assistant", Offset: 14, Text: "I'll stick with the parser that still extracts JWTs from cookies in src/auth.ts."},
+		{Role: "assistant", Offset: 15, Text: namedLockKeep},
+		{Role: "assistant", Offset: 16, Text: fileLockKeep},
+	}, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
+	var redis, job1, jose, auth, jwt bool
+	for _, r := range got {
+		if strings.Contains(r.Text, "never lose") || strings.Contains(r.Text, "I'll run the actual") ||
+			strings.Contains(r.Text, "I'll-run") || strings.Contains(r.Text, "intended-gap") ||
+			strings.Contains(r.Text, "same-failure-twice") || strings.Contains(r.Text, "live residue") ||
+			strings.Contains(r.Text, "pauses as no-progress") || strings.Contains(r.Text, "Intended gap") ||
+			strings.Contains(r.Text, "diff_stat") ||
+			strings.Contains(r.Text, "I'll rerun") || strings.Contains(r.Text, "still store and pack") ||
+			strings.Contains(r.Text, "in SkipProse") || strings.Contains(r.Text, "recap-as-failed") ||
+			strings.Contains(r.Text, "lock the recap row") || strings.Contains(r.Text, "control-flow holes") ||
+			strings.Contains(r.Text, "recap-like") || strings.Contains(r.Text, "recent_noise") ||
+			strings.Contains(r.Text, "Inspect recent on the live store") || strings.Contains(r.Text, "recap-faileds") {
+			t.Fatalf("residue kept: %+v", r)
+		}
+		if r.Type == "failed" && strings.Contains(r.Text, "token bucket failed in src/middleware/auth.ts staging.") {
+			redis = true
+		}
+		if r.Type == "failed" && strings.Contains(r.Text, "still 429") {
+			job1 = true
+		}
+		if r.Type == "decision" && strings.Contains(r.Text, "jose") {
+			jose = true
+		}
+		if r.Type == "constraint" && strings.Contains(r.Text, "Authorization") {
+			auth = true
+		}
+		if r.Type == "decision" && strings.Contains(r.Text, "still extracts JWTs") {
+			jwt = true
+		}
+	}
+	if !redis || !job1 || !jose || !auth || !jwt {
+		t.Fatalf("locks missed redis=%v job1=%v jose=%v auth=%v jwt=%v %+v", redis, job1, jose, auth, jwt, got)
+	}
+	alone := Extract([]Message{{
+		Role: "assistant", Offset: 1,
+		Text: "Same failure twice: Redis token bucket still 429 in src/middleware/auth.ts.",
+	}}, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
+	ok := false
+	for _, r := range alone {
+		if r.Type == "failed" && strings.Contains(r.Text, "still 429") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("space-form job-1 Redis missed: %+v", alone)
+	}
+	tests := Extract([]Message{{
+		Role: "assistant", Offset: 1,
+		Text: "Tests failed to connect after we raised the pool.",
+	}}, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
+	ok = false
+	for _, r := range tests {
+		if r.Type == "failed" && strings.Contains(r.Text, "Tests failed to connect") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("pathless Tests failed to missed: %+v", tests)
+	}
+	lockFailed := Extract([]Message{
+		{Role: "assistant", Offset: 1, Text: "Named locks in catchup.go failed to persist the session JSONL."},
+		{Role: "assistant", Offset: 2, Text: "File locks are tested in concurrent_test.go and the acquire failed."},
+		{Role: "assistant", Offset: 3, Text: testGoFirstKeep},
+	}, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
+	var named, file, testGo bool
+	for _, r := range lockFailed {
+		if r.Type == "failed" && strings.Contains(r.Text, "Named locks in catchup.go") {
+			named = true
+		}
+		if r.Type == "failed" && strings.Contains(r.Text, "File locks are tested") {
+			file = true
+		}
+		if r.Type == "failed" && strings.Contains(r.Text, "concurrent_test.go File locks failed") {
+			testGo = true
+		}
+	}
+	if !named || !file || !testGo {
+		t.Fatalf("named-lock faileds missed named=%v file=%v testGo=%v %+v", named, file, testGo, lockFailed)
+	}
+	glued := Extract([]Message{
+		{Role: "user", Offset: 1, Text: "Look at internal/gate/gate.go and internal/write/extract.go."},
+		{Role: "assistant", Offset: 2, Text: liveRecap1743},
+		{Role: "assistant", Offset: 3, Text: liveRecap1957},
+		{Role: "assistant", Offset: 4, Text: liveRecap2010},
+		{Role: "assistant", Offset: 5, Text: liveRecap2013},
+	}, ExtractOpts{ProjectKey: "jbgh/lossless", SessionID: "s"})
+	if len(glued) != 0 {
+		t.Fatalf("nearby paths extracted live recap: %+v", glued)
+	}
+	theyFound := Extract([]Message{
+		{Role: "user", Offset: 1, Text: "Look at src/middleware/auth.ts and catchup.go."},
+		{Role: "assistant", Offset: 2, Text: theyFoundRedis},
+		{Role: "assistant", Offset: 3, Text: "They found the named-lock race failed in catchup.go."},
+		{Role: "assistant", Offset: 4, Text: theyFoundLock},
+		{Role: "assistant", Offset: 5, Text: liveRecap1743},
+		{Role: "assistant", Offset: 6, Text: liveRecap2010},
+	}, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
+	var foundRedis, foundLock bool
+	for _, r := range theyFound {
+		if strings.Contains(r.Text, "control-flow holes") || strings.Contains(r.Text, "recent_noise") ||
+			strings.Contains(r.Text, "Inspect recent on the live store") {
+			t.Fatalf("review recap kept next to they-found: %+v", r)
+		}
+		if r.Type == "failed" && strings.Contains(r.Text, "They found Redis token bucket failed") {
+			foundRedis = true
+		}
+		if r.Type == "failed" && strings.Contains(r.Text, "named-lock race failed") {
+			foundLock = true
+		}
+	}
+	if !foundRedis || !foundLock {
+		t.Fatalf("they-found keeps missed redis=%v lock=%v %+v", foundRedis, foundLock, theyFound)
+	}
+	sessionKeep := Extract([]Message{
+		{Role: "assistant", Offset: 1, Text: "They found Redis token bucket failed in this session in src/middleware/auth.ts."},
+		{Role: "assistant", Offset: 2, Text: "I'll stick with JWT next."},
+		{Role: "assistant", Offset: 3, Text: "We'll use postgres next."},
+		{Role: "assistant", Offset: 4, Text: "Working on billing invoices export next."},
+		{Role: "assistant", Offset: 5, Text: "A They-found + Redis/path failed still stores and packs."},
+	}, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
+	var inSession, stickNext, postgresNext bool
+	for _, r := range sessionKeep {
+		if strings.Contains(r.Text, "still stores and packs") {
+			t.Fatalf("meta recap kept: %+v", r)
+		}
+		if r.Type == "failed" && strings.Contains(r.Text, "in this session") {
+			inSession = true
+		}
+		if r.Type == "decision" && strings.Contains(r.Text, "I'll stick with JWT next.") {
+			stickNext = true
+		}
+		if r.Type == "decision" && strings.Contains(r.Text, "We'll use postgres next.") {
+			postgresNext = true
+		}
+	}
+	if !inSession || !stickNext || !postgresNext {
+		t.Fatalf("process-state SkipProse over-drop inSession=%v stickNext=%v postgresNext=%v %+v", inSession, stickNext, postgresNext, sessionKeep)
 	}
 }
 

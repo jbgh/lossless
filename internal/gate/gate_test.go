@@ -149,3 +149,171 @@ func TestSkipProse(t *testing.T) {
 		t.Fatal("0.1.3 remember")
 	}
 }
+
+// Live inspect --project jbgh/lossless recap bodies (2026-08-19). Copied in;
+// tests must not read ~/.lossless.
+const (
+	liveRecap1909   = "tree: productCopy slogans not bare never; space-form Same failure twice Redis still extracts; 0.1."
+	liveRecap1915   = "e_test.go lock the recap row, not a pathful named-lock failed (contrast Redis token bucket)."
+	liveRecap1903   = "Redis faileds, stick-with decisions, space-form “same failure twice” job-1, and pathless `Tests failed to` still store and pack."
+	liveRecap1922   = "Shipping the current tree would lock fail-close skips and recap-as-failed."
+	liveRecap1931   = "Ship only when inspect recent 8 are things a future session should obey and 19:09 is not a packed failed."
+	liveRecap1743   = "They found real control-flow holes: budget headroom too small, a failed semver check aborting the whole batch, and a “shipped N” summary when the run just ran out of slots."
+	liveRecap1957   = "One remaining active failed looks recap-like."
+	liveRecap2010   = "Live recent 8 are slice-loop / 0.1.5 decisions and version state; `recent_noise=0`; 17:43 is not a packed failed."
+	liveRecap2013   = "Inspect recent on the live store still includes the recap failed “Live recent 8 are slice-loop…”, which the uncommitted 0.1.7 gates already skip (`a packed failed` / `inspect recent 8`)."
+	liveRecap2019   = "Live export still has recap-faileds in the recent window, and the tests gold yesterday’s skip phrases instead of proving that window is obey-worthy."
+	namedLockKeep   = "Named locks in catchup.go stay on the session JSONL."
+	fileLockKeep    = "File locks are tested in concurrent_test.go."
+	testGoFirstKeep = "concurrent_test.go File locks failed to acquire."
+	weightKeep      = "WFailedOverlap stays 4.0."
+	theyFoundRedis  = "They found Redis token bucket failed in src/middleware/auth.ts staging."
+	theyFoundLock   = "They found the named-lock race in catchup.go."
+)
+
+func TestTruncatedLiveRecaps(t *testing.T) {
+	if !Truncated(liveRecap1909) {
+		t.Fatal("19:09 tree dump / trailing 0.1.")
+	}
+	if !yamlTreeDump(liveRecap1909) {
+		t.Fatal("19:09 yaml tree:")
+	}
+	if !trailingShortVersion(liveRecap1909) {
+		t.Fatal("19:09 trailing 0.1.")
+	}
+	if !Truncated(liveRecap1915) {
+		t.Fatal("19:15 leading e_test.go")
+	}
+	if !leadingFileFragment(liveRecap1915) {
+		t.Fatal("19:15 file fragment")
+	}
+	if Truncated("Always never log Authorization headers in src/middleware/auth.ts.") {
+		t.Fatal("Authorization truncated")
+	}
+	if Truncated("auth.ts Redis token bucket failed in staging.") {
+		t.Fatal("auth.ts-first failed")
+	}
+	if Truncated("I'll stick with the parser that still extracts JWTs from cookies in src/auth.ts.") {
+		t.Fatal("jwt still extracts truncated")
+	}
+	if Truncated("0.1.3 / 0.3 extract-clean: gate failed-work-first. Real pathful faileds stay.") {
+		t.Fatal("0.1.3 remember truncated")
+	}
+	if Truncated(weightKeep) || trailingShortVersion(weightKeep) {
+		t.Fatal("standing 4.0. truncated")
+	}
+	if Truncated("WShippedOverlap stays 2.5.") || trailingShortVersion("WShippedOverlap stays 2.5.") {
+		t.Fatal("standing 2.5. truncated")
+	}
+	if Truncated(testGoFirstKeep) || leadingFileFragment(testGoFirstKeep) {
+		t.Fatal("concurrent_test.go-first truncated")
+	}
+	if leadingFileFragment(namedLockKeep) || leadingFileFragment(fileLockKeep) {
+		t.Fatal("named-lock keep as file fragment")
+	}
+}
+
+func TestSkipProseLiveResidue(t *testing.T) {
+	for _, s := range []string{
+		"You can switch between them and never lose memory.",
+		"you can switch between them and never lose your memory.",
+		"Intended gap: Shipped channel is still 0.1.5: OpenCode plugin-miss, Codex desktop empty-rollout, and Claude unknown-cwd session files never reach the tape.",
+		"Git objects are binary — I’ll run the actual git commands instead of inferring from object IDs.",
+		"Same failure twice pauses as no-progress.",
+		"The SQLITE_BUSY failure looks flaky; I'll rerun the full eval suite to confirm.",
+		"0.1.7 extract-clean tree: slogans, I'll-run, intended-gap, same-failure-twice, process-state gated; Redis faileds and stick-with kept.",
+		"Live prune superseded 8 noise rows (slogans, I'll-run, intended-gap, right-next-step, same-failure-twice).",
+		"Tests failed on the live residue as expected.",
+		"Ask warnings were treated as blocking for further product edits: do not dump an ask JSON body as assistant text; keep-tests (mobile SDK, failed worker, already-shipped, JWT still-extracts, 0.1.3 remember) stay.",
+		`{"diff_stat":"13 files changed","ok":true,"summary":"0.1.7 gates slogans, I'll-run, intended-gap, same-failure-twice."}`,
+		`{"diff_stat":"13 files changed, 322 insertions(+), 6 deletions(-)","ok":true,"summary":"Gate SkipProse now treats hyphenated I'll-run/intended-gap/same-failure-twice, live-residue recap, Ask JSON dumps, and test-lock narration as noise; Tests/Live/Ask are not identifiers.`,
+		"Slogans, I'll-run, intended-gap, right-next-step, same-failure-twice, and the test-pass recap are gone.",
+		"ProcessState is in SkipProse as planned; Working on … next is no longer a required kept state.",
+		liveRecap1909,
+		liveRecap1915,
+		liveRecap1903,
+		liveRecap1922,
+		liveRecap1931,
+		liveRecap1743,
+		liveRecap1957,
+		liveRecap2010,
+		liveRecap2013,
+		liveRecap2019,
+	} {
+		if !SkipProse(s) {
+			t.Fatalf("residue not skipped: %q", s)
+		}
+	}
+	for _, s := range []string{
+		"Always never log Authorization headers in src/middleware/auth.ts.",
+		"Redis token bucket failed in src/middleware/auth.ts staging.",
+		"I'll stick with postgres instead of mysql.",
+		"I'll cold-start at game size x 2 instead of resizing mid-session.",
+		"0.1.3 / 0.3 extract-clean: gate failed-work-first. Real pathful faileds stay.",
+		"slice-loop is autonomous.",
+		"Same failure twice: Redis token bucket still 429 in src/middleware/auth.ts.",
+		"Tests failed to connect after we raised the pool.",
+		"I'll stick with the parser that still extracts JWTs from cookies in src/auth.ts.",
+		namedLockKeep,
+		fileLockKeep,
+		testGoFirstKeep,
+		weightKeep,
+		theyFoundRedis,
+		theyFoundLock,
+		"They found Redis token bucket failed in this session in src/middleware/auth.ts.",
+		"I'll stick with JWT next.",
+		"We'll use postgres next.",
+	} {
+		if SkipProse(s) {
+			t.Fatalf("lock skipped: %q", s)
+		}
+	}
+	if !ProcessState("Working on billing invoices export next.") {
+		t.Fatal("process-state leftover")
+	}
+	if SkipProse("Working on billing invoices export next.") {
+		t.Fatal("process-state is type-scoped, not SkipProse")
+	}
+	if !ProcessState("A first run from the **lossless checkout**, with the example args, is the right next step.") {
+		t.Fatal("right next step")
+	}
+	if SkipProse("A first run from the **lossless checkout**, with the example args, is the right next step.") {
+		t.Fatal("right next step is type-scoped")
+	}
+	if !SkipProse("A They-found + Redis/path failed still stores and packs.") {
+		t.Fatal("still stores and packs meta")
+	}
+	if !MetaFailedTalk(liveRecap1903) {
+		t.Fatal("19:03 still store and pack")
+	}
+	if !MetaFailedTalk(liveRecap1922) {
+		t.Fatal("19:22 recap-as-failed")
+	}
+	if !theyFoundReviewList(liveRecap1743) {
+		t.Fatal("17:43 review-list shape")
+	}
+	if !InspectStatus(liveRecap1957) {
+		t.Fatal("19:57 remaining-active recap")
+	}
+	if !InspectStatus(liveRecap2010) {
+		t.Fatal("20:10 inspect window")
+	}
+	if !InspectStatus(liveRecap2013) {
+		t.Fatal("20:13 inspect recent on")
+	}
+	if !InspectStatus(liveRecap2019) {
+		t.Fatal("20:19 recap-faileds in window")
+	}
+	if InspectStatus(theyFoundRedis) || theyFoundReviewList(theyFoundRedis) {
+		t.Fatal("they-found Redis as inspect-status")
+	}
+	if InspectStatus(theyFoundLock) || theyFoundReviewList(theyFoundLock) {
+		t.Fatal("they-found named-lock as inspect-status")
+	}
+	if MetaFailedTalk(namedLockKeep) || MetaFailedTalk(fileLockKeep) || MetaFailedTalk(testGoFirstKeep) {
+		t.Fatal("named-lock keep as meta-failed")
+	}
+	if MetaFailedTalk(theyFoundRedis) || MetaFailedTalk(theyFoundLock) {
+		t.Fatal("they-found keep as meta-failed")
+	}
+}
