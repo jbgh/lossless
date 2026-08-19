@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.10 — 2026-08-19
+
+- Concurrent catch-up retries SQLITE_BUSY on cursor, session, excerpt, and action writes so parallel session ingest does not fail the release job.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.9 — 2026-08-19
 
 - Skip inspect-recap, gates-mostly-match, go-first mash, ok=false, hyphenated They-found lock-lists, and still-keep / still-ground extract-meta so those sentences do not become claims.

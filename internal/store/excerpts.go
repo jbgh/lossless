@@ -65,6 +65,14 @@ func (s *Store) WriteExcerpts(month string, xs []Excerpt) error {
 	if month == "" {
 		month = time.Now().UTC().Format("2006-01")
 	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	return withBusyRetry(func() error {
+		return s.writeExcerptsOnce(month, xs)
+	})
+}
+
+func (s *Store) writeExcerptsOnce(month string, xs []Excerpt) error {
 	db, err := s.openExcerpt(month)
 	if err != nil {
 		return err

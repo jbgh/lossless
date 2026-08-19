@@ -29,6 +29,12 @@ func (s *Store) AppendActions(acts []Action) error {
 	if len(acts) == 0 {
 		return nil
 	}
+	return withBusyRetry(func() error {
+		return s.appendActionsOnce(acts)
+	})
+}
+
+func (s *Store) appendActionsOnce(acts []Action) error {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return err

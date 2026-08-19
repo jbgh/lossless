@@ -17,15 +17,17 @@ func (s *Store) UpsertSession(sess Session) error {
 	if sess.Project != "" {
 		sess.Project = projectkey.Normalize(sess.Project)
 	}
-	_, err := s.DB.Exec(`INSERT INTO sessions(jsonl, session_id, harness, workspace, project_key)
+	return withBusyRetry(func() error {
+		_, err := s.DB.Exec(`INSERT INTO sessions(jsonl, session_id, harness, workspace, project_key)
 		VALUES(?,?,?,?,?)
 		ON CONFLICT(jsonl) DO UPDATE SET
 			session_id=excluded.session_id,
 			harness=excluded.harness,
 			workspace=excluded.workspace,
 			project_key=excluded.project_key`,
-		sess.JSONL, sess.SessionID, sess.Harness, sess.Workspace, sess.Project)
-	return err
+			sess.JSONL, sess.SessionID, sess.Harness, sess.Workspace, sess.Project)
+		return err
+	})
 }
 
 func (s *Store) SessionByJSONL(jsonl string) (Session, bool) {

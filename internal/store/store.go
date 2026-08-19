@@ -187,9 +187,11 @@ func (s *Store) Cursor(path string) int64 {
 }
 
 func (s *Store) SetCursor(path string, offset int64) error {
-	_, err := s.DB.Exec(`INSERT INTO cursors(path, offset) VALUES(?, ?)
+	return withBusyRetry(func() error {
+		_, err := s.DB.Exec(`INSERT INTO cursors(path, offset) VALUES(?, ?)
 		ON CONFLICT(path) DO UPDATE SET offset = excluded.offset`, path, offset)
-	return err
+		return err
+	})
 }
 
 func (s *Store) WriteClaim(rec claim.Record) (superseded string, err error) {

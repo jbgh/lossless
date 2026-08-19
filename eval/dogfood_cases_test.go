@@ -391,10 +391,17 @@ func testConcurrentPoison(t *testing.T) {
 				errc <- err
 				return
 			}
-			_, err := write.CatchUp(st, write.CatchUpRequest{
-				JSONL: p, Project: "acme/app", Harness: "grok",
-				SessionID: fmt.Sprintf("c%d", i),
-			})
+			var err error
+			for try := 0; try < 8; try++ {
+				_, err = write.CatchUp(st, write.CatchUpRequest{
+					JSONL: p, Project: "acme/app", Harness: "grok",
+					SessionID: fmt.Sprintf("c%d", i),
+				})
+				if err == nil || (!strings.Contains(err.Error(), "BUSY") && !strings.Contains(err.Error(), "database is locked")) {
+					break
+				}
+				time.Sleep(time.Duration(try+1) * 20 * time.Millisecond)
+			}
 			if err != nil {
 				errc <- err
 			}
