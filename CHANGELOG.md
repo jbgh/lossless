@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5 — 2026-08-19
+
+- After compact catch-up, write `~/.lossless/active/<owner__repo>.md` from a real `ask`. Skill/rule: if that file exists and this turn has not asked, read it or call ask. Stop stays write-only. No Claude inject.
+
 ## 0.1.4 — 2026-08-18
 
 - `Failed` is not a proper noun. Pathless "Failed work first…" does not extract or pack. `Failed to` / `Failure during` still ground. A Redis failed still grounds. Retrieve `extractNoise` uses the same `GroundedFailed` as write.

@@ -668,6 +668,69 @@ func TestCatchUpHTTPRejectsNonJSONL(t *testing.T) {
 	}
 }
 
+func TestCatchUpTurnDoesNotWriteActive(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	src := filepath.Join(t.TempDir(), "chat.jsonl")
+	if err := os.WriteFile(src, []byte(`{"type":"assistant","content":"Redis token bucket failed in src/middleware/auth.ts staging."}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(Handler(st, ""))
+	t.Cleanup(srv.Close)
+	body, _ := json.Marshal(map[string]any{
+		"path_to_jsonl": src, "project": "acme/api", "session_id": "s-turn",
+		"source": "turn",
+	})
+	res, err := http.Post(srv.URL+"/v1/catch-up", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	time.Sleep(50 * time.Millisecond)
+	if _, err := os.Stat(filepath.Join(st.Root, "active", "acme__api.md")); !os.IsNotExist(err) {
+		t.Fatal("turn wrote active")
+	}
+}
+
+func TestCatchUpCompactWritesActive(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	src := filepath.Join(t.TempDir(), "chat.jsonl")
+	if err := os.WriteFile(src, []byte(`{"type":"assistant","content":"Redis token bucket failed in src/middleware/auth.ts staging."}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(Handler(st, ""))
+	t.Cleanup(srv.Close)
+	body, _ := json.Marshal(map[string]any{
+		"path_to_jsonl": src, "project": "acme/api", "session_id": "s-compact",
+		"source": "PreCompact",
+	})
+	res, err := http.Post(srv.URL+"/v1/catch-up", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatal(res.StatusCode)
+	}
+	dest := filepath.Join(st.Root, "active", "acme__api.md")
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		b, err := os.ReadFile(dest)
+		if err == nil && strings.Contains(string(b), "Redis") {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("active file missing or empty")
+}
+
 func joinTexts(out retrieve.Response) string {
 	var b strings.Builder
 	for _, h := range out.Context {

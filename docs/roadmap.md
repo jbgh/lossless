@@ -36,7 +36,7 @@ If a later idea needs one of those to work, it is the wrong idea.
 
 1. **`maybeCatchUp` is narrower than 0.1.1 sounds.** It runs only when `session_id` is set *and* that session is already in the store with a JSONL path. A first `ask` in a new session, or an MCP call that omits `session_id`, does not ingest the live harness file. Compile can read newest *owned raw*. It does not locate the live harness file.
 
-2. **Caller B inject is specified, not shipped.** `pipeline.md` describes Claude `additionalContext` on SessionStart / UserPromptSubmit and `~/.lossless/active/<project>.md` for Grok. No hook writes `additionalContext`. The `active/` directory is never created. The skill does not mention that file. Docs must not read as if this exists.
+2. **Caller B Claude inject is specified, not shipped.** No hook writes `additionalContext`. The Grok/Codex **pull** file `~/.lossless/active/<owner__repo>.md` is written after compact catch-up (0.1.5). Stop still does not inject.
 
 3. **Stop-inject is forbidden, not deferred.** "Do not use Stop hooks to nag or auto-inject packs" is a decision. 0.2 may add a pack only at session start and just-compacted, and only where the harness can do that honestly. Stop stays write-only.
 

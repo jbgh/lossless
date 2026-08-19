@@ -346,6 +346,18 @@ func TestGroundedFailed(t *testing.T) {
 	}
 }
 
+func TestExtractSkipsActiveCheckoutMarkdown(t *testing.T) {
+	body := "# lossless\n\nproject: acme/api\n\nRead this or call ask.\n\n## context\n\n### failed\n> Redis token bucket failed in src/middleware/auth.ts staging.\n"
+	got := Extract([]Message{
+		{Role: "assistant", Offset: 1, Text: body},
+	}, ExtractOpts{ProjectKey: "acme/api"})
+	for _, r := range got {
+		if strings.Contains(r.Text, "Redis") {
+			t.Fatalf("active checkout extracted: %+v", r)
+		}
+	}
+}
+
 func TestExtractSkipsReadmeProse(t *testing.T) {
 	got := Extract([]Message{
 		{Role: "assistant", Offset: 1, Text: "Compact thinning is failed approaches become a clause; a library choice becomes picked something."},

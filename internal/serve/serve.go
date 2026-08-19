@@ -134,6 +134,9 @@ func Handler(st *store.Store, token string) http.Handler {
 			return
 		}
 		go func() { _, _ = write.FlushPush(st.Root) }()
+		if retrieve.CompactSource(req.Source) {
+			go retrieve.RefreshActive(st, st.Root, req)
+		}
 		writeJSON(w, http.StatusOK, out)
 	})
 	mux.HandleFunc("/v1/remember", func(w http.ResponseWriter, r *http.Request) {

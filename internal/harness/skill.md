@@ -28,6 +28,8 @@ Call **once at the start of real work**, before the first edit or design:
 
 Call **again** when the topic or files change (auth → billing is a new ask).
 
+If `~/.lossless/active/<owner__repo>.md` exists and this turn has not asked, read it or call ask. That file is a checkout from the last compact. It is not a substitute for ask on a new topic.
+
 ## When not to call
 
 - trivia, chit-chat, or "what's in this file"
