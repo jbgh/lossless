@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.8 — 2026-08-19
+
+- Skip still-stores extract-meta (punctuation forms; "and pack" is not required) so those recaps do not become claims.
+- Loop-residue keep-talk and example-drop recaps skip after list-marker and quote trim. A They-found Redis/path failed still stores.
+- Chopped never-lose slogans and unclosed-paren fragments do not become claims.
+- Pack of five and 4.0 / 2.5 unchanged. 0.3 (inspect recent all obey-worthy) is not closed.
+
 ## 0.1.7 — 2026-08-19
 
 - Skip truncated recaps, extract-meta talk, and inspect-status dumps so those sentences do not become claims.

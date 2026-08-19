@@ -76,11 +76,12 @@ func MetaFailedTalk(s string) bool {
 	return InspectStatus(s) || theyFoundReviewList(s)
 }
 
-// stillExtractsNoObject is extract-meta ("still extracts;" / "still extracts.")
-// not "still extracts JWTs".
+// stillExtractsNoObject is extract-meta punctuation ("still extracts;" /
+// "still stores.") not "still extracts JWTs" and not a real They-found Redis
+// failed. "and pack" is not required.
 func stillExtractsNoObject(low string) bool {
-	for _, p := range []string{"still extracts.", "still extracts;", "still extract.", "still extract;"} {
-		if strings.Contains(low, p) {
+	for _, verb := range []string{"still extracts", "still extract", "still stores", "still store"} {
+		if strings.Contains(low, verb+".") || strings.Contains(low, verb+";") {
 			return true
 		}
 	}
@@ -154,6 +155,9 @@ func Truncated(s string) bool {
 		return true
 	}
 	if leadingFileFragment(s) || yamlTreeDump(s) || trailingShortVersion(s) {
+		return true
+	}
+	if strings.Count(s, "(") > strings.Count(s, ")") {
 		return true
 	}
 	return false
@@ -318,6 +322,9 @@ func SkipProse(s string) bool {
 	if t == "" {
 		return true
 	}
+	if exampleDrop(t) {
+		return true
+	}
 	t = strings.TrimLeft(t, "\"“”'`")
 	if t == "" {
 		return true
@@ -347,6 +354,17 @@ func SkipProse(s string) bool {
 	// ProcessState is type-scoped in extract and extractNoise. A They-found
 	// Redis failed that contains "in this session" or ends " next." still stores.
 	return false
+}
+
+// exampleDrop is inspect-recap chrome ("Example drop: …") after list-marker
+// and quote trim. Unprefixed They-found Redis is not this shape.
+func exampleDrop(s string) bool {
+	t := strings.TrimSpace(s)
+	if rest, ok := ListMarker(t); ok {
+		t = rest
+	}
+	t = strings.TrimLeft(t, "\"“”'`")
+	return hasPrefixFold(t, []string{"example drop:"})
 }
 
 func ProductCopy(s string) bool {
@@ -422,6 +440,7 @@ var (
 		"still stores and pack",
 		"lock the recap row",
 		"recap-as-failed",
+		"loop residue", "the product keep is",
 	}
 	processState = []string{
 		"in this session", "the next stop", "next test that matters",
@@ -440,7 +459,8 @@ var (
 		"failed work first, then", "then what already shipped",
 		"the next product is:", "before it retries the failed work",
 		"harness holes beyond",
-		"never lose memory", "never lose your memory", "switch between them",
+		"never lose memory", "never lose your memory", "never lose memo",
+		"switch between them",
 	}
 	yamlChrome = []string{
 		"text: ", "text = ", "text=", "type: failed", "type: decision", "type: constraint",

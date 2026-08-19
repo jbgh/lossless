@@ -397,6 +397,21 @@ func TestExtractNoiseKeepsPointOneThreeRemember(t *testing.T) {
 	if !retrieveNoise("A They-found + Redis/path failed still stores and packs.") {
 		t.Fatal("still stores and packs meta")
 	}
+	if !retrieveNoise("A They-found Redis/path failed still stores.") {
+		t.Fatal("still stores. without and pack")
+	}
+	if !retrieveNoise("Those recaps are loop residue; the product keep is: a real They-found Redis/path failed still stores.") {
+		t.Fatal("loop residue keep-talk")
+	}
+	if !retrieveNoise("Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging.") {
+		t.Fatal("example drop")
+	}
+	if !retrieveNoise("Cross-harness, switch models, never lose memo") {
+		t.Fatal("never lose memo")
+	}
+	if !retrieveNoise("Non-empty must not prune other projects (memora etc.") {
+		t.Fatal("unclosed paren")
+	}
 	if !retrieveNoise(`{"diff_stat":"13 files changed, 322 insertions(+), 6 deletions(-)","ok":true,"summary":"Gate SkipProse now treats hyphenated I'll-run."}`) {
 		t.Fatal("eval json dump")
 	}

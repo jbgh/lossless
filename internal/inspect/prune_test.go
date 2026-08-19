@@ -218,6 +218,36 @@ func TestPruneSupersedesSloganAndIntendedGap(t *testing.T) {
 			CreatedAt: "2026-08-19T18:38:00Z", SessionID: "s-live", Status: "active",
 			Source: "import", Harness: "grok",
 		},
+		{
+			ID: "STILLSTORES", Type: "failed", ProjectKey: "acme/api",
+			Text:      "A They-found Redis/path failed still stores.",
+			CreatedAt: "2026-08-19T20:59:56Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "LOOPRESIDUE", Type: "failed", ProjectKey: "acme/api",
+			Text:      "Those recaps are loop residue; the product keep is: a real They-found Redis/path failed still stores.",
+			CreatedAt: "2026-08-19T20:39:27Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "EXAMPLEDROP", Type: "failed", ProjectKey: "acme/api",
+			Text:  "Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging.",
+			Paths: []string{"src/middleware/auth.ts"}, CreatedAt: "2026-08-19T20:18:47Z",
+			SessionID: "s-live", Status: "active", Source: "import", Harness: "grok",
+		},
+		{
+			ID: "NEVERLOSEMEMO", Type: "constraint", ProjectKey: "acme/api",
+			Text:      "Cross-harness, switch models, never lose memo",
+			CreatedAt: "2026-08-19T20:39:27Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "UNCLOSEDPAREN", Type: "constraint", ProjectKey: "acme/api",
+			Text:      "Non-empty must not prune other projects (memora etc.",
+			CreatedAt: "2026-08-19T20:39:53Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
 	} {
 		if _, err := st.WriteClaim(r); err != nil {
 			t.Fatal(err)
@@ -227,7 +257,7 @@ func TestPruneSupersedesSloganAndIntendedGap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.SupersededNoise < 13 {
+	if res.SupersededNoise < 18 {
 		t.Fatalf("%+v", res)
 	}
 	slogan, ok := st.Get("SLOGAN")
@@ -250,7 +280,7 @@ func TestPruneSupersedesSloganAndIntendedGap(t *testing.T) {
 	if !ok || dump.Status != "superseded" {
 		t.Fatalf("dump %+v %v", dump, ok)
 	}
-	for _, id := range []string{"R1909", "R1915", "R1903", "R1922", "R1743", "R1957", "R2010", "R2013", "R2019"} {
+	for _, id := range []string{"R1909", "R1915", "R1903", "R1922", "R1743", "R1957", "R2010", "R2013", "R2019", "STILLSTORES", "LOOPRESIDUE", "EXAMPLEDROP", "NEVERLOSEMEMO", "UNCLOSEDPAREN"} {
 		recap, ok := st.Get(id)
 		if !ok || recap.Status != "superseded" {
 			t.Fatalf("live recap %s %+v %v", id, recap, ok)

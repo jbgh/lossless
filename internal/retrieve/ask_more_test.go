@@ -492,6 +492,17 @@ func TestAskDropsLiveRecapKeepsRedis(t *testing.T) {
 		Paths:     []string{"src/middleware/auth.ts"},
 		CreatedAt: "2026-08-10T20:18:47Z",
 	})
+	writeRec(t, st, claim.Record{
+		ID: "EXAMPLEDROP", Type: "failed", SessionID: "live",
+		Text:      "Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging.",
+		Paths:     []string{"src/middleware/auth.ts"},
+		CreatedAt: "2026-08-10T20:18:48Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "STILLSTORES", Type: "failed", SessionID: "live",
+		Text:      "A They-found Redis/path failed still stores.",
+		CreatedAt: "2026-08-10T20:59:56Z",
+	})
 	out := askAt(t, st, Request{
 		Project:   "acme/api",
 		SessionID: "live",
@@ -500,7 +511,8 @@ func TestAskDropsLiveRecapKeepsRedis(t *testing.T) {
 		Paths:     []string{"src/middleware/auth.ts"},
 	})
 	if containsID(out, "RECAP1909") || containsID(out, "RECAP1915") || containsID(out, "RECAP1743") ||
-		containsID(out, "RECAP2010") || containsID(out, "RECAP2013") {
+		containsID(out, "RECAP2010") || containsID(out, "RECAP2013") || containsID(out, "EXAMPLEDROP") ||
+		containsID(out, "STILLSTORES") {
 		t.Fatalf("live recap packed: %+v", out.Context)
 	}
 	if !containsID(out, "REDIS") {
@@ -511,7 +523,9 @@ func TestAskDropsLiveRecapKeepsRedis(t *testing.T) {
 			strings.Contains(w, "RECAP1743") || strings.Contains(w, "RECAP2010") ||
 			strings.Contains(w, "RECAP2013") || strings.Contains(w, "still extracts") ||
 			strings.Contains(w, "lock the recap row") || strings.Contains(w, "control-flow holes") ||
-			strings.Contains(w, "recent_noise=0") {
+			strings.Contains(w, "recent_noise=0") || strings.Contains(w, "EXAMPLEDROP") ||
+			strings.Contains(w, "STILLSTORES") || strings.Contains(w, "Example drop:") ||
+			strings.Contains(w, "still stores") {
 			t.Fatalf("live recap warned: %v", out.Warnings)
 		}
 	}

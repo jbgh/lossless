@@ -371,20 +371,25 @@ func TestGroundedFailed(t *testing.T) {
 // Live inspect --project jbgh/lossless recap bodies (2026-08-19). Copied in;
 // tests must not read ~/.lossless.
 const (
-	liveRecap1909   = "tree: productCopy slogans not bare never; space-form Same failure twice Redis still extracts; 0.1."
-	liveRecap1915   = "e_test.go lock the recap row, not a pathful named-lock failed (contrast Redis token bucket)."
-	liveRecap1903   = "Redis faileds, stick-with decisions, space-form “same failure twice” job-1, and pathless `Tests failed to` still store and pack."
-	liveRecap1922   = "Shipping the current tree would lock fail-close skips and recap-as-failed."
-	liveRecap1743   = "They found real control-flow holes: budget headroom too small, a failed semver check aborting the whole batch, and a “shipped N” summary when the run just ran out of slots."
-	liveRecap1957   = "One remaining active failed looks recap-like."
-	liveRecap2010   = "Live recent 8 are slice-loop / 0.1.5 decisions and version state; `recent_noise=0`; 17:43 is not a packed failed."
-	liveRecap2013   = "Inspect recent on the live store still includes the recap failed “Live recent 8 are slice-loop…”, which the uncommitted 0.1.7 gates already skip (`a packed failed` / `inspect recent 8`)."
-	liveRecap2019   = "Live export still has recap-faileds in the recent window, and the tests gold yesterday’s skip phrases instead of proving that window is obey-worthy."
-	namedLockKeep   = "Named locks in catchup.go stay on the session JSONL."
-	fileLockKeep    = "File locks are tested in concurrent_test.go."
-	testGoFirstKeep = "concurrent_test.go File locks failed to acquire."
-	theyFoundRedis  = "They found Redis token bucket failed in src/middleware/auth.ts staging."
-	theyFoundLock   = "They found the named-lock race in catchup.go."
+	liveRecap1909     = "tree: productCopy slogans not bare never; space-form Same failure twice Redis still extracts; 0.1."
+	liveRecap1915     = "e_test.go lock the recap row, not a pathful named-lock failed (contrast Redis token bucket)."
+	liveRecap1903     = "Redis faileds, stick-with decisions, space-form “same failure twice” job-1, and pathless `Tests failed to` still store and pack."
+	liveRecap1922     = "Shipping the current tree would lock fail-close skips and recap-as-failed."
+	liveRecap1743     = "They found real control-flow holes: budget headroom too small, a failed semver check aborting the whole batch, and a “shipped N” summary when the run just ran out of slots."
+	liveRecap1957     = "One remaining active failed looks recap-like."
+	liveRecap2010     = "Live recent 8 are slice-loop / 0.1.5 decisions and version state; `recent_noise=0`; 17:43 is not a packed failed."
+	liveRecap2013     = "Inspect recent on the live store still includes the recap failed “Live recent 8 are slice-loop…”, which the uncommitted 0.1.7 gates already skip (`a packed failed` / `inspect recent 8`)."
+	liveRecap2019     = "Live export still has recap-faileds in the recent window, and the tests gold yesterday’s skip phrases instead of proving that window is obey-worthy."
+	namedLockKeep     = "Named locks in catchup.go stay on the session JSONL."
+	fileLockKeep      = "File locks are tested in concurrent_test.go."
+	testGoFirstKeep   = "concurrent_test.go File locks failed to acquire."
+	theyFoundRedis    = "They found Redis token bucket failed in src/middleware/auth.ts staging."
+	theyFoundLock     = "They found the named-lock race in catchup.go."
+	liveStillStores   = "A They-found Redis/path failed still stores."
+	liveLoopResidue   = "Those recaps are loop residue; the product keep is: a real They-found Redis/path failed still stores."
+	liveExampleDrop   = "Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging."
+	liveNeverLoseMemo = "Cross-harness, switch models, never lose memo"
+	liveUnclosedParen = "Non-empty must not prune other projects (memora etc."
 )
 
 func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
@@ -400,12 +405,13 @@ func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
 			"Ask warnings were treated as blocking for further product edits: do not dump an ask JSON body as assistant text. " +
 			liveRecap1909 + " " + liveRecap1915 + " " + liveRecap1903 + " " + liveRecap1922 + " " +
 			liveRecap1743 + " " + liveRecap1957 + " " + liveRecap2010 + " " + liveRecap2013 + " " + liveRecap2019 + " " +
+			liveStillStores + " " + liveLoopResidue + " " + liveExampleDrop + " " + liveNeverLoseMemo + " " + liveUnclosedParen + " " +
 			"ProcessState is in SkipProse as planned; Working on … next is no longer a required kept state.",
 	}}, ExtractOpts{ProjectKey: "jbgh/lossless", SessionID: "s"})
 	if len(residue) != 0 {
 		t.Fatalf("residue extracted: %+v", residue)
 	}
-	for i, recap := range []string{liveRecap1909, liveRecap1915, liveRecap1903, liveRecap1922, liveRecap1743, liveRecap1957, liveRecap2010, liveRecap2013, liveRecap2019} {
+	for i, recap := range []string{liveRecap1909, liveRecap1915, liveRecap1903, liveRecap1922, liveRecap1743, liveRecap1957, liveRecap2010, liveRecap2013, liveRecap2019, liveStillStores, liveLoopResidue, liveExampleDrop, liveNeverLoseMemo, liveUnclosedParen} {
 		got := Extract([]Message{{
 			Role: "assistant", Offset: int64(i + 1), Text: recap,
 		}}, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
@@ -442,7 +448,10 @@ func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
 			strings.Contains(r.Text, "in SkipProse") || strings.Contains(r.Text, "recap-as-failed") ||
 			strings.Contains(r.Text, "lock the recap row") || strings.Contains(r.Text, "control-flow holes") ||
 			strings.Contains(r.Text, "recap-like") || strings.Contains(r.Text, "recent_noise") ||
-			strings.Contains(r.Text, "Inspect recent on the live store") || strings.Contains(r.Text, "recap-faileds") {
+			strings.Contains(r.Text, "Inspect recent on the live store") || strings.Contains(r.Text, "recap-faileds") ||
+			strings.Contains(r.Text, "still stores") || strings.Contains(r.Text, "loop residue") ||
+			strings.Contains(r.Text, "Example drop:") || strings.Contains(r.Text, "never lose memo") ||
+			strings.Contains(r.Text, "memora etc.") {
 			t.Fatalf("residue kept: %+v", r)
 		}
 		if r.Type == "failed" && strings.Contains(r.Text, "token bucket failed in src/middleware/auth.ts staging.") {
@@ -520,6 +529,17 @@ func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
 	if len(glued) != 0 {
 		t.Fatalf("nearby paths extracted live recap: %+v", glued)
 	}
+	gluedMeta := Extract([]Message{
+		{Role: "user", Offset: 1, Text: "Look at src/middleware/auth.ts."},
+		{Role: "assistant", Offset: 2, Text: liveStillStores},
+		{Role: "assistant", Offset: 3, Text: liveLoopResidue},
+		{Role: "assistant", Offset: 4, Text: liveExampleDrop},
+		{Role: "assistant", Offset: 5, Text: liveNeverLoseMemo},
+		{Role: "assistant", Offset: 6, Text: liveUnclosedParen},
+	}, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
+	if len(gluedMeta) != 0 {
+		t.Fatalf("nearby auth.ts glued onto still-stores meta: %+v", gluedMeta)
+	}
 	theyFound := Extract([]Message{
 		{Role: "user", Offset: 1, Text: "Look at src/middleware/auth.ts and catchup.go."},
 		{Role: "assistant", Offset: 2, Text: theyFoundRedis},
@@ -527,11 +547,18 @@ func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
 		{Role: "assistant", Offset: 4, Text: theyFoundLock},
 		{Role: "assistant", Offset: 5, Text: liveRecap1743},
 		{Role: "assistant", Offset: 6, Text: liveRecap2010},
+		{Role: "assistant", Offset: 7, Text: liveStillStores},
+		{Role: "assistant", Offset: 8, Text: liveLoopResidue},
+		{Role: "assistant", Offset: 9, Text: liveExampleDrop},
+		{Role: "assistant", Offset: 10, Text: liveNeverLoseMemo},
+		{Role: "assistant", Offset: 11, Text: liveUnclosedParen},
 	}, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
 	var foundRedis, foundLock bool
 	for _, r := range theyFound {
 		if strings.Contains(r.Text, "control-flow holes") || strings.Contains(r.Text, "recent_noise") ||
-			strings.Contains(r.Text, "Inspect recent on the live store") {
+			strings.Contains(r.Text, "Inspect recent on the live store") || strings.Contains(r.Text, "still stores") ||
+			strings.Contains(r.Text, "loop residue") || strings.Contains(r.Text, "Example drop:") ||
+			strings.Contains(r.Text, "never lose memo") || strings.Contains(r.Text, "memora etc.") {
 			t.Fatalf("review recap kept next to they-found: %+v", r)
 		}
 		if r.Type == "failed" && strings.Contains(r.Text, "They found Redis token bucket failed") {

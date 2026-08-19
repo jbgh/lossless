@@ -179,6 +179,11 @@ func TestExtractNoiseAndJobOverlap(t *testing.T) {
 		{Type: "failed", Text: "Live recent 8 are slice-loop / 0.1.5 decisions and version state; `recent_noise=0`; 17:43 is not a packed failed."},
 		{Type: "failed", Text: "Inspect recent on the live store still includes the recap failed “Live recent 8 are slice-loop…”, which the uncommitted 0.1.7 gates already skip (`a packed failed` / `inspect recent 8`)."},
 		{Type: "decision", Text: "Live export still has recap-faileds in the recent window, and the tests gold yesterday’s skip phrases instead of proving that window is obey-worthy."},
+		{Type: "failed", Text: "A They-found Redis/path failed still stores."},
+		{Type: "failed", Text: "Those recaps are loop residue; the product keep is: a real They-found Redis/path failed still stores."},
+		{Type: "failed", Text: "Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging.", Paths: []string{"src/middleware/auth.ts"}},
+		{Type: "constraint", Text: "Cross-harness, switch models, never lose memo"},
+		{Type: "constraint", Text: "Non-empty must not prune other projects (memora etc."},
 	} {
 		if !extractNoise(rec) {
 			t.Fatalf("residue not noise: %+v", rec)
@@ -234,6 +239,12 @@ func TestExtractNoiseAndJobOverlap(t *testing.T) {
 	}
 	if !extractNoise(claim.Record{Type: "failed", Text: "A They-found + Redis/path failed still stores and packs."}) {
 		t.Fatal("still stores and packs meta")
+	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "A They-found Redis/path failed still stores."}) {
+		t.Fatal("still stores. without and pack")
+	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging.", Paths: []string{"src/middleware/auth.ts"}}) {
+		t.Fatal("example drop pathful redis")
 	}
 	if !extractNoise(claim.Record{Type: "state", Text: "Working on billing invoices export next."}) {
 		t.Fatal("process-state leftover as state")

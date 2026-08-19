@@ -226,3 +226,50 @@ func TestInspectRecentResidueIsNoise(t *testing.T) {
 		t.Fatalf("expected extract-noise drop of a live recap %+v", ask.Dropped)
 	}
 }
+
+func TestInspectRecentExampleDropIsNoise(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	recs := []claim.Record{
+		{ID: "EXAMPLEDROP", Type: "failed", Text: "Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging.", Paths: []string{"src/middleware/auth.ts"}, CreatedAt: "2026-08-19T20:18:47Z"},
+		{ID: "STILLSTORES", Type: "failed", Text: "A They-found Redis/path failed still stores.", CreatedAt: "2026-08-19T20:59:56Z"},
+		{ID: "THEYREDIS", Type: "failed", Text: "They found Redis token bucket failed in src/middleware/auth.ts staging.", Paths: []string{"src/middleware/auth.ts"}, CreatedAt: "2026-08-19T20:18:46Z"},
+		{ID: "REDISOK", Type: "failed", Text: "Redis token bucket failed in src/middleware/auth.ts staging.", Paths: []string{"src/middleware/auth.ts"}, CreatedAt: "2026-08-19T18:51:54Z"},
+	}
+	for _, r := range recs {
+		r.ProjectKey = "acme/api"
+		r.Status = "active"
+		r.Source = "import"
+		r.Harness = "grok"
+		r.SessionID = "s-live"
+		if _, err := st.WriteClaim(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	det, err := Build(st, "acme/api")
+	if err != nil || det.Detail == nil || det.Detail.RecentNoise != 2 {
+		t.Fatalf("recent_noise want 2 got %+v %v", det.Detail, err)
+	}
+	var noiseDrop, goldKeep int
+	for _, c := range det.Detail.Recent {
+		if strings.Contains(c.Text, "Example drop:") || strings.Contains(c.Text, "still stores.") {
+			if !retrieve.ExtractNoise(c) {
+				t.Fatalf("recap not noise: %q", c.Text)
+			}
+			noiseDrop++
+			continue
+		}
+		if strings.Contains(c.Text, "token bucket failed in src/middleware/auth.ts staging") {
+			if retrieve.ExtractNoise(c) {
+				t.Fatalf("gold Redis as noise: %q", c.Text)
+			}
+			goldKeep++
+		}
+	}
+	if noiseDrop != 2 || goldKeep != 2 {
+		t.Fatalf("example-drop window noise=%d gold=%d recent=%+v", noiseDrop, goldKeep, det.Detail.Recent)
+	}
+}

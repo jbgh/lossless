@@ -153,22 +153,28 @@ func TestSkipProse(t *testing.T) {
 // Live inspect --project jbgh/lossless recap bodies (2026-08-19). Copied in;
 // tests must not read ~/.lossless.
 const (
-	liveRecap1909   = "tree: productCopy slogans not bare never; space-form Same failure twice Redis still extracts; 0.1."
-	liveRecap1915   = "e_test.go lock the recap row, not a pathful named-lock failed (contrast Redis token bucket)."
-	liveRecap1903   = "Redis faileds, stick-with decisions, space-form “same failure twice” job-1, and pathless `Tests failed to` still store and pack."
-	liveRecap1922   = "Shipping the current tree would lock fail-close skips and recap-as-failed."
-	liveRecap1931   = "Ship only when inspect recent 8 are things a future session should obey and 19:09 is not a packed failed."
-	liveRecap1743   = "They found real control-flow holes: budget headroom too small, a failed semver check aborting the whole batch, and a “shipped N” summary when the run just ran out of slots."
-	liveRecap1957   = "One remaining active failed looks recap-like."
-	liveRecap2010   = "Live recent 8 are slice-loop / 0.1.5 decisions and version state; `recent_noise=0`; 17:43 is not a packed failed."
-	liveRecap2013   = "Inspect recent on the live store still includes the recap failed “Live recent 8 are slice-loop…”, which the uncommitted 0.1.7 gates already skip (`a packed failed` / `inspect recent 8`)."
-	liveRecap2019   = "Live export still has recap-faileds in the recent window, and the tests gold yesterday’s skip phrases instead of proving that window is obey-worthy."
-	namedLockKeep   = "Named locks in catchup.go stay on the session JSONL."
-	fileLockKeep    = "File locks are tested in concurrent_test.go."
-	testGoFirstKeep = "concurrent_test.go File locks failed to acquire."
-	weightKeep      = "WFailedOverlap stays 4.0."
-	theyFoundRedis  = "They found Redis token bucket failed in src/middleware/auth.ts staging."
-	theyFoundLock   = "They found the named-lock race in catchup.go."
+	liveRecap1909     = "tree: productCopy slogans not bare never; space-form Same failure twice Redis still extracts; 0.1."
+	liveRecap1915     = "e_test.go lock the recap row, not a pathful named-lock failed (contrast Redis token bucket)."
+	liveRecap1903     = "Redis faileds, stick-with decisions, space-form “same failure twice” job-1, and pathless `Tests failed to` still store and pack."
+	liveRecap1922     = "Shipping the current tree would lock fail-close skips and recap-as-failed."
+	liveRecap1931     = "Ship only when inspect recent 8 are things a future session should obey and 19:09 is not a packed failed."
+	liveRecap1743     = "They found real control-flow holes: budget headroom too small, a failed semver check aborting the whole batch, and a “shipped N” summary when the run just ran out of slots."
+	liveRecap1957     = "One remaining active failed looks recap-like."
+	liveRecap2010     = "Live recent 8 are slice-loop / 0.1.5 decisions and version state; `recent_noise=0`; 17:43 is not a packed failed."
+	liveRecap2013     = "Inspect recent on the live store still includes the recap failed “Live recent 8 are slice-loop…”, which the uncommitted 0.1.7 gates already skip (`a packed failed` / `inspect recent 8`)."
+	liveRecap2019     = "Live export still has recap-faileds in the recent window, and the tests gold yesterday’s skip phrases instead of proving that window is obey-worthy."
+	namedLockKeep     = "Named locks in catchup.go stay on the session JSONL."
+	fileLockKeep      = "File locks are tested in concurrent_test.go."
+	testGoFirstKeep   = "concurrent_test.go File locks failed to acquire."
+	weightKeep        = "WFailedOverlap stays 4.0."
+	theyFoundRedis    = "They found Redis token bucket failed in src/middleware/auth.ts staging."
+	theyFoundLock     = "They found the named-lock race in catchup.go."
+	liveStillStores   = "A They-found Redis/path failed still stores."
+	liveLoopResidue   = "Those recaps are loop residue; the product keep is: a real They-found Redis/path failed still stores."
+	liveExampleDrop   = "Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging."
+	liveNeverLoseMemo = "Cross-harness, switch models, never lose memo"
+	liveUnclosedParen = "Non-empty must not prune other projects (memora etc."
+	exampleDropQuoted = `- "Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging."`
 )
 
 func TestTruncatedLiveRecaps(t *testing.T) {
@@ -211,6 +217,15 @@ func TestTruncatedLiveRecaps(t *testing.T) {
 	if leadingFileFragment(namedLockKeep) || leadingFileFragment(fileLockKeep) {
 		t.Fatal("named-lock keep as file fragment")
 	}
+	if !Truncated(liveUnclosedParen) {
+		t.Fatal("unclosed (memora etc.")
+	}
+	if Truncated("Redis token bucket failed (timeout).") {
+		t.Fatal("closed (timeout) truncated")
+	}
+	if Truncated("WFailedOverlap stays 4.0.") {
+		t.Fatal("standing 4.0. truncated")
+	}
 }
 
 func TestSkipProseLiveResidue(t *testing.T) {
@@ -239,6 +254,12 @@ func TestSkipProseLiveResidue(t *testing.T) {
 		liveRecap2010,
 		liveRecap2013,
 		liveRecap2019,
+		liveStillStores,
+		liveLoopResidue,
+		liveExampleDrop,
+		liveNeverLoseMemo,
+		liveUnclosedParen,
+		exampleDropQuoted,
 	} {
 		if !SkipProse(s) {
 			t.Fatalf("residue not skipped: %q", s)
@@ -315,5 +336,20 @@ func TestSkipProseLiveResidue(t *testing.T) {
 	}
 	if MetaFailedTalk(theyFoundRedis) || MetaFailedTalk(theyFoundLock) {
 		t.Fatal("they-found keep as meta-failed")
+	}
+	if !MetaFailedTalk(liveStillStores) || !stillExtractsNoObject(Fold(liveStillStores)) {
+		t.Fatal("still stores. without and pack")
+	}
+	if !MetaFailedTalk(liveLoopResidue) {
+		t.Fatal("loop residue / the product keep is")
+	}
+	if !exampleDrop(liveExampleDrop) || !exampleDrop(exampleDropQuoted) {
+		t.Fatal("example drop after list-marker and quote trim")
+	}
+	if exampleDrop(theyFoundRedis) {
+		t.Fatal("unprefixed they-found Redis as example drop")
+	}
+	if !ProductCopy(liveNeverLoseMemo) {
+		t.Fatal("never lose memo")
 	}
 }
