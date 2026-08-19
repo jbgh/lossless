@@ -281,7 +281,8 @@ var (
 		"stand-in",
 		"extract residue", "ask-would-drop",
 		"remaining recent residue",
-		"still extracts.",
+		"still extracts.", "still extract.",
+		"no i'll-ask", "no failed-work-first",
 	}
 	processState = []string{
 		"in this session", "the next stop", "next test that matters",

@@ -8,6 +8,7 @@ import (
 	"lossless/internal/claim"
 	"lossless/internal/gate"
 	"lossless/internal/projectkey"
+	"lossless/internal/write"
 )
 
 type Request struct {
@@ -306,6 +307,9 @@ func extractNoise(rec claim.Record) bool {
 		}
 	case "failed":
 		if gate.StatusFailed(t) || gate.FailedAsObject(t) || (len(rec.Paths) == 0 && failedOnlyInTicks(t)) {
+			return true
+		}
+		if !write.GroundedFailed(t, rec.Paths) {
 			return true
 		}
 	}

@@ -328,14 +328,33 @@ func TestExtractSkipsToolDumps(t *testing.T) {
 	}
 }
 
+func TestGroundedFailed(t *testing.T) {
+	if GroundedFailed("Failed work first, then what already shipped.", nil) {
+		t.Fatal("slogan")
+	}
+	if !GroundedFailed("Failed to connect after we raised the pool.", nil) {
+		t.Fatal("failed to")
+	}
+	if !GroundedFailed("Failure during the token-bucket refill.", nil) {
+		t.Fatal("failure during")
+	}
+	if !GroundedFailed("Redis token bucket failed in staging.", nil) {
+		t.Fatal("Redis")
+	}
+	if !GroundedFailed("the redis pool failed", []string{"src/pool.ts"}) {
+		t.Fatal("path grounds")
+	}
+}
+
 func TestExtractSkipsReadmeProse(t *testing.T) {
 	got := Extract([]Message{
 		{Role: "assistant", Offset: 1, Text: "Compact thinning is failed approaches become a clause; a library choice becomes picked something."},
 		{Role: "assistant", Offset: 2, Text: "Over a long project that happens again and again, so failed approaches and shipped decisions disappear."},
-		{Role: "assistant", Offset: 3, Text: "Redis token bucket failed in src/middleware/auth.ts staging."},
+		{Role: "assistant", Offset: 3, Text: "Failed work first, then what already shipped."},
+		{Role: "assistant", Offset: 4, Text: "Redis token bucket failed in src/middleware/auth.ts staging."},
 	}, ExtractOpts{ProjectKey: "acme/api"})
 	for _, r := range got {
-		if strings.Contains(r.Text, "Compact thinning") || strings.Contains(r.Text, "long project") {
+		if strings.Contains(r.Text, "Compact thinning") || strings.Contains(r.Text, "long project") || strings.Contains(r.Text, "Failed work first") {
 			t.Fatalf("readme prose extracted: %+v", r)
 		}
 	}

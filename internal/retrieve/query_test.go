@@ -107,6 +107,18 @@ func TestExtractNoiseAndJobOverlap(t *testing.T) {
 	if extractNoise(claim.Record{Type: "failed", Text: "Redis token bucket failed in staging.", Paths: []string{"src/middleware/auth.ts"}}) {
 		t.Fatal("real failed")
 	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "Failed work first, then what already shipped."}) {
+		t.Fatal("readme failed-first ungrounded")
+	}
+	if extractNoise(claim.Record{Type: "failed", Text: "Failed to connect after we raised the pool."}) {
+		t.Fatal("failed to connect")
+	}
+	if extractNoise(claim.Record{Type: "failed", Text: "Redis token bucket failed in staging."}) {
+		t.Fatal("Redis still grounds a pathless failed")
+	}
+	if extractNoise(claim.Record{Type: "failed", Text: "The pack filter was too blunt: pathless two-hop still needs the Redis failed."}) {
+		t.Fatal("two-hop redis failed")
+	}
 	if !extractNoise(claim.Record{Type: "failed", Text: "The live ask just returned five `failed`s, and four look like extract noise."}) {
 		t.Fatal("backticked type mention")
 	}

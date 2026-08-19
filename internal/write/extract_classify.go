@@ -70,6 +70,13 @@ func stripFailedNoise(s string) string {
 }
 
 func groundedFailed(s string, paths []string) bool {
+	return GroundedFailed(s, paths)
+}
+
+// GroundedFailed is true when a failed has a path, tick, or a real
+// identifier. The word Failed itself is not an identifier, so
+// "Failed work first…" does not count as grounded.
+func GroundedFailed(s string, paths []string) bool {
 	if len(paths) > 0 {
 		return true
 	}
@@ -88,6 +95,15 @@ func groundedFailed(s string, paths []string) bool {
 		if w == "" {
 			continue
 		}
+		if failWord(w) {
+			if i+1 < len(fields) {
+				next := strings.ToLower(strings.Trim(fields[i+1], ".,;:()[]\"'"))
+				if next == "to" || next == "during" || next == "again" || next == "on" {
+					return true
+				}
+			}
+			continue
+		}
 		if i == 0 && sentenceStarter[w] {
 			continue
 		}
@@ -99,6 +115,15 @@ func groundedFailed(s string, paths []string) bool {
 		}
 	}
 	return false
+}
+
+func failWord(w string) bool {
+	switch strings.ToLower(w) {
+	case "failed", "failure", "failing", "fail":
+		return true
+	default:
+		return false
+	}
 }
 
 var sentenceStarter = map[string]bool{
