@@ -2,7 +2,12 @@
 
 ## 0.1.7 — 2026-08-19
 
-- Shape gates for extract residue. Truncated skips chopped leading file-fragments (`e_test.go …`), not a real `concurrent_test.go`-first failed; yaml-ish `tree:` dumps; and trailing chopped `0.1.` (not standing `4.0.` / `2.5.`). Extract-meta skips `still extracts;` / `still extracts.` with no object, `still store and pack` / `still stores and packs`, `lock the recap row`, and `recap-as-failed`. Inspect-status recaps skip by shape: `Live recent N are` / `Inspect recent on` leads, `recent_noise=` dumps, clock-time recap ids, recap-faileds in the recent window. `They found X: a, b, and c` is a review list; a They-found + Redis/path failed still stores, including one that says `in this session`. ProcessState leftovers skip only as type=state, not SkipProse. Contains-skips for `named locks` / `locks are tested` / `they found` / `inspect recent 8` / `a packed failed` are gone so a real named-lock or They-found failed still stores. Space-form "same failure twice" Redis, Authorization, I'll stick with JWT still-extracts, I'll cold-start, 0.1.3 remember, and slice-loop stay. Pack of five and 4.0 / 2.5 unchanged. `inspect --prune --project` supersedes already-stored residue for that project. 0.3 success (inspect recent 8 all obey-worthy) is not closed.
+- Skip truncated recaps, extract-meta talk, and inspect-status dumps so those sentences do not become claims.
+- Review-list "They found X: a, b, and c" is skipped. A They-found Redis/path failed still stores.
+- Process-state leftovers skip only as type=state, not the shared skip list.
+- Global contains-skips for named-lock and they-found phrases are gone. Real lock and They-found faileds still store.
+- `inspect --prune --project` supersedes residue for that project only.
+- Pack of five and 4.0 / 2.5 unchanged. 0.3 (inspect recent all obey-worthy) is not closed.
 
 ## 0.1.6 — 2026-08-19
 
