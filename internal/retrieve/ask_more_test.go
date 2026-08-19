@@ -503,6 +503,67 @@ func TestAskDropsLiveRecapKeepsRedis(t *testing.T) {
 		Text:      "A They-found Redis/path failed still stores.",
 		CreatedAt: "2026-08-10T20:59:56Z",
 	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2049", Type: "failed", SessionID: "live",
+		Text:      "The gates mostly match the listed shapes, and extract does keep the gold They-found Redis failed plus real named-lock faileds.",
+		CreatedAt: "2026-08-10T20:49:15Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2157", Type: "failed", SessionID: "live",
+		Text:      "Shared `SkipProse` / `ExtractNoise` now drop the five live inspect-recap shapes that were impersonating work, so a later session or another tool is less likely to be handed a fake Redis failed.",
+		CreatedAt: "2026-08-10T21:57:10Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2208", Type: "failed", SessionID: "live",
+		Text:      "Bench failed against current testdata.",
+		CreatedAt: "2026-08-10T22:08:14Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2146", Type: "decision", SessionID: "live",
+		Text:      "go-first, 4.0, 0.1.3 remember, Authorization, I'll stick with JWT next.",
+		CreatedAt: "2026-08-10T21:46:01Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2237", Type: "failed", SessionID: "live",
+		Text:      "Gold Redis/named-lock/JWT/Tests-failed-to/concurrent_test.",
+		CreatedAt: "2026-08-10T22:37:54Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2232", Type: "failed", SessionID: "live",
+		Text:      "Locks still keep They-found Redis/path, named-lock, JWT next, Tests failed to, concurrent_test.",
+		CreatedAt: "2026-08-10T22:32:42Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2227COLON", Type: "failed", SessionID: "live",
+		Text:      "Locks still store: They-found Redis/path, named-lock, JWT next, Tests failed to connect, concurrent_test.",
+		CreatedAt: "2026-08-10T22:27:44Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2227JUDGE", Type: "decision", SessionID: "live",
+		Text:      "Recent 8 is not all obey-worthy (`A later session still checks out recap instead of work` plus slice-loop judge residue), so 0.3 stays open.",
+		CreatedAt: "2026-08-10T22:27:45Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2217", Type: "decision", SessionID: "live",
+		Text:      "A later session still checks out recap instead of work.",
+		CreatedAt: "2026-08-10T22:17:27Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2243", Type: "failed", SessionID: "live",
+		Text:      "They-found Redis, named-lock, I'll stick with JWT next, Tests failed to, and version.go keeps are not contains-skipped.",
+		CreatedAt: "2026-08-10T22:43:23Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2256", Type: "failed", SessionID: "live",
+		Text:      "They-found Redis, named-lock, JWT next, Tests failed to, version.go, and 4.0 still keep.",
+		CreatedAt: "2026-08-10T22:56:27Z",
+	})
+	writeRec(t, st, claim.Record{
+		ID: "RECAP2255", Type: "decision", SessionID: "live",
+		Text:      "Colon-form still-store lock-list recaps skip. A concurrent_test.go-first failed is not a go-first mash.",
+		CreatedAt: "2026-08-10T22:55:52Z",
+		Paths:     []string{"internal/gate/gate.go", "internal/write/extract.go"},
+	})
 	out := askAt(t, st, Request{
 		Project:   "acme/api",
 		SessionID: "live",
@@ -512,7 +573,11 @@ func TestAskDropsLiveRecapKeepsRedis(t *testing.T) {
 	})
 	if containsID(out, "RECAP1909") || containsID(out, "RECAP1915") || containsID(out, "RECAP1743") ||
 		containsID(out, "RECAP2010") || containsID(out, "RECAP2013") || containsID(out, "EXAMPLEDROP") ||
-		containsID(out, "STILLSTORES") {
+		containsID(out, "STILLSTORES") || containsID(out, "RECAP2049") || containsID(out, "RECAP2157") ||
+		containsID(out, "RECAP2208") || containsID(out, "RECAP2146") || containsID(out, "RECAP2237") ||
+		containsID(out, "RECAP2232") || containsID(out, "RECAP2227COLON") || containsID(out, "RECAP2227JUDGE") ||
+		containsID(out, "RECAP2217") || containsID(out, "RECAP2243") ||
+		containsID(out, "RECAP2256") || containsID(out, "RECAP2255") {
 		t.Fatalf("live recap packed: %+v", out.Context)
 	}
 	if !containsID(out, "REDIS") {
@@ -525,7 +590,17 @@ func TestAskDropsLiveRecapKeepsRedis(t *testing.T) {
 			strings.Contains(w, "lock the recap row") || strings.Contains(w, "control-flow holes") ||
 			strings.Contains(w, "recent_noise=0") || strings.Contains(w, "EXAMPLEDROP") ||
 			strings.Contains(w, "STILLSTORES") || strings.Contains(w, "Example drop:") ||
-			strings.Contains(w, "still stores") {
+			strings.Contains(w, "still stores") || strings.Contains(w, "RECAP2049") ||
+			strings.Contains(w, "RECAP2157") || strings.Contains(w, "RECAP2208") ||
+			strings.Contains(w, "RECAP2146") || strings.Contains(w, "gates mostly match") ||
+			strings.Contains(w, "inspect-recap") || strings.Contains(w, "current testdata") ||
+			strings.Contains(w, "go-first") || strings.Contains(w, "RECAP2237") ||
+			strings.Contains(w, "RECAP2232") || strings.Contains(w, "RECAP2227COLON") ||
+			strings.Contains(w, "RECAP2227JUDGE") || strings.Contains(w, "RECAP2217") ||
+			strings.Contains(w, "RECAP2243") || strings.Contains(w, "still store:") ||
+			strings.Contains(w, "checks out recap") || strings.Contains(w, "contains-skipped") ||
+			strings.Contains(w, "RECAP2256") || strings.Contains(w, "RECAP2255") ||
+			strings.Contains(w, "still keep") || strings.Contains(w, "lock-list recap") {
 			t.Fatalf("live recap warned: %v", out.Warnings)
 		}
 	}

@@ -386,7 +386,7 @@ func fileExtDot(rs []rune, i int) bool {
 		return true
 	}
 	switch rs[j] {
-	case ' ', '\t', ',', ';', ':', ')', ']', '\'', '"', '.', '!', '?':
+	case ' ', '\t', ',', ';', ':', ')', ']', '\'', '"', '.', '!', '?', '-':
 		return true
 	}
 	return false

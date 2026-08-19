@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.9 — 2026-08-19
+
+- Skip inspect-recap, gates-mostly-match, go-first mash, ok=false, hyphenated They-found lock-lists, and still-keep / still-ground extract-meta so those sentences do not become claims.
+- Pathless Bench is a sentence starter, not an identifier. Pathful Bench still grounds when a path is present.
+- Hyphenated still-store lock-list recaps skip. A concurrent_test.go-first keep is not a go-first mash.
+- Pack of five and 4.0 / 2.5 unchanged. 0.3 (inspect recent all obey-worthy) is not closed.
+
 ## 0.1.8 — 2026-08-19
 
 - Skip still-stores extract-meta (punctuation forms; "and pack" is not required) so those recaps do not become claims.

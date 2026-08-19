@@ -214,7 +214,7 @@ func TestPruneSupersedesSloganAndIntendedGap(t *testing.T) {
 		},
 		{
 			ID: "TESTGOKEEP", Type: "failed", ProjectKey: "acme/api",
-			Text:      "concurrent_test.go File locks failed to acquire.",
+			Text:      "concurrent_test.go-first File locks failed to acquire.",
 			CreatedAt: "2026-08-19T18:38:00Z", SessionID: "s-live", Status: "active",
 			Source: "import", Harness: "grok",
 		},
@@ -248,6 +248,114 @@ func TestPruneSupersedesSloganAndIntendedGap(t *testing.T) {
 			CreatedAt: "2026-08-19T20:39:53Z", SessionID: "s-live", Status: "active",
 			Source: "import", Harness: "grok",
 		},
+		{
+			ID: "R2208", Type: "failed", ProjectKey: "acme/api",
+			Text:      "Bench failed against current testdata.",
+			CreatedAt: "2026-08-19T22:08:14Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2157A", Type: "failed", ProjectKey: "acme/api",
+			Text:      "Shared `SkipProse` / `ExtractNoise` now drop the five live inspect-recap shapes that were impersonating work, so a later session or another tool is less likely to be handed a fake Redis failed.",
+			CreatedAt: "2026-08-19T21:57:10Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2146", Type: "decision", ProjectKey: "acme/api",
+			Text:      "go-first, 4.0, 0.1.3 remember, Authorization, I'll stick with JWT next.",
+			CreatedAt: "2026-08-19T21:46:01Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2149", Type: "decision", ProjectKey: "acme/api",
+			Text:      "Secrets path unchanged; tests copy recap bodies instead of reading ~/.",
+			CreatedAt: "2026-08-19T21:49:37Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2049", Type: "failed", ProjectKey: "acme/api",
+			Text:      "The gates mostly match the listed shapes, and extract does keep the gold They-found Redis failed plus real named-lock faileds.",
+			CreatedAt: "2026-08-19T20:49:15Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "OKFALSE", Type: "constraint", ProjectKey: "acme/api",
+			Text:      "If it fails, ok=false and do not push.",
+			CreatedAt: "2026-08-19T22:01:35Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2237", Type: "failed", ProjectKey: "acme/api",
+			Text:      "Gold Redis/named-lock/JWT/Tests-failed-to/concurrent_test.",
+			CreatedAt: "2026-08-19T22:37:54Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2232", Type: "failed", ProjectKey: "acme/api",
+			Text:      "Locks still keep They-found Redis/path, named-lock, JWT next, Tests failed to, concurrent_test.",
+			CreatedAt: "2026-08-19T22:32:42Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2227COLON", Type: "failed", ProjectKey: "acme/api",
+			Text:      "Locks still store: They-found Redis/path, named-lock, JWT next, Tests failed to connect, concurrent_test.",
+			CreatedAt: "2026-08-19T22:27:44Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2227JUDGE", Type: "decision", ProjectKey: "acme/api",
+			Text:      "Recent 8 is not all obey-worthy (`A later session still checks out recap instead of work` plus slice-loop judge residue), so 0.3 stays open.",
+			CreatedAt: "2026-08-19T22:27:45Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2217", Type: "decision", ProjectKey: "acme/api",
+			Text:      "A later session still checks out recap instead of work.",
+			CreatedAt: "2026-08-19T22:17:27Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2243", Type: "failed", ProjectKey: "acme/api",
+			Text:      "They-found Redis, named-lock, I'll stick with JWT next, Tests failed to, and version.go keeps are not contains-skipped.",
+			CreatedAt: "2026-08-19T22:43:23Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2256", Type: "failed", ProjectKey: "acme/api",
+			Text:      "They-found Redis, named-lock, JWT next, Tests failed to, version.go, and 4.0 still keep.",
+			CreatedAt: "2026-08-19T22:56:27Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2255", Type: "decision", ProjectKey: "acme/api",
+			Text:      "Colon-form still-store lock-list recaps skip. A concurrent_test.go-first failed is not a go-first mash.",
+			CreatedAt: "2026-08-19T22:55:52Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "R2255ALONE", Type: "decision", ProjectKey: "acme/api",
+			Text:      "Colon-form still-store lock-list recaps skip.",
+			CreatedAt: "2026-08-19T22:55:00Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "RGROUND", Type: "failed", ProjectKey: "acme/api",
+			Text:      "Pathful Bench and Failed to still ground.",
+			CreatedAt: "2026-08-19T22:54:00Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "JWTNEXT", Type: "decision", ProjectKey: "acme/api",
+			Text:      "I'll stick with JWT next.",
+			CreatedAt: "2026-08-19T21:40:00Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
+		{
+			ID: "VERKEEP", Type: "constraint", ProjectKey: "acme/api",
+			Text:      "version.go and CHANGELOG must match.",
+			CreatedAt: "2026-08-19T22:01:35Z", SessionID: "s-live", Status: "active",
+			Source: "import", Harness: "grok",
+		},
 	} {
 		if _, err := st.WriteClaim(r); err != nil {
 			t.Fatal(err)
@@ -257,7 +365,7 @@ func TestPruneSupersedesSloganAndIntendedGap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.SupersededNoise < 18 {
+	if res.SupersededNoise < 24 {
 		t.Fatalf("%+v", res)
 	}
 	slogan, ok := st.Get("SLOGAN")
@@ -280,7 +388,7 @@ func TestPruneSupersedesSloganAndIntendedGap(t *testing.T) {
 	if !ok || dump.Status != "superseded" {
 		t.Fatalf("dump %+v %v", dump, ok)
 	}
-	for _, id := range []string{"R1909", "R1915", "R1903", "R1922", "R1743", "R1957", "R2010", "R2013", "R2019", "STILLSTORES", "LOOPRESIDUE", "EXAMPLEDROP", "NEVERLOSEMEMO", "UNCLOSEDPAREN"} {
+	for _, id := range []string{"R1909", "R1915", "R1903", "R1922", "R1743", "R1957", "R2010", "R2013", "R2019", "STILLSTORES", "LOOPRESIDUE", "EXAMPLEDROP", "NEVERLOSEMEMO", "UNCLOSEDPAREN", "R2208", "R2157A", "R2146", "R2149", "R2049", "OKFALSE", "R2237", "R2232", "R2227COLON", "R2227JUDGE", "R2217", "R2243", "R2256", "R2255", "R2255ALONE", "RGROUND"} {
 		recap, ok := st.Get(id)
 		if !ok || recap.Status != "superseded" {
 			t.Fatalf("live recap %s %+v %v", id, recap, ok)
@@ -313,6 +421,14 @@ func TestPruneSupersedesSloganAndIntendedGap(t *testing.T) {
 	they, ok := st.Get("THEYREDIS")
 	if !ok || they.Status != "active" {
 		t.Fatalf("they-found Redis keep %+v %v", they, ok)
+	}
+	jwt, ok := st.Get("JWTNEXT")
+	if !ok || jwt.Status != "active" {
+		t.Fatalf("JWT next keep %+v %v", jwt, ok)
+	}
+	ver, ok := st.Get("VERKEEP")
+	if !ok || ver.Status != "active" {
+		t.Fatalf("version.go keep %+v %v", ver, ok)
 	}
 }
 

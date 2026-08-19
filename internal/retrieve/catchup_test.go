@@ -385,7 +385,7 @@ func TestExtractNoiseKeepsPointOneThreeRemember(t *testing.T) {
 	if retrieveNoise("File locks are tested in concurrent_test.go.") {
 		t.Fatal("file-lock keep")
 	}
-	if retrieveNoise("concurrent_test.go File locks failed to acquire.") {
+	if retrieveNoise("concurrent_test.go-first File locks failed to acquire.") {
 		t.Fatal("concurrent_test.go-first keep")
 	}
 	if retrieveNoise("They found Redis token bucket failed in src/middleware/auth.ts staging.") {
@@ -411,6 +411,69 @@ func TestExtractNoiseKeepsPointOneThreeRemember(t *testing.T) {
 	}
 	if !retrieveNoise("Non-empty must not prune other projects (memora etc.") {
 		t.Fatal("unclosed paren")
+	}
+	if !retrieveNoise("Bench failed against current testdata.") {
+		t.Fatal("22:08 Bench recap")
+	}
+	if !retrieveNoise("Shared `SkipProse` / `ExtractNoise` now drop the five live inspect-recap shapes that were impersonating work, so a later session or another tool is less likely to be handed a fake Redis failed.") {
+		t.Fatal("21:57 inspect-recap")
+	}
+	if !retrieveNoise("This cut makes the durable half of the goal more true: five inspect-recap shapes no longer become tape or pack, while the gold They-found Redis failed still does.") {
+		t.Fatal("21:57 this-cut")
+	}
+	if !retrieveNoise("go-first, 4.0, 0.1.3 remember, Authorization, I'll stick with JWT next.") {
+		t.Fatal("21:46 go-first mash")
+	}
+	if !retrieveNoise("Secrets path unchanged; tests copy recap bodies instead of reading ~/.") {
+		t.Fatal("21:49 recap bodies")
+	}
+	if !retrieveNoise("The gates mostly match the listed shapes, and extract does keep the gold They-found Redis failed plus real named-lock faileds.") {
+		t.Fatal("20:49 gates mostly match")
+	}
+	if !retrieveNoise("If it fails, ok=false and do not push.") {
+		t.Fatal("ok=false push")
+	}
+	if !retrieveNoise("Gold Redis/named-lock/JWT/Tests-failed-to/concurrent_test.") {
+		t.Fatal("22:37 gold mash")
+	}
+	if !retrieveNoise("Locks still keep They-found Redis/path, named-lock, JWT next, Tests failed to, concurrent_test.") {
+		t.Fatal("22:32 still keep lock-list")
+	}
+	if !retrieveNoise("Locks still store: They-found Redis/path, named-lock, JWT next, Tests failed to connect, concurrent_test.") {
+		t.Fatal("22:27 colon-form still store")
+	}
+	if !retrieveNoise("Recent 8 is not all obey-worthy (`A later session still checks out recap instead of work` plus slice-loop judge residue), so 0.3 stays open.") {
+		t.Fatal("22:27 slice-loop judge")
+	}
+	if !retrieveNoise("A later session still checks out recap instead of work.") {
+		t.Fatal("22:17 recap-checkout")
+	}
+	if !retrieveNoise("They-found Redis, named-lock, I'll stick with JWT next, Tests failed to, and version.go keeps are not contains-skipped.") {
+		t.Fatal("22:43 contains-skipped keep-talk")
+	}
+	if !retrieveNoise("They-found Redis, named-lock, JWT next, Tests failed to, version.go, and 4.0 still keep.") {
+		t.Fatal("22:56 hyphen they-found lock-list")
+	}
+	if !retrieveNoise("Colon-form still-store lock-list recaps skip. A concurrent_test.go-first failed is not a go-first mash.") {
+		t.Fatal("22:55 colon-form changelog recap")
+	}
+	if !retrieveNoise("Colon-form still-store lock-list recaps skip.") {
+		t.Fatal("22:55 still-store lock-list alone")
+	}
+	if !retrieveNoise("Pathful Bench and Failed to still ground.") {
+		t.Fatal("still ground. changelog recap")
+	}
+	if retrieveNoise("Named locks still keep the session JSONL in catchup.go.") {
+		t.Fatal("still keep + object keep")
+	}
+	if retrieveNoise("I'll stick with JWT next.") {
+		t.Fatal("JWT next keep")
+	}
+	if extractNoise(claim.Record{Type: "constraint", Text: "version.go and CHANGELOG must match."}) {
+		t.Fatal("version.go keep")
+	}
+	if retrieveNoise("WFailedOverlap stays 4.0.") {
+		t.Fatal("standing 4.0 keep")
 	}
 	if !retrieveNoise(`{"diff_stat":"13 files changed, 322 insertions(+), 6 deletions(-)","ok":true,"summary":"Gate SkipProse now treats hyphenated I'll-run."}`) {
 		t.Fatal("eval json dump")

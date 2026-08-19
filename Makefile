@@ -1,4 +1,4 @@
-VERSION ?= 0.1.8
+VERSION ?= 0.1.9
 LDFLAGS := -s -w -X lossless/internal/version.Version=$(VERSION)
 
 .PHONY: test cover cover-html vet bench lossless dist

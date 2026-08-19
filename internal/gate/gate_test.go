@@ -165,7 +165,7 @@ const (
 	liveRecap2019     = "Live export still has recap-faileds in the recent window, and the tests gold yesterday’s skip phrases instead of proving that window is obey-worthy."
 	namedLockKeep     = "Named locks in catchup.go stay on the session JSONL."
 	fileLockKeep      = "File locks are tested in concurrent_test.go."
-	testGoFirstKeep   = "concurrent_test.go File locks failed to acquire."
+	testGoFirstKeep   = "concurrent_test.go-first File locks failed to acquire."
 	weightKeep        = "WFailedOverlap stays 4.0."
 	theyFoundRedis    = "They found Redis token bucket failed in src/middleware/auth.ts staging."
 	theyFoundLock     = "They found the named-lock race in catchup.go."
@@ -175,6 +175,29 @@ const (
 	liveNeverLoseMemo = "Cross-harness, switch models, never lose memo"
 	liveUnclosedParen = "Non-empty must not prune other projects (memora etc."
 	exampleDropQuoted = `- "Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging."`
+	liveRecap2208     = "Bench failed against current testdata."
+	liveRecap2157a    = "Shared `SkipProse` / `ExtractNoise` now drop the five live inspect-recap shapes that were impersonating work, so a later session or another tool is less likely to be handed a fake Redis failed."
+	liveRecap2157b    = "This cut makes the durable half of the goal more true: five inspect-recap shapes no longer become tape or pack, while the gold They-found Redis failed still does."
+	liveRecap2146     = "go-first, 4.0, 0.1.3 remember, Authorization, I'll stick with JWT next."
+	liveRecap2149     = "Secrets path unchanged; tests copy recap bodies instead of reading ~/."
+	liveRecap2049     = "The gates mostly match the listed shapes, and extract does keep the gold They-found Redis failed plus real named-lock faileds."
+	liveOkFalsePush   = "If it fails, ok=false and do not push."
+	liveOkFalseArt    = "If there is no installable artifact, say so in detail and ok=false — a library-only repo should still have a test you just ran; do not skip."
+	versionKeep       = "version.go and CHANGELOG must match."
+	jwtNextKeep       = "I'll stick with JWT next."
+	// Post-prune inspect recent (2026-08-19). Copied in; tests must not read ~/.lossless.
+	liveRecap2237gold  = "Gold Redis/named-lock/JWT/Tests-failed-to/concurrent_test."
+	liveRecap2232keep  = "Locks still keep They-found Redis/path, named-lock, JWT next, Tests failed to, concurrent_test."
+	liveRecap2227colon = "Locks still store: They-found Redis/path, named-lock, JWT next, Tests failed to connect, concurrent_test."
+	liveRecap2227judge = "Recent 8 is not all obey-worthy (`A later session still checks out recap instead of work` plus slice-loop judge residue), so 0.3 stays open."
+	liveRecap2217      = "A later session still checks out recap instead of work."
+	liveRecap2243      = "They-found Redis, named-lock, I'll stick with JWT next, Tests failed to, and version.go keeps are not contains-skipped."
+	// Live inspect --project jbgh/lossless after 0.1.9 gates (2026-08-19 22:55–22:56).
+	liveRecap2256hyphen  = "They-found Redis, named-lock, JWT next, Tests failed to, version.go, and 4.0 still keep."
+	liveRecap2255colon   = "Colon-form still-store lock-list recaps skip. A concurrent_test.go-first failed is not a go-first mash."
+	liveRecap2255alone   = "Colon-form still-store lock-list recaps skip."
+	liveRecapBenchGround = "Pathful Bench and Failed to still ground."
+	stillKeepObject      = "Named locks still keep the session JSONL in catchup.go."
 )
 
 func TestTruncatedLiveRecaps(t *testing.T) {
@@ -260,6 +283,24 @@ func TestSkipProseLiveResidue(t *testing.T) {
 		liveNeverLoseMemo,
 		liveUnclosedParen,
 		exampleDropQuoted,
+		liveRecap2208,
+		liveRecap2157a,
+		liveRecap2157b,
+		liveRecap2146,
+		liveRecap2149,
+		liveRecap2049,
+		liveOkFalsePush,
+		liveOkFalseArt,
+		liveRecap2237gold,
+		liveRecap2232keep,
+		liveRecap2227colon,
+		liveRecap2227judge,
+		liveRecap2217,
+		liveRecap2243,
+		liveRecap2256hyphen,
+		liveRecap2255colon,
+		liveRecap2255alone,
+		liveRecapBenchGround,
 	} {
 		if !SkipProse(s) {
 			t.Fatalf("residue not skipped: %q", s)
@@ -282,8 +323,11 @@ func TestSkipProseLiveResidue(t *testing.T) {
 		theyFoundRedis,
 		theyFoundLock,
 		"They found Redis token bucket failed in this session in src/middleware/auth.ts.",
-		"I'll stick with JWT next.",
+		jwtNextKeep,
 		"We'll use postgres next.",
+		versionKeep,
+		"Bench failed in testdata/bench/cases/01-auth.json.",
+		stillKeepObject,
 	} {
 		if SkipProse(s) {
 			t.Fatalf("lock skipped: %q", s)
@@ -351,5 +395,61 @@ func TestSkipProseLiveResidue(t *testing.T) {
 	}
 	if !ProductCopy(liveNeverLoseMemo) {
 		t.Fatal("never lose memo")
+	}
+	if !MetaFailedTalk(liveRecap2208) || !MetaFailedTalk(liveRecap2157a) ||
+		!MetaFailedTalk(liveRecap2157b) || !MetaFailedTalk(liveRecap2146) ||
+		!MetaFailedTalk(liveRecap2149) || !MetaFailedTalk(liveRecap2049) ||
+		!MetaFailedTalk(liveOkFalsePush) || !MetaFailedTalk(liveOkFalseArt) {
+		t.Fatal("0.1.9 recap meta")
+	}
+	if !MetaFailedTalk(liveRecap2237gold) || !MetaFailedTalk(liveRecap2232keep) ||
+		!MetaFailedTalk(liveRecap2227colon) || !MetaFailedTalk(liveRecap2227judge) ||
+		!MetaFailedTalk(liveRecap2217) || !MetaFailedTalk(liveRecap2243) {
+		t.Fatal("post-prune recap meta")
+	}
+	if !MetaFailedTalk(liveRecap2256hyphen) || !theyFoundHyphenList(liveRecap2256hyphen) {
+		t.Fatal("22:56 hyphen they-found lock-list")
+	}
+	if theyFoundHyphenList(theyFoundRedis) || theyFoundHyphenList(theyFoundLock) {
+		t.Fatal("space-form they-found as hyphen lock-list")
+	}
+	if !MetaFailedTalk(liveRecap2255colon) || !MetaFailedTalk(liveRecap2255alone) {
+		t.Fatal("22:55 colon-form still-store lock-list")
+	}
+	if !stillExtractsNoObject(Fold(liveRecap2255alone)) {
+		t.Fatal("hyphenated still-store")
+	}
+	if !MetaFailedTalk(liveRecapBenchGround) || !stillExtractsNoObject(Fold(liveRecapBenchGround)) {
+		t.Fatal("still ground. changelog recap")
+	}
+	if !stillExtractsNoObject(Fold(liveRecap2256hyphen)) {
+		t.Fatal("still keep. hyphen lock-list")
+	}
+	if stillExtractsNoObject(Fold(stillKeepObject)) || MetaFailedTalk(stillKeepObject) {
+		t.Fatal("still keep + object as no-object")
+	}
+	if !stillExtractsNoObject(Fold(liveRecap2227colon)) {
+		t.Fatal("colon-form still store")
+	}
+	if stillExtractsNoObject(Fold("I'll stick with the parser that still extracts JWTs from cookies in src/auth.ts.")) {
+		t.Fatal("still extracts JWTs as no-object")
+	}
+	if goFirstMash(Fold(testGoFirstKeep)) {
+		t.Fatal("concurrent_test.go-first as go-first mash")
+	}
+	if !goFirstMash(Fold(liveRecap2146)) {
+		t.Fatal("go-first mash missed")
+	}
+	if MetaFailedTalk(versionKeep) || MetaFailedTalk(jwtNextKeep) || MetaFailedTalk(weightKeep) {
+		t.Fatal("version/jwt/4.0 keep as meta-failed")
+	}
+	if MetaFailedTalk(testGoFirstKeep) {
+		t.Fatal("concurrent_test.go-first keep as meta-failed")
+	}
+	if MetaFailedTalk("ExtractNoise wrongly dropped the Redis failed in src/middleware/auth.ts.") {
+		t.Fatal("extractnoise contains-skip")
+	}
+	if SkipProse("They found Redis token bucket failed in src/middleware/auth.ts staging.") {
+		t.Fatal("they-found contains-skip")
 	}
 }
