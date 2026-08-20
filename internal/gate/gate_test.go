@@ -280,20 +280,15 @@ func TestSkipProseLiveResidue(t *testing.T) {
 		liveStillStores,
 		liveLoopResidue,
 		liveExampleDrop,
-		liveNeverLoseMemo,
 		liveUnclosedParen,
 		exampleDropQuoted,
-		liveRecap2208,
 		liveRecap2157a,
 		liveRecap2157b,
 		liveRecap2146,
 		liveRecap2149,
 		liveRecap2049,
-		liveOkFalsePush,
-		liveOkFalseArt,
 		liveRecap2237gold,
 		liveRecap2232keep,
-		liveRecap2227colon,
 		liveRecap2227judge,
 		liveRecap2217,
 		liveRecap2243,
@@ -327,7 +322,13 @@ func TestSkipProseLiveResidue(t *testing.T) {
 		"We'll use postgres next.",
 		versionKeep,
 		"Bench failed in testdata/bench/cases/01-auth.json.",
+		"Bench failed to converge after we raised the batch.",
 		stillKeepObject,
+		"Login returned ok=false in src/auth.ts after we rotated tokens.",
+		"This cut makes the Redis limiter fail in src/middleware/auth.ts.",
+		"Never lose memoization of JWT claims in src/auth.ts.",
+		"Inspect recapture of Redis sessions failed in src/watch.ts.",
+		"We still store: the session JSONL on disk in catchup.go.",
 	} {
 		if SkipProse(s) {
 			t.Fatalf("lock skipped: %q", s)
@@ -393,19 +394,30 @@ func TestSkipProseLiveResidue(t *testing.T) {
 	if exampleDrop(theyFoundRedis) {
 		t.Fatal("unprefixed they-found Redis as example drop")
 	}
-	if !ProductCopy(liveNeverLoseMemo) {
-		t.Fatal("never lose memo")
+	if ProductCopy("Never lose memoization of JWT claims in src/auth.ts.") {
+		t.Fatal("never lose memoization")
 	}
-	if !MetaFailedTalk(liveRecap2208) || !MetaFailedTalk(liveRecap2157a) ||
+	if MetaFailedTalk("Login returned ok=false in src/auth.ts after we rotated tokens.") {
+		t.Fatal("ok=false health failed")
+	}
+	if MetaFailedTalk("This cut makes the Redis limiter fail in src/middleware/auth.ts.") {
+		t.Fatal("this cut makes Redis fail")
+	}
+	if MetaFailedTalk("Inspect recapture of Redis sessions failed in src/watch.ts.") {
+		t.Fatal("inspect recapture")
+	}
+	if !MetaFailedTalk(liveRecap2157a) ||
 		!MetaFailedTalk(liveRecap2157b) || !MetaFailedTalk(liveRecap2146) ||
-		!MetaFailedTalk(liveRecap2149) || !MetaFailedTalk(liveRecap2049) ||
-		!MetaFailedTalk(liveOkFalsePush) || !MetaFailedTalk(liveOkFalseArt) {
+		!MetaFailedTalk(liveRecap2149) || !MetaFailedTalk(liveRecap2049) {
 		t.Fatal("0.1.9 recap meta")
 	}
 	if !MetaFailedTalk(liveRecap2237gold) || !MetaFailedTalk(liveRecap2232keep) ||
-		!MetaFailedTalk(liveRecap2227colon) || !MetaFailedTalk(liveRecap2227judge) ||
+		!MetaFailedTalk(liveRecap2227judge) ||
 		!MetaFailedTalk(liveRecap2217) || !MetaFailedTalk(liveRecap2243) {
 		t.Fatal("post-prune recap meta")
+	}
+	if MetaFailedTalk(liveRecap2227colon) {
+		t.Fatal("colon still store: is a keep")
 	}
 	if !MetaFailedTalk(liveRecap2256hyphen) || !theyFoundHyphenList(liveRecap2256hyphen) {
 		t.Fatal("22:56 hyphen they-found lock-list")
@@ -428,8 +440,8 @@ func TestSkipProseLiveResidue(t *testing.T) {
 	if stillExtractsNoObject(Fold(stillKeepObject)) || MetaFailedTalk(stillKeepObject) {
 		t.Fatal("still keep + object as no-object")
 	}
-	if !stillExtractsNoObject(Fold(liveRecap2227colon)) {
-		t.Fatal("colon-form still store")
+	if stillExtractsNoObject(Fold(liveRecap2227colon)) || stillExtractsNoObject(Fold("We still store: the session JSONL on disk in catchup.go.")) {
+		t.Fatal("colon still store: as no-object")
 	}
 	if stillExtractsNoObject(Fold("I'll stick with the parser that still extracts JWTs from cookies in src/auth.ts.")) {
 		t.Fatal("still extracts JWTs as no-object")

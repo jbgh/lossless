@@ -78,16 +78,17 @@ func MetaFailedTalk(s string) bool {
 }
 
 // stillExtractsNoObject is extract-meta punctuation ("still extracts;" /
-// "still stores." / "still store:" / "still keep." / "still ground.") not
-// "still extracts JWTs" and not a real They-found Redis failed. "and pack"
-// is not required. Hyphenated still-store / still-keep / still-ground is
-// changelog recap, not "Named locks still keep the session JSONL".
+// "still stores.") not "still extracts JWTs" and not "We still store: the
+// session JSONL" (colon after store is a real claim). Hyphenated still-store
+// / still-keep / still-ground is changelog recap, not "Named locks still
+// keep the session JSONL".
 func stillExtractsNoObject(low string) bool {
-	for _, verb := range []string{
-		"still extracts", "still extract", "still stores", "still store",
-		"still keep", "still keeps", "still ground", "still grounds",
+	for _, p := range []string{
+		"still extracts.", "still extracts;", "still extract.", "still extract;",
+		"still stores.", "still stores;", "still store.", "still store;",
+		"still keep.", "still keeps.", "still ground.", "still grounds.",
 	} {
-		if strings.Contains(low, verb+".") || strings.Contains(low, verb+";") || strings.Contains(low, verb+":") {
+		if strings.Contains(low, p) {
 			return true
 		}
 	}
@@ -475,13 +476,10 @@ var (
 		"lock the recap row",
 		"recap-as-failed",
 		"loop residue", "the product keep is",
-		"inspect-recap", "inspect recap",
-		"this cut makes",
+		"inspect-recap",
 		"gates mostly match",
 		"gold they-found",
 		"recap bodies",
-		"ok=false",
-		"current testdata",
 		"still keep they-found",
 		"checks out recap",
 		"obey-worthy",
@@ -507,7 +505,7 @@ var (
 		"failed work first, then", "then what already shipped",
 		"the next product is:", "before it retries the failed work",
 		"harness holes beyond",
-		"never lose memory", "never lose your memory", "never lose memo",
+		"never lose memory", "never lose your memory",
 		"switch between them",
 	}
 	yamlChrome = []string{

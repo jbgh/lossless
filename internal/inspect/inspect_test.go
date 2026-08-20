@@ -301,13 +301,13 @@ func TestInspectRecent019RecapsAreNoise(t *testing.T) {
 		}
 	}
 	det, err := Build(st, "acme/api")
-	if err != nil || det.Detail == nil || det.Detail.RecentNoise != 5 {
-		t.Fatalf("recent_noise want 5 got %+v %v", det.Detail, err)
+	if err != nil || det.Detail == nil || det.Detail.RecentNoise != 4 {
+		t.Fatalf("recent_noise want 4 got %+v %v", det.Detail, err)
 	}
 	var noiseDrop, goldKeep int
 	for _, c := range det.Detail.Recent {
 		switch {
-		case strings.Contains(c.Text, "current testdata"), strings.Contains(c.Text, "inspect-recap"),
+		case strings.Contains(c.Text, "inspect-recap"),
 			strings.Contains(c.Text, "go-first"), strings.Contains(c.Text, "recap bodies"),
 			strings.Contains(c.Text, "gates mostly match"):
 			if !retrieve.ExtractNoise(c) {
@@ -316,14 +316,15 @@ func TestInspectRecent019RecapsAreNoise(t *testing.T) {
 			noiseDrop++
 		case strings.Contains(c.Text, "token bucket failed in src/middleware/auth.ts staging"),
 			c.Text == "I'll stick with JWT next.",
-			c.Text == "version.go and CHANGELOG must match.":
+			c.Text == "version.go and CHANGELOG must match.",
+			strings.Contains(c.Text, "current testdata"):
 			if retrieve.ExtractNoise(c) {
 				t.Fatalf("keep as noise: %q", c.Text)
 			}
 			goldKeep++
 		}
 	}
-	if noiseDrop != 5 || goldKeep != 3 {
+	if noiseDrop != 4 || goldKeep != 4 {
 		t.Fatalf("0.1.9 window noise=%d gold=%d recent=%+v", noiseDrop, goldKeep, det.Detail.Recent)
 	}
 }
@@ -355,14 +356,14 @@ func TestInspectRecentPostPruneRecapsAreNoise(t *testing.T) {
 		}
 	}
 	det, err := Build(st, "acme/api")
-	if err != nil || det.Detail == nil || det.Detail.RecentNoise != 5 {
-		t.Fatalf("recent_noise want 5 got %+v %v", det.Detail, err)
+	if err != nil || det.Detail == nil || det.Detail.RecentNoise != 4 {
+		t.Fatalf("recent_noise want 4 got %+v %v", det.Detail, err)
 	}
 	var noiseDrop, goldKeep int
 	for _, c := range det.Detail.Recent {
 		switch {
 		case strings.Contains(c.Text, "Tests-failed-to"), strings.Contains(c.Text, "still keep They-found"),
-			strings.Contains(c.Text, "still store:"), strings.Contains(c.Text, "obey-worthy"),
+			strings.Contains(c.Text, "obey-worthy"),
 			strings.Contains(c.Text, "checks out recap") && !strings.Contains(c.Text, "obey-worthy"):
 			if !retrieve.ExtractNoise(c) {
 				t.Fatalf("recap not noise: %q", c.Text)
@@ -370,14 +371,15 @@ func TestInspectRecentPostPruneRecapsAreNoise(t *testing.T) {
 			noiseDrop++
 		case strings.Contains(c.Text, "token bucket failed in src/middleware/auth.ts staging"),
 			c.Text == "I'll stick with JWT next.",
-			c.Text == "version.go and CHANGELOG must match.":
+			c.Text == "version.go and CHANGELOG must match.",
+			strings.Contains(c.Text, "still store:"):
 			if retrieve.ExtractNoise(c) {
 				t.Fatalf("keep as noise: %q", c.Text)
 			}
 			goldKeep++
 		}
 	}
-	if noiseDrop != 5 || goldKeep != 3 {
+	if noiseDrop != 4 || goldKeep != 4 {
 		t.Fatalf("post-prune window noise=%d gold=%d recent=%+v", noiseDrop, goldKeep, det.Detail.Recent)
 	}
 }

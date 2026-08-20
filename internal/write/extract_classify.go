@@ -132,7 +132,7 @@ var sentenceStarter = map[string]bool{
 	"It": true, "I": true, "After": true, "Before": true, "When": true,
 	"While": true, "Then": true, "Also": true, "Just": true, "Checking": true,
 	"Same": true, "Tests": true, "Live": true, "Ask": true,
-	"They": true, "One": true, "Bench": true,
+	"They": true, "One": true,
 }
 
 func allUpper(s string) bool {

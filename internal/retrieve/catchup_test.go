@@ -406,14 +406,14 @@ func TestExtractNoiseKeepsPointOneThreeRemember(t *testing.T) {
 	if !retrieveNoise("Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging.") {
 		t.Fatal("example drop")
 	}
-	if !retrieveNoise("Cross-harness, switch models, never lose memo") {
-		t.Fatal("never lose memo")
+	if retrieveNoise("Never lose memoization of JWT claims in src/auth.ts.") {
+		t.Fatal("never lose memoization keep")
 	}
 	if !retrieveNoise("Non-empty must not prune other projects (memora etc.") {
 		t.Fatal("unclosed paren")
 	}
-	if !retrieveNoise("Bench failed against current testdata.") {
-		t.Fatal("22:08 Bench recap")
+	if retrieveNoise("Bench failed against current testdata.") {
+		t.Fatal("pathless Bench keep")
 	}
 	if !retrieveNoise("Shared `SkipProse` / `ExtractNoise` now drop the five live inspect-recap shapes that were impersonating work, so a later session or another tool is less likely to be handed a fake Redis failed.") {
 		t.Fatal("21:57 inspect-recap")
@@ -430,8 +430,8 @@ func TestExtractNoiseKeepsPointOneThreeRemember(t *testing.T) {
 	if !retrieveNoise("The gates mostly match the listed shapes, and extract does keep the gold They-found Redis failed plus real named-lock faileds.") {
 		t.Fatal("20:49 gates mostly match")
 	}
-	if !retrieveNoise("If it fails, ok=false and do not push.") {
-		t.Fatal("ok=false push")
+	if retrieveNoise("Login returned ok=false in src/auth.ts after we rotated tokens.") {
+		t.Fatal("ok=false health failed keep")
 	}
 	if !retrieveNoise("Gold Redis/named-lock/JWT/Tests-failed-to/concurrent_test.") {
 		t.Fatal("22:37 gold mash")
@@ -439,8 +439,8 @@ func TestExtractNoiseKeepsPointOneThreeRemember(t *testing.T) {
 	if !retrieveNoise("Locks still keep They-found Redis/path, named-lock, JWT next, Tests failed to, concurrent_test.") {
 		t.Fatal("22:32 still keep lock-list")
 	}
-	if !retrieveNoise("Locks still store: They-found Redis/path, named-lock, JWT next, Tests failed to connect, concurrent_test.") {
-		t.Fatal("22:27 colon-form still store")
+	if extractNoise(claim.Record{Type: "failed", Text: "We still store: the session JSONL on disk in catchup.go.", Paths: []string{"catchup.go"}}) {
+		t.Fatal("colon still store keep")
 	}
 	if !retrieveNoise("Recent 8 is not all obey-worthy (`A later session still checks out recap instead of work` plus slice-loop judge residue), so 0.3 stays open.") {
 		t.Fatal("22:27 slice-loop judge")

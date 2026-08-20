@@ -366,8 +366,8 @@ func TestGroundedFailed(t *testing.T) {
 	if !GroundedFailed("the redis pool failed", []string{"src/pool.ts"}) {
 		t.Fatal("path grounds")
 	}
-	if GroundedFailed("Bench failed against current testdata.", nil) {
-		t.Fatal("Bench is not an identifier")
+	if !GroundedFailed("Bench failed against current testdata.", nil) {
+		t.Fatal("Bench is an identifier")
 	}
 	if !GroundedFailed("Bench failed in testdata/bench/cases/01-auth.json", nil) {
 		t.Fatal("pathful Bench")
@@ -435,10 +435,10 @@ func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
 			"Ask warnings were treated as blocking for further product edits: do not dump an ask JSON body as assistant text. " +
 			liveRecap1909 + " " + liveRecap1915 + " " + liveRecap1903 + " " + liveRecap1922 + " " +
 			liveRecap1743 + " " + liveRecap1957 + " " + liveRecap2010 + " " + liveRecap2013 + " " + liveRecap2019 + " " +
-			liveStillStores + " " + liveLoopResidue + " " + liveExampleDrop + " " + liveNeverLoseMemo + " " + liveUnclosedParen + " " +
-			liveRecap2208 + " " + liveRecap2157a + " " + liveRecap2157b + " " + liveRecap2146 + " " +
-			liveRecap2149 + " " + liveRecap2049 + " " + liveOkFalsePush + " " + liveOkFalseArt + " " +
-			liveRecap2237gold + " " + liveRecap2232keep + " " + liveRecap2227colon + " " +
+			liveStillStores + " " + liveLoopResidue + " " + liveExampleDrop + " " + liveUnclosedParen + " " +
+			liveRecap2157a + " " + liveRecap2157b + " " + liveRecap2146 + " " +
+			liveRecap2149 + " " + liveRecap2049 + " " +
+			liveRecap2237gold + " " + liveRecap2232keep + " " +
 			liveRecap2227judge + " " + liveRecap2217 + " " + liveRecap2243 + " " +
 			liveRecap2256hyphen + " " + liveRecap2255colon + " " + liveRecap2255alone + " " + liveRecapBenchGround + " " +
 			"ProcessState is in SkipProse as planned; Working on … next is no longer a required kept state.",
@@ -446,7 +446,7 @@ func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
 	if len(residue) != 0 {
 		t.Fatalf("residue extracted: %+v", residue)
 	}
-	for i, recap := range []string{liveRecap1909, liveRecap1915, liveRecap1903, liveRecap1922, liveRecap1743, liveRecap1957, liveRecap2010, liveRecap2013, liveRecap2019, liveStillStores, liveLoopResidue, liveExampleDrop, liveNeverLoseMemo, liveUnclosedParen, liveRecap2208, liveRecap2157a, liveRecap2157b, liveRecap2146, liveRecap2149, liveRecap2049, liveOkFalsePush, liveOkFalseArt, liveRecap2237gold, liveRecap2232keep, liveRecap2227colon, liveRecap2227judge, liveRecap2217, liveRecap2243, liveRecap2256hyphen, liveRecap2255colon, liveRecap2255alone, liveRecapBenchGround} {
+	for i, recap := range []string{liveRecap1909, liveRecap1915, liveRecap1903, liveRecap1922, liveRecap1743, liveRecap1957, liveRecap2010, liveRecap2013, liveRecap2019, liveStillStores, liveLoopResidue, liveExampleDrop, liveUnclosedParen, liveRecap2157a, liveRecap2157b, liveRecap2146, liveRecap2149, liveRecap2049, liveRecap2237gold, liveRecap2232keep, liveRecap2227judge, liveRecap2217, liveRecap2243, liveRecap2256hyphen, liveRecap2255colon, liveRecap2255alone, liveRecapBenchGround} {
 		got := Extract([]Message{{
 			Role: "assistant", Offset: int64(i + 1), Text: recap,
 		}}, ExtractOpts{ProjectKey: "acme/api", SessionID: "s"})
@@ -485,12 +485,12 @@ func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
 			strings.Contains(r.Text, "recap-like") || strings.Contains(r.Text, "recent_noise") ||
 			strings.Contains(r.Text, "Inspect recent on the live store") || strings.Contains(r.Text, "recap-faileds") ||
 			strings.Contains(r.Text, "still stores") || strings.Contains(r.Text, "loop residue") ||
-			strings.Contains(r.Text, "Example drop:") || strings.Contains(r.Text, "never lose memo") ||
-			strings.Contains(r.Text, "memora etc.") || strings.Contains(r.Text, "current testdata") ||
-			strings.Contains(r.Text, "inspect-recap") || strings.Contains(r.Text, "this cut makes") ||
+			strings.Contains(r.Text, "Example drop:") ||
+			strings.Contains(r.Text, "memora etc.") ||
+			strings.Contains(r.Text, "inspect-recap") ||
 			strings.Contains(r.Text, "go-first") || strings.Contains(r.Text, "recap bodies") ||
-			strings.Contains(r.Text, "gates mostly match") || strings.Contains(r.Text, "ok=false") ||
-			strings.Contains(r.Text, "still store:") || strings.Contains(r.Text, "still keep They-found") ||
+			strings.Contains(r.Text, "gates mostly match") ||
+			strings.Contains(r.Text, "still keep They-found") ||
 			strings.Contains(r.Text, "Tests-failed-to") || strings.Contains(r.Text, "checks out recap") ||
 			strings.Contains(r.Text, "obey-worthy") || strings.Contains(r.Text, "contains-skipped") ||
 			strings.Contains(r.Text, "still keep.") || strings.Contains(r.Text, "lock-list recap") ||
@@ -577,19 +577,14 @@ func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
 		{Role: "assistant", Offset: 2, Text: liveStillStores},
 		{Role: "assistant", Offset: 3, Text: liveLoopResidue},
 		{Role: "assistant", Offset: 4, Text: liveExampleDrop},
-		{Role: "assistant", Offset: 5, Text: liveNeverLoseMemo},
 		{Role: "assistant", Offset: 6, Text: liveUnclosedParen},
-		{Role: "assistant", Offset: 7, Text: liveRecap2208},
 		{Role: "assistant", Offset: 8, Text: liveRecap2157a},
 		{Role: "assistant", Offset: 9, Text: liveRecap2157b},
 		{Role: "assistant", Offset: 10, Text: liveRecap2146},
 		{Role: "assistant", Offset: 11, Text: liveRecap2149},
 		{Role: "assistant", Offset: 12, Text: liveRecap2049},
-		{Role: "assistant", Offset: 13, Text: liveOkFalsePush},
-		{Role: "assistant", Offset: 14, Text: liveOkFalseArt},
 		{Role: "assistant", Offset: 15, Text: liveRecap2237gold},
 		{Role: "assistant", Offset: 16, Text: liveRecap2232keep},
-		{Role: "assistant", Offset: 17, Text: liveRecap2227colon},
 		{Role: "assistant", Offset: 18, Text: liveRecap2227judge},
 		{Role: "assistant", Offset: 19, Text: liveRecap2217},
 		{Role: "assistant", Offset: 20, Text: liveRecap2243},
@@ -611,17 +606,13 @@ func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
 		{Role: "assistant", Offset: 7, Text: liveStillStores},
 		{Role: "assistant", Offset: 8, Text: liveLoopResidue},
 		{Role: "assistant", Offset: 9, Text: liveExampleDrop},
-		{Role: "assistant", Offset: 10, Text: liveNeverLoseMemo},
 		{Role: "assistant", Offset: 11, Text: liveUnclosedParen},
-		{Role: "assistant", Offset: 12, Text: liveRecap2208},
 		{Role: "assistant", Offset: 13, Text: liveRecap2157a},
 		{Role: "assistant", Offset: 14, Text: liveRecap2146},
 		{Role: "assistant", Offset: 15, Text: liveRecap2149},
 		{Role: "assistant", Offset: 16, Text: liveRecap2049},
-		{Role: "assistant", Offset: 17, Text: liveOkFalsePush},
 		{Role: "assistant", Offset: 18, Text: liveRecap2237gold},
 		{Role: "assistant", Offset: 19, Text: liveRecap2232keep},
-		{Role: "assistant", Offset: 20, Text: liveRecap2227colon},
 		{Role: "assistant", Offset: 21, Text: liveRecap2227judge},
 		{Role: "assistant", Offset: 22, Text: liveRecap2217},
 		{Role: "assistant", Offset: 23, Text: liveRecap2243},
@@ -637,11 +628,11 @@ func TestExtractSkipsLiveResidueKeepsLocks(t *testing.T) {
 		if strings.Contains(r.Text, "control-flow holes") || strings.Contains(r.Text, "recent_noise") ||
 			strings.Contains(r.Text, "Inspect recent on the live store") || strings.Contains(r.Text, "still stores") ||
 			strings.Contains(r.Text, "loop residue") || strings.Contains(r.Text, "Example drop:") ||
-			strings.Contains(r.Text, "never lose memo") || strings.Contains(r.Text, "memora etc.") ||
-			strings.Contains(r.Text, "current testdata") || strings.Contains(r.Text, "inspect-recap") ||
+			strings.Contains(r.Text, "memora etc.") ||
+			strings.Contains(r.Text, "inspect-recap") ||
 			strings.Contains(r.Text, "go-first") || strings.Contains(r.Text, "recap bodies") ||
-			strings.Contains(r.Text, "gates mostly match") || strings.Contains(r.Text, "ok=false") ||
-			strings.Contains(r.Text, "still store:") || strings.Contains(r.Text, "still keep They-found") ||
+			strings.Contains(r.Text, "gates mostly match") ||
+			strings.Contains(r.Text, "still keep They-found") ||
 			strings.Contains(r.Text, "Tests-failed-to") || strings.Contains(r.Text, "checks out recap") ||
 			strings.Contains(r.Text, "obey-worthy") || strings.Contains(r.Text, "contains-skipped") ||
 			strings.Contains(r.Text, "still keep.") || strings.Contains(r.Text, "lock-list recap") ||

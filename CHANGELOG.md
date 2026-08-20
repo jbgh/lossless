@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.11 — 2026-08-19
+
+- Drop fail-closed recap contains-skips that swallowed real claims: `ok=false` health faileds, "this cut makes" product faileds, "never lose memo" inside memoization, space-form "inspect recap" inside recapture, and colon `still store:` session writes.
+- Pathless Bench is an identifier again. A Bench failed still grounds.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.10 — 2026-08-19
 
 - Concurrent catch-up retries SQLITE_BUSY on cursor, session, excerpt, and action writes so parallel session ingest does not fail the release job.

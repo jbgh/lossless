@@ -388,7 +388,7 @@ func TestPruneSupersedesSloganAndIntendedGap(t *testing.T) {
 	if !ok || dump.Status != "superseded" {
 		t.Fatalf("dump %+v %v", dump, ok)
 	}
-	for _, id := range []string{"R1909", "R1915", "R1903", "R1922", "R1743", "R1957", "R2010", "R2013", "R2019", "STILLSTORES", "LOOPRESIDUE", "EXAMPLEDROP", "NEVERLOSEMEMO", "UNCLOSEDPAREN", "R2208", "R2157A", "R2146", "R2149", "R2049", "OKFALSE", "R2237", "R2232", "R2227COLON", "R2227JUDGE", "R2217", "R2243", "R2256", "R2255", "R2255ALONE", "RGROUND"} {
+	for _, id := range []string{"R1909", "R1915", "R1903", "R1922", "R1743", "R1957", "R2010", "R2013", "R2019", "STILLSTORES", "LOOPRESIDUE", "EXAMPLEDROP", "UNCLOSEDPAREN", "R2157A", "R2146", "R2149", "R2049", "R2237", "R2232", "R2227JUDGE", "R2217", "R2243", "R2256", "R2255", "R2255ALONE", "RGROUND"} {
 		recap, ok := st.Get(id)
 		if !ok || recap.Status != "superseded" {
 			t.Fatalf("live recap %s %+v %v", id, recap, ok)
@@ -397,6 +397,12 @@ func TestPruneSupersedesSloganAndIntendedGap(t *testing.T) {
 	proc, ok := st.Get("PROCRECAP")
 	if !ok || proc.Status != "superseded" {
 		t.Fatalf("process recap %+v %v", proc, ok)
+	}
+	for _, id := range []string{"NEVERLOSEMEMO", "R2208", "OKFALSE", "R2227COLON"} {
+		keep, ok := st.Get(id)
+		if !ok || keep.Status != "active" {
+			t.Fatalf("keep %s %+v %v", id, keep, ok)
+		}
 	}
 	redis, ok := st.Get("REDISOK")
 	if !ok || redis.Status != "active" {
