@@ -856,7 +856,7 @@ func TestClassifyAndHelpers(t *testing.T) {
 
 	r := makeRec("decision", "Use jose, not jsonwebtoken, for Edge.", []string{
 		"a.ts", "b.ts", "c.ts", "d.ts", "e.ts", "f.ts", "g.ts", "h.ts", "i.ts",
-	}, 0, ExtractOpts{})
+	}, Message{Offset: 0, Text: "Use jose, not jsonwebtoken, for Edge."}, ExtractOpts{})
 	if len(r.Paths) != 8 {
 		t.Fatal(len(r.Paths))
 	}

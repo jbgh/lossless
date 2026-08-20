@@ -22,13 +22,15 @@ type Request struct {
 }
 
 type Hit struct {
-	ID      string   `json:"id"`
-	Type    string   `json:"type"`
-	Text    string   `json:"text"`
-	When    string   `json:"when"`
-	Paths   []string `json:"paths"`
-	Harness string   `json:"harness"`
-	Status  string   `json:"status"`
+	ID         string   `json:"id"`
+	Type       string   `json:"type"`
+	Text       string   `json:"text"`
+	When       string   `json:"when"`
+	Paths      []string `json:"paths"`
+	Harness    string   `json:"harness"`
+	Status     string   `json:"status"`
+	Source     string   `json:"source,omitempty"`
+	HasExcerpt bool     `json:"has_excerpt"`
 }
 
 type Response struct {

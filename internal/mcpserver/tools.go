@@ -44,7 +44,7 @@ func toolDefs() []map[string]any {
 		},
 		{
 			"name":        "get_record",
-			"description": "Fetch one claim by id (from an ask hit). Does not change the ask context.",
+			"description": "Open the tape excerpt and source for one ask hit. Required when the packed sentence is not enough to act without guessing (recap, slogan, or you would change extract/gate/behavior). Not required on every hit. Does not change ask context. Not a search.",
 			"inputSchema": map[string]any{
 				"type":     "object",
 				"required": []string{"id"},

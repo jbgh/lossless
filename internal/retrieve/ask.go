@@ -174,7 +174,7 @@ func (e Engine) prepare(req Request) (prep, error) {
 		}
 		p.drops = append(p.drops, traceDrop{rec: c.rec, reason: packSkipReason(c, packed, packedText), sc: c, scored: true})
 	}
-	hits, warnings, tokens := emit(packed)
+	hits, warnings, tokens := emit(packed, e.Store)
 	p.cand = cand
 	p.packed = packed
 	p.out = Response{Context: hits, Warnings: warnings, Tokens: tokens, Project: q.ProjectKey}

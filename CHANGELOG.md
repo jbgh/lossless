@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.13 — 2026-08-20
+
+- Claims cite the source turn on tape. Catch-up and append offsets are file-absolute. The cite is the message envelope. `get_record` opens the covering excerpt.
+- `ask` packs `source` and `has_excerpt`, not excerpt text. A shipped-decision warning says to `get_record` that id before treating it as done.
+- `remember` stamps a span on the manual line so `get_record` can open that page.
+- `inspect` recent prints claim id and page / no-page.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.12 — 2026-08-20
 
 - Drop remaining 0.1.8/0.1.9 recap contains-skips (`gates mostly match`, `inspect-recap`, `obey-worthy`, hyphen `still-store`, and the rest of that denylist). `go-first` mash is the comma form only.

@@ -241,6 +241,13 @@ func TestRememberWritesClaimAndRaw(t *testing.T) {
 	if !ok || !strings.Contains(got.Text, "jose") {
 		t.Fatal("claim missing")
 	}
+	if got.TranscriptRef == nil || got.TranscriptRef.SessionID != "manual" {
+		t.Fatalf("ref %+v", got.TranscriptRef)
+	}
+	view, ok := st.View(res.IDs[0])
+	if !ok || !strings.Contains(view.Excerpt, "jose") {
+		t.Fatalf("excerpt %q", view.Excerpt)
+	}
 }
 
 func TestRememberSupersedes(t *testing.T) {

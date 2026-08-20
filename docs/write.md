@@ -227,7 +227,7 @@ From new messages only:
 
 - Concatenate role + text.
 - Window 800–1600 chars, 200 overlap.
-- Tool / tool-result bodies > 2000 chars: store full text in **raw**, but the excerpt index keeps head 400 + tail 400. Retrieval can still `GET` the raw span if needed.
+- Tool / tool-result bodies > 2000 chars: store full text in **raw**, but the excerpt index keeps head 400 + tail 400. `GET /v1/records/:id` returns the covering excerpt window, not a seekable raw-file slice.
 - Write into `excerpts-YYYY-MM.sqlite` for the session's month.
 - Chunk id = `sha256(session_id + start_offset + end_offset)`.
 

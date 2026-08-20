@@ -96,6 +96,7 @@ func Append(st *store.Store, req AppendRequest) (AppendResult, error) {
 	for _, line := range strings.Split(strings.TrimSuffix(string(body), "\n"), "\n") {
 		clean.WriteString(redact.Line(line))
 	}
+	rawBase := fileByteSize(raw)
 	if _, err := raw.WriteString(clean.String()); err != nil {
 		_ = syscall.Flock(int(raw.Fd()), syscall.LOCK_UN)
 		_ = raw.Close()
@@ -115,7 +116,7 @@ func Append(st *store.Store, req AppendRequest) (AppendResult, error) {
 	}
 	out.AcceptedThrough = next
 
-	msgs, _ := ParseJSONL(clean.String(), 0)
+	msgs, _ := ParseJSONL(clean.String(), rawBase)
 	if xs := ChunkExcerpts(req.SessionID, req.Project, msgs); len(xs) > 0 {
 		if err := st.WriteExcerpts(now.UTC().Format("2006-01"), xs); err != nil {
 			return out, err

@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"time"
 
 	"lossless/internal/claim"
+	"lossless/internal/store"
 )
 
 func dropInvalidatedByNewerFailed(cand []scored) []scored {
@@ -316,12 +318,17 @@ func evictFailed(packed, all []scored, limit int) []scored {
 	return packed
 }
 
-func emit(packed []scored) ([]Hit, []string, int) {
+func emit(packed []scored, st *store.Store) ([]Hit, []string, int) {
 	hits := make([]Hit, 0, len(packed))
 	var warnings []string
 	seenWarn := map[string]bool{}
 	for _, c := range packed {
-		hits = append(hits, toHit(c, c.stale == 1))
+		h := toHit(c, c.stale == 1)
+		if st != nil && c.rec.TranscriptRef != nil {
+			created, _ := time.Parse(time.RFC3339, c.rec.CreatedAt)
+			_, h.HasExcerpt = st.ExcerptCovering(c.rec.TranscriptRef, created)
+		}
+		hits = append(hits, h)
 		if c.failedOverlap == 1 && c.rec.Type == "failed" {
 			w := "A prior attempt at this goal failed (see " + c.rec.ID + "). Do not repeat it without new evidence."
 			if !seenWarn[w] {
@@ -330,7 +337,7 @@ func emit(packed []scored) ([]Hit, []string, int) {
 			}
 		}
 		if c.shippedOverlap == 1 && c.rec.Type == "decision" {
-			w := "Existing implementation may already cover part of this goal (see " + c.rec.ID + ")."
+			w := "Existing implementation may already cover part of this goal (see " + c.rec.ID + "). get_record that id before treating it as done."
 			if !seenWarn[w] {
 				warnings = append(warnings, w)
 				seenWarn[w] = true
@@ -364,13 +371,15 @@ func toHit(c scored, verify bool) Hit {
 		paths = []string{}
 	}
 	return Hit{
-		ID:      c.rec.ID,
-		Type:    c.rec.Type,
-		Text:    text,
-		When:    c.rec.CreatedAt,
-		Paths:   paths,
-		Harness: c.rec.Harness,
-		Status:  c.rec.Status,
+		ID:         c.rec.ID,
+		Type:       c.rec.Type,
+		Text:       text,
+		When:       c.rec.CreatedAt,
+		Paths:      paths,
+		Harness:    c.rec.Harness,
+		Status:     c.rec.Status,
+		Source:     c.rec.Source,
+		HasExcerpt: c.rec.TranscriptRef != nil,
 	}
 }
 

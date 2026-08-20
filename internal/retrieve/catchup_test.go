@@ -506,3 +506,42 @@ func TestAskDropsStoredIllAskPlanning(t *testing.T) {
 		t.Fatalf("real decision missed: %+v", out)
 	}
 }
+
+func TestAskPackHasExcerpt(t *testing.T) {
+	st := tmpStore(t)
+	ws := t.TempDir()
+	src := writeJSONL(t, ws, "chat.jsonl",
+		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."}`+"\n")
+	if _, err := write.CatchUp(st, write.CatchUpRequest{
+		JSONL: src, Project: "acme/api", WorkspaceRoot: ws,
+		Harness: "grok", SessionID: "sess-cite", Source: "turn",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := askAt(t, st, Request{
+		Project:  "acme/api",
+		Question: "why not jsonwebtoken",
+		Paths:    []string{"src/middleware/auth.ts"},
+	})
+	if len(out.Context) == 0 {
+		t.Fatal("empty pack")
+	}
+	found := false
+	for _, h := range out.Context {
+		if strings.Contains(h.Text, "jose") {
+			found = true
+			if !h.HasExcerpt {
+				t.Fatalf("missing page %+v", h)
+			}
+			if h.Source != "turn" {
+				t.Fatalf("source %+v", h)
+			}
+			if h.ID == "" {
+				t.Fatal("id")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("jose missed %+v", out.Context)
+	}
+}

@@ -158,7 +158,7 @@ ask(work context)
 
 No scan of the whole store. No network. Claim vectors are on-box and optional. Empty context is valid.
 
-`GET /v1/records/:id` is the only follow-up: full claim + raw excerpt. The agent asks for that, not memory deciding to dump the transcript.
+`GET /v1/records/:id` is the only follow-up: full claim + covering excerpt. The agent asks for that, not memory deciding to dump the transcript. `ask` packs the cite sentence, `source`, and `has_excerpt`. It does not pack excerpt text.
 
 ---
 
@@ -169,7 +169,7 @@ No scan of the whole store. No network. Claim vectors are on-box and optional. E
    - Read `warnings` first.
    - `failed` warning → do not repeat that approach unless the user says to.
    - `decision` warning → do not silently undo it.
-   - If you need the original file-read or the paragraph around a claim → `GET /v1/records/:id`.
+   - If the packed sentence is not enough to act (recap, slogan, or you would change extract/gate/behavior), and `has_excerpt` is true → `GET /v1/records/:id` on **that one** id. Do not GET all five.
 3. **Do the work.** Edits, tests, the usual harness loop.
 4. **Optional `remember`.** Only when the agent (or user) has a durable sentence the extract heuristics will miss. Example: "We are not using Redis for rate limits, ever." Catch-up will still copy the turn; `remember` is for making that one sentence a first-class claim *now*.
 5. **Catch-up later** copies the session log. **Skip** tool calls named `ask` / `remember` / `catch-up` and their results so the store does not ingest its own packets. If we do not skip, "everything remembered" becomes an echo chamber.

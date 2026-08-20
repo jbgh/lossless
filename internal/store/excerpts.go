@@ -153,12 +153,16 @@ func (s *Store) lookupExcerpt(month string, ref *claim.TranscriptRef) (Excerpt, 
 	}
 	defer db.Close()
 	var x Excerpt
+	end := ref.EndOffset
+	if end <= ref.StartOffset {
+		end = ref.StartOffset
+	}
 	err = db.QueryRow(`
 SELECT id, session_id, project_key, start_offset, end_offset, text
 FROM excerpts
 WHERE session_id = ? AND start_offset <= ? AND end_offset >= ?
 ORDER BY (end_offset - start_offset) ASC
-LIMIT 1`, ref.SessionID, ref.StartOffset, ref.StartOffset).Scan(
+LIMIT 1`, ref.SessionID, ref.StartOffset, end).Scan(
 		&x.ID, &x.SessionID, &x.ProjectKey, &x.StartOffset, &x.EndOffset, &x.Text)
 	if err != nil {
 		return Excerpt{}, false

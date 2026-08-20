@@ -54,7 +54,9 @@ How records are chosen: [retrieval.md](retrieval.md).
       "when": "2026-08-01T18:12:00Z",
       "paths": ["src/middleware/auth.ts"],
       "harness": "grok",
-      "status": "active"
+      "status": "active",
+      "source": "turn",
+      "has_excerpt": true
     }
   ],
   "warnings": [
@@ -67,10 +69,12 @@ How records are chosen: [retrieval.md](retrieval.md).
 
 | Field | Meaning |
 |-------|---------|
-| `context[].type` | `decision` \| `failed` \| `constraint` \| `state` \| `thread` \| `excerpt` |
-| `context[].text` | The durable claim. This is what the model should read. |
+| `context[].type` | `decision` \| `failed` \| `constraint` \| `state` \| `thread` |
+| `context[].text` | Bibliography sentence. Tape is `get_record`. |
+| `context[].source` | How the claim landed (`turn`, `compact`, `remember`, …). |
+| `context[].has_excerpt` | True when `get_record` can open a covering tape window. |
 | `context[].status` | `active` or `superseded`. `[verify]` is a **prefix on `text`**, not a persisted status. |
-| `warnings` | Anti-regression signals. Treat as blocking unless the user overrides. |
+| `warnings` | Anti-regression signals. Treat as blocking unless the user overrides. A shipped decision warning: `get_record` that id before treating it as done. |
 | `tokens` | Estimated tokens of `context` + `warnings`. Always `<= limit_tokens`. |
 
 ## Ranking (owned by lossless)

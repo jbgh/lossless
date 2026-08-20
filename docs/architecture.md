@@ -30,7 +30,7 @@ flowchart LR
 | `POST /v1/ask` | REST on `127.0.0.1:7432` | Main read. Optional `session_id`. |
 | MCP `ask` / `remember` / `get_record` | `/mcp` or `lossless mcp` | Same JSON as REST. |
 | CLI | `lossless ask\|remember\|catch-up` | Opens the store directly; still writes the tape. |
-| `GET /v1/records/:id` | Full claim + excerpt | Dwell. Does not change the last pack by itself. |
+| `GET /v1/records/:id` | Full claim + covering excerpt | Open the cited page. Dwell. Does not change the last pack by itself. |
 | hooks + watch | fail-open, ≤400ms sidecar | Never stall compact. Spool if home is down. |
 
 ## 3. Write path

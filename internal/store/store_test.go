@@ -187,6 +187,17 @@ func TestExcerptsCoverRef(t *testing.T) {
 	if _, ok := st.ExcerptCovering(&claim.TranscriptRef{SessionID: "nope", StartOffset: 0}, time.Time{}); ok {
 		t.Fatal("missing")
 	}
+	later := []Excerpt{{
+		SessionID: "s1", ProjectKey: "acme/api", StartOffset: 200, EndOffset: 300,
+		Text: "assistant: Redis token bucket failed.\n",
+	}}
+	if err := st.WriteExcerpts("2026-08", later); err != nil {
+		t.Fatal(err)
+	}
+	ex2, ok := st.ExcerptCovering(&claim.TranscriptRef{SessionID: "s1", StartOffset: 200, EndOffset: 280}, time.Date(2026, 8, 14, 0, 0, 0, 0, time.UTC))
+	if !ok || !strings.Contains(ex2.Text, "Redis") || strings.Contains(ex2.Text, "jose") {
+		t.Fatalf("end-offset cover %+v %v", ex2, ok)
+	}
 	if _, ok := st.View("missing"); ok {
 		t.Fatal("view missing")
 	}

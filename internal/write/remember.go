@@ -46,6 +46,10 @@ func Remember(st *store.Store, rec claim.Record) (CatchUpResult, error) {
 	if err := os.MkdirAll(filepath.Dir(rawPath), 0o700); err != nil {
 		return out, err
 	}
+	base := int64(0)
+	if fi, err := os.Stat(rawPath); err == nil {
+		base = fi.Size()
+	}
 	line, _ := json.Marshal(map[string]any{
 		"type": "remember", "role": "user", "text": rec.Text, "claim_type": rec.Type,
 	})
@@ -56,6 +60,15 @@ func Remember(st *store.Store, rec claim.Record) (CatchUpResult, error) {
 	_, _ = f.Write(append(line, '\n'))
 	_ = f.Close()
 	out.RawPath = rawPath
+	msg := Message{Role: "user", Text: rec.Text, Offset: base}
+	ref := messageSpan(msg)
+	ref.SessionID = rec.SessionID
+	rec.TranscriptRef = &ref
+	if xs := ChunkExcerpts(rec.SessionID, rec.ProjectKey, []Message{msg}); len(xs) > 0 {
+		if err := st.WriteExcerpts(time.Now().UTC().Format("2006-01"), xs); err != nil {
+			return out, err
+		}
+	}
 
 	sup, err := st.WriteClaim(rec)
 	if err != nil {

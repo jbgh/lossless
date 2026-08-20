@@ -152,6 +152,7 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 	for _, line := range strings.Split(strings.TrimSuffix(rest, "\n"), "\n") {
 		clean.WriteString(redact.Line(line))
 	}
+	rawBase := fileByteSize(raw)
 	written, err := raw.WriteString(clean.String())
 	if err != nil {
 		unlockRaw()
@@ -170,7 +171,7 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 	out.Copied = int64(written)
 	out.RawPath = rawPath
 
-	msgs, _ := ParseJSONL(clean.String(), 0)
+	msgs, _ := ParseJSONL(clean.String(), rawBase)
 	if xs := ChunkExcerpts(session, project, msgs); len(xs) > 0 {
 		if err := st.WriteExcerpts(now.UTC().Format("2006-01"), xs); err != nil {
 			return out, err
@@ -212,6 +213,17 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 		WorkspaceRoot: req.WorkspaceRoot, Source: req.Source,
 	}, clean.String())
 	return out, nil
+}
+
+func fileByteSize(f *os.File) int64 {
+	if f == nil {
+		return 0
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return 0
+	}
+	return fi.Size()
 }
 
 func lockSession(st *store.Store, project, session string) (func(), error) {

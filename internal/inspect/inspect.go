@@ -39,6 +39,7 @@ type ProjectDetail struct {
 	ByType      map[string]int  `json:"by_type"`
 	Sessions    []store.Session `json:"sessions"`
 	Recent      []claim.Record  `json:"recent"`
+	RecentPage  map[string]bool `json:"recent_page,omitempty"`
 	RecentNoise int             `json:"recent_noise"`
 	LastAsks    []AskPack       `json:"last_asks"`
 }
@@ -132,9 +133,14 @@ func Build(st *store.Store, project string) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
+	det.RecentPage = map[string]bool{}
 	for _, c := range det.Recent {
 		if retrieve.ExtractNoise(c) {
 			det.RecentNoise++
+		}
+		if c.TranscriptRef != nil {
+			created, _ := time.Parse(time.RFC3339, c.CreatedAt)
+			_, det.RecentPage[c.ID] = st.ExcerptCovering(c.TranscriptRef, created)
 		}
 	}
 	acts, err := st.RecentActions(key, "", 40)
@@ -352,7 +358,11 @@ func Format(w io.Writer, r Report) {
 			if retrieve.ExtractNoise(c) {
 				tag = "noise"
 			}
-			fmt.Fprintf(w, "  [%s] %s %s  %s\n", c.Type, tag, c.CreatedAt, clip(c.Text, 80))
+			cite := "no-page"
+			if d.RecentPage[c.ID] {
+				cite = "page"
+			}
+			fmt.Fprintf(w, "  [%s] %s %s  %s  %s\n", c.Type, tag, c.ID, cite, clip(c.Text, 72))
 		}
 	}
 	if len(d.LastAsks) > 0 {

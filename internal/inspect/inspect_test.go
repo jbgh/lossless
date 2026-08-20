@@ -54,6 +54,11 @@ func TestBuildAndAskInspect(t *testing.T) {
 	if err != nil || det.Detail == nil || len(det.Detail.Recent) != 1 {
 		t.Fatalf("%+v %v", det.Detail, err)
 	}
+	var recBuf strings.Builder
+	Format(&recBuf, det)
+	if !strings.Contains(recBuf.String(), "01JJOSE") || !strings.Contains(recBuf.String(), "no-page") {
+		t.Fatalf("recent cite %s", recBuf.String())
+	}
 
 	now := time.Date(2026, 8, 16, 0, 0, 0, 0, time.UTC)
 	ask, err := Ask(st, retrieve.Request{

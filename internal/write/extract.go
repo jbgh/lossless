@@ -129,7 +129,7 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			if tr != nil {
 				tr.Sentences++
 			}
-			drafts = append(drafts, makeRec(typ, text, paths, msg.Offset, opts))
+			drafts = append(drafts, makeRec(typ, text, paths, msg, opts))
 		}
 	}
 	dedup := map[string]claim.Record{}
@@ -232,7 +232,7 @@ func primaryDir(paths []string) string {
 	return p
 }
 
-func makeRec(typ, text string, paths []string, offset int64, opts ExtractOpts) claim.Record {
+func makeRec(typ, text string, paths []string, msg Message, opts ExtractOpts) claim.Record {
 	if len(paths) > 8 {
 		paths = paths[:8]
 	}
@@ -244,6 +244,8 @@ func makeRec(typ, text string, paths []string, offset int64, opts ExtractOpts) c
 			}
 		}
 	}
+	ref := messageSpan(msg)
+	ref.SessionID = opts.SessionID
 	return claim.Record{
 		ID:            claim.NewID(),
 		Type:          typ,
@@ -259,12 +261,16 @@ func makeRec(typ, text string, paths []string, offset int64, opts ExtractOpts) c
 		Status:        "active",
 		Source:        opts.Source,
 		ClaimHash:     claim.Hash(opts.ProjectKey, typ, text),
-		TranscriptRef: &claim.TranscriptRef{
-			SessionID:   opts.SessionID,
-			StartOffset: offset,
-			EndOffset:   offset + int64(len(text)),
-		},
+		TranscriptRef: &ref,
 	}
+}
+
+func messageSpan(msg Message) claim.TranscriptRef {
+	end := msg.Offset + int64(len(msg.Text))
+	if end <= msg.Offset {
+		end = msg.Offset + 1
+	}
+	return claim.TranscriptRef{StartOffset: msg.Offset, EndOffset: end}
 }
 
 func tail(msgs []Message, maxN, maxChars int) []Message {

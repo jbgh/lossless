@@ -92,6 +92,9 @@ func TestMustJSONAndToHit(t *testing.T) {
 	if h.Paths == nil {
 		t.Fatal("nil paths")
 	}
+	if h.HasExcerpt {
+		t.Fatal("no ref")
+	}
 }
 
 func TestExtractNoiseAndJobOverlap(t *testing.T) {

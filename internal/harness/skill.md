@@ -52,10 +52,12 @@ ask({
 
 ## After context returns
 
+The pack is a bibliography of at most five cites, not the tape. Packed `text` is the cite sentence.
+
 - Treat `warnings` as blocking unless the user overrides.
 - Do not repeat a `failed` without new evidence.
 - Do not undo a `decision` or violate a `constraint`.
-- `get_record` only if you need the full claim behind a hit id.
+- Before you change extract/gate/behavior, or skip work because a warning says a decision may already cover, call `get_record` on **that one** id if `has_excerpt` is true. Do not GET all five. Do not GET a self-contained lock (weights, no-LLM, version match).
 - `remember` only for a durable fact the tape will miss. It does not replace catch-up.
 
 You are not searching memory. You are telling lossless what you are doing so it can keep the window honest.

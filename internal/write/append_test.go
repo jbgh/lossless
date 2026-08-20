@@ -34,6 +34,23 @@ func TestAppendIncrementalAndConflict(t *testing.T) {
 	if err != nil || c.Conflict || c.AcceptedThrough != a.AcceptedThrough+int64(len(chunk2)) {
 		t.Fatalf("second: %+v %v", c, err)
 	}
+	claims, _ := st.ListActive("acme/api")
+	var redisStart int64 = -1
+	for _, rec := range claims {
+		if strings.Contains(rec.Text, "Redis") {
+			if rec.TranscriptRef == nil || rec.TranscriptRef.StartOffset == 0 {
+				t.Fatalf("append second still offset 0: %+v", rec.TranscriptRef)
+			}
+			redisStart = rec.TranscriptRef.StartOffset
+			view, ok := st.View(rec.ID)
+			if !ok || !strings.Contains(view.Excerpt, "Redis") {
+				t.Fatalf("append excerpt %q", view.Excerpt)
+			}
+		}
+	}
+	if redisStart < 0 {
+		t.Fatal("redis claim missing")
+	}
 	empty, err := Append(st, AppendRequest{
 		Project: "acme/api", SessionID: "s-app", Client: "c1",
 		PrevOff: c.AcceptedThrough, Body: nil,

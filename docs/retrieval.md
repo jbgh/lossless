@@ -294,7 +294,7 @@ After packing, scan the **packed** hits plus any `failed_overlap=1` candidate th
 | Condition | Warning |
 |-----------|---------|
 | Any packed or uncapped-but-overlapping `failed` | `A prior attempt at this goal failed (see {id}). Do not repeat it without new evidence.` |
-| Any packed `decision` with `shipped_overlap=1` | `Existing implementation may already cover part of this goal (see {id}).` |
+| Any packed `decision` with `shipped_overlap=1` | `Existing implementation may already cover part of this goal (see {id}). get_record that id before treating it as done.` |
 | Any packed `constraint` with `shipped_overlap=1` | `A standing constraint applies (see {id}). Do not violate it without an explicit override.` |
 
 If a `failed_overlap` record did not fit in the 5, **evict the lowest-score non-failed packed hit** and insert it. Job 1 is not allowed to lose to the cap.
@@ -305,9 +305,9 @@ Warnings must cite ids that appear in `context`. If you warn, the record is in `
 
 ## 6. `GET /v1/records/:id`
 
-Return the full claim. If `transcript_ref` is set, also return the redacted excerpt (the chunk covering that span). If the session file is gone, omit the excerpt. Do not 404 the claim.
+Return the full claim. If `transcript_ref` is set, also return the covering excerpt (role-prefixed window over the source turn). If that window is gone, omit the excerpt. Do not 404 the claim. Offsets are file-absolute in the owned raw session file; the cite is the message envelope, not `len(claim text)`.
 
-`ask` does not include excerpt text.
+`ask` does not include excerpt text. Packed hits carry `source` and `has_excerpt` so the agent knows whether `get_record` can open the page.
 
 ---
 
