@@ -573,11 +573,8 @@ func TestAskDropsLiveRecapKeepsRedis(t *testing.T) {
 	})
 	if containsID(out, "RECAP1909") || containsID(out, "RECAP1915") || containsID(out, "RECAP1743") ||
 		containsID(out, "RECAP2010") || containsID(out, "RECAP2013") || containsID(out, "EXAMPLEDROP") ||
-		containsID(out, "STILLSTORES") || containsID(out, "RECAP2049") || containsID(out, "RECAP2157") ||
-		containsID(out, "RECAP2146") || containsID(out, "RECAP2237") ||
-		containsID(out, "RECAP2232") || containsID(out, "RECAP2227JUDGE") ||
-		containsID(out, "RECAP2217") || containsID(out, "RECAP2243") ||
-		containsID(out, "RECAP2256") || containsID(out, "RECAP2255") {
+		containsID(out, "STILLSTORES") || containsID(out, "RECAP2146") ||
+		containsID(out, "RECAP2256") {
 		t.Fatalf("live recap packed: %+v", out.Context)
 	}
 	if !containsID(out, "REDIS") {
@@ -590,17 +587,9 @@ func TestAskDropsLiveRecapKeepsRedis(t *testing.T) {
 			strings.Contains(w, "lock the recap row") || strings.Contains(w, "control-flow holes") ||
 			strings.Contains(w, "recent_noise=0") || strings.Contains(w, "EXAMPLEDROP") ||
 			strings.Contains(w, "STILLSTORES") || strings.Contains(w, "Example drop:") ||
-			strings.Contains(w, "still stores") || strings.Contains(w, "RECAP2049") ||
-			strings.Contains(w, "RECAP2157") ||
-			strings.Contains(w, "RECAP2146") || strings.Contains(w, "gates mostly match") ||
-			strings.Contains(w, "inspect-recap") ||
-			strings.Contains(w, "go-first") || strings.Contains(w, "RECAP2237") ||
-			strings.Contains(w, "RECAP2232") ||
-			strings.Contains(w, "RECAP2227JUDGE") || strings.Contains(w, "RECAP2217") ||
-			strings.Contains(w, "RECAP2243") ||
-			strings.Contains(w, "checks out recap") || strings.Contains(w, "contains-skipped") ||
-			strings.Contains(w, "RECAP2256") || strings.Contains(w, "RECAP2255") ||
-			strings.Contains(w, "still keep") || strings.Contains(w, "lock-list recap") {
+			strings.Contains(w, "still stores") ||
+			strings.Contains(w, "RECAP2146") ||
+			strings.Contains(w, "go-first,") || strings.Contains(w, "RECAP2256") {
 			t.Fatalf("live recap warned: %v", out.Warnings)
 		}
 	}

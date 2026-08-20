@@ -71,7 +71,7 @@ If a later idea needs one of those to work, it is the wrong idea.
 
 The tape is infinite. The checkout is five records. Infinite context is not a bigger pack and not retuned 4.0 / 2.5. It is: catch-up every harness file (including children), extract only obey-worthy claims, check out after compact. Multi-model is already `owner/repo`. Multi-agent is still parent-only locate — that is 0.6.
 
-0.3 comes before 0.2b Claude inject so a session-start pack cannot inject extract residue. Claude `additionalContext` is a copy change, not a silent exception to "if the skill is ignored, the store is a diary." Do not start 0.5 without a named paraphrase miss. 0.1.9 gated inspect-recap / gates-mostly-match / go-first mash / hyphenated They-found lock-lists. 0.1.11 dropped the fail-closed contains-skips (`ok=false`, this-cut-makes, never-lose-memo, inspect recap, colon still-store) and Bench-as-starter. 0.3 stays open until live inspect recent is obey-worthy. Do not start 0.2b until then.
+0.3 comes before 0.2b Claude inject so a session-start pack cannot inject extract residue. Claude `additionalContext` is a copy change, not a silent exception to "if the skill is ignored, the store is a diary." Do not start 0.5 without a named paraphrase miss. 0.1.9 gated inspect-recap / gates-mostly-match / go-first mash / hyphenated They-found lock-lists. 0.1.11–0.1.12 dropped the fail-closed recap contains-skips. Shape skips stay. 0.3 stays open until live inspect recent is obey-worthy. Do not start 0.2b until then.
 
 ---
 
@@ -106,7 +106,7 @@ SessionStart / just-compacted hooks stay fail-open. Catch-up must still skip own
 
 Retrieve is already better than write. The only allowed "smarter" is better extract so claims have the right `symbols[]`. Ranking stays dumb.
 
-0.1.9 gated inspect-recap, gates-mostly-match, go-first mash, and hyphenated They-found lock-lists. 0.1.11 dropped fail-closed recap contains-skips (`ok=false`, this-cut-makes, never-lose-memo, inspect recap, colon still-store) and Bench-as-starter so those real claims still store. A concurrent_test.go-first failed is not a go-first mash. ProcessState leftovers skip only as type=state. A They-found + Redis/path failed still stores. The success bar is still live inspect recent all obey-worthy.
+0.1.9 gated inspect-recap, gates-mostly-match, go-first mash, and hyphenated They-found lock-lists. 0.1.11–0.1.12 dropped fail-closed recap contains-skips so those real claims still store. A concurrent_test.go-first failed is not a go-first mash. ProcessState leftovers skip only as type=state. A They-found + Redis/path failed still stores. The success bar is still live inspect recent all obey-worthy.
 
 - Remaining narration, process-state, product-copy leftovers
 - Stronger symbols from path stems and identifiers (hop and overlap eat these)

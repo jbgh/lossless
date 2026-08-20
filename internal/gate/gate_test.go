@@ -278,24 +278,11 @@ func TestSkipProseLiveResidue(t *testing.T) {
 		liveRecap2013,
 		liveRecap2019,
 		liveStillStores,
-		liveLoopResidue,
 		liveExampleDrop,
 		liveUnclosedParen,
 		exampleDropQuoted,
-		liveRecap2157a,
-		liveRecap2157b,
 		liveRecap2146,
-		liveRecap2149,
-		liveRecap2049,
-		liveRecap2237gold,
-		liveRecap2232keep,
-		liveRecap2227judge,
-		liveRecap2217,
-		liveRecap2243,
 		liveRecap2256hyphen,
-		liveRecap2255colon,
-		liveRecap2255alone,
-		liveRecapBenchGround,
 	} {
 		if !SkipProse(s) {
 			t.Fatalf("residue not skipped: %q", s)
@@ -329,6 +316,8 @@ func TestSkipProseLiveResidue(t *testing.T) {
 		"Never lose memoization of JWT claims in src/auth.ts.",
 		"Inspect recapture of Redis sessions failed in src/watch.ts.",
 		"We still store: the session JSONL on disk in catchup.go.",
+		"The rate limit gates mostly match the Redis spec in src/middleware/auth.ts.",
+		"Named locks still keep the session JSONL in catchup.go.",
 	} {
 		if SkipProse(s) {
 			t.Fatalf("lock skipped: %q", s)
@@ -385,8 +374,8 @@ func TestSkipProseLiveResidue(t *testing.T) {
 	if !MetaFailedTalk(liveStillStores) || !stillExtractsNoObject(Fold(liveStillStores)) {
 		t.Fatal("still stores. without and pack")
 	}
-	if !MetaFailedTalk(liveLoopResidue) {
-		t.Fatal("loop residue / the product keep is")
+	if MetaFailedTalk("Those recaps are loop residue and the product keep is a Redis failed.") {
+		t.Fatal("loop residue phrase is not a skip")
 	}
 	if !exampleDrop(liveExampleDrop) || !exampleDrop(exampleDropQuoted) {
 		t.Fatal("example drop after list-marker and quote trim")
@@ -406,15 +395,11 @@ func TestSkipProseLiveResidue(t *testing.T) {
 	if MetaFailedTalk("Inspect recapture of Redis sessions failed in src/watch.ts.") {
 		t.Fatal("inspect recapture")
 	}
-	if !MetaFailedTalk(liveRecap2157a) ||
-		!MetaFailedTalk(liveRecap2157b) || !MetaFailedTalk(liveRecap2146) ||
-		!MetaFailedTalk(liveRecap2149) || !MetaFailedTalk(liveRecap2049) {
-		t.Fatal("0.1.9 recap meta")
+	if MetaFailedTalk("The rate limit gates mostly match the Redis spec in src/middleware/auth.ts.") {
+		t.Fatal("gates mostly match Redis spec")
 	}
-	if !MetaFailedTalk(liveRecap2237gold) || !MetaFailedTalk(liveRecap2232keep) ||
-		!MetaFailedTalk(liveRecap2227judge) ||
-		!MetaFailedTalk(liveRecap2217) || !MetaFailedTalk(liveRecap2243) {
-		t.Fatal("post-prune recap meta")
+	if !MetaFailedTalk(liveRecap2146) {
+		t.Fatal("go-first mash")
 	}
 	if MetaFailedTalk(liveRecap2227colon) {
 		t.Fatal("colon still store: is a keep")
@@ -425,17 +410,11 @@ func TestSkipProseLiveResidue(t *testing.T) {
 	if theyFoundHyphenList(theyFoundRedis) || theyFoundHyphenList(theyFoundLock) {
 		t.Fatal("space-form they-found as hyphen lock-list")
 	}
-	if !MetaFailedTalk(liveRecap2255colon) || !MetaFailedTalk(liveRecap2255alone) {
-		t.Fatal("22:55 colon-form still-store lock-list")
+	if stillExtractsNoObject(Fold(liveRecap2255alone)) {
+		t.Fatal("hyphenated still-store as extract-meta")
 	}
-	if !stillExtractsNoObject(Fold(liveRecap2255alone)) {
-		t.Fatal("hyphenated still-store")
-	}
-	if !MetaFailedTalk(liveRecapBenchGround) || !stillExtractsNoObject(Fold(liveRecapBenchGround)) {
-		t.Fatal("still ground. changelog recap")
-	}
-	if !stillExtractsNoObject(Fold(liveRecap2256hyphen)) {
-		t.Fatal("still keep. hyphen lock-list")
+	if stillExtractsNoObject(Fold(liveRecapBenchGround)) {
+		t.Fatal("still ground. as extract-meta")
 	}
 	if stillExtractsNoObject(Fold(stillKeepObject)) || MetaFailedTalk(stillKeepObject) {
 		t.Fatal("still keep + object as no-object")

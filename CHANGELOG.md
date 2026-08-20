@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.12 — 2026-08-20
+
+- Drop remaining 0.1.8/0.1.9 recap contains-skips (`gates mostly match`, `inspect-recap`, `obey-worthy`, hyphen `still-store`, and the rest of that denylist). `go-first` mash is the comma form only.
+- Shape skips stay: example-drop, They-found hyphen lock-lists, inspect-status leads, truncated recaps.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.11 — 2026-08-19
 
 - Drop fail-closed recap contains-skips that swallowed real claims: `ok=false` health faileds, "this cut makes" product faileds, "never lose memo" inside memoization, space-form "inspect recap" inside recapture, and colon `still store:` session writes.

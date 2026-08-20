@@ -183,20 +183,8 @@ func TestExtractNoiseAndJobOverlap(t *testing.T) {
 		{Type: "failed", Text: "Those recaps are loop residue; the product keep is: a real They-found Redis/path failed still stores."},
 		{Type: "failed", Text: "Example drop: They found Redis token bucket failed in src/middleware/auth.ts staging.", Paths: []string{"src/middleware/auth.ts"}},
 		{Type: "constraint", Text: "Non-empty must not prune other projects (memora etc."},
-		{Type: "failed", Text: "Shared `SkipProse` / `ExtractNoise` now drop the five live inspect-recap shapes that were impersonating work, so a later session or another tool is less likely to be handed a fake Redis failed."},
-		{Type: "failed", Text: "This cut makes the durable half of the goal more true: five inspect-recap shapes no longer become tape or pack, while the gold They-found Redis failed still does."},
 		{Type: "decision", Text: "go-first, 4.0, 0.1.3 remember, Authorization, I'll stick with JWT next."},
-		{Type: "decision", Text: "Secrets path unchanged; tests copy recap bodies instead of reading ~/."},
-		{Type: "failed", Text: "The gates mostly match the listed shapes, and extract does keep the gold They-found Redis failed plus real named-lock faileds."},
-		{Type: "failed", Text: "Gold Redis/named-lock/JWT/Tests-failed-to/concurrent_test."},
-		{Type: "failed", Text: "Locks still keep They-found Redis/path, named-lock, JWT next, Tests failed to, concurrent_test."},
-		{Type: "decision", Text: "Recent 8 is not all obey-worthy (`A later session still checks out recap instead of work` plus slice-loop judge residue), so 0.3 stays open."},
-		{Type: "decision", Text: "A later session still checks out recap instead of work."},
-		{Type: "failed", Text: "They-found Redis, named-lock, I'll stick with JWT next, Tests failed to, and version.go keeps are not contains-skipped."},
 		{Type: "failed", Text: "They-found Redis, named-lock, JWT next, Tests failed to, version.go, and 4.0 still keep."},
-		{Type: "decision", Text: "Colon-form still-store lock-list recaps skip. A concurrent_test.go-first failed is not a go-first mash.", Paths: []string{"internal/gate/gate.go", "internal/write/extract.go"}},
-		{Type: "decision", Text: "Colon-form still-store lock-list recaps skip."},
-		{Type: "failed", Text: "Pathful Bench and Failed to still ground."},
 	} {
 		if !extractNoise(rec) {
 			t.Fatalf("residue not noise: %+v", rec)

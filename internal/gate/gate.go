@@ -79,36 +79,23 @@ func MetaFailedTalk(s string) bool {
 
 // stillExtractsNoObject is extract-meta punctuation ("still extracts;" /
 // "still stores.") not "still extracts JWTs" and not "We still store: the
-// session JSONL" (colon after store is a real claim). Hyphenated still-store
-// / still-keep / still-ground is changelog recap, not "Named locks still
-// keep the session JSONL".
+// session JSONL" (colon after store is a real claim).
 func stillExtractsNoObject(low string) bool {
 	for _, p := range []string{
 		"still extracts.", "still extracts;", "still extract.", "still extract;",
 		"still stores.", "still stores;", "still store.", "still store;",
-		"still keep.", "still keeps.", "still ground.", "still grounds.",
 	} {
 		if strings.Contains(low, p) {
 			return true
 		}
 	}
-	return strings.Contains(low, "still-store") || strings.Contains(low, "still-keep") ||
-		strings.Contains(low, "still-ground")
+	return false
 }
 
 // goFirstMash is the recap list "go-first, 4.0, …". A
-// concurrent_test.go-first failed has a dot before go-first.
+// concurrent_test.go-first failed does not contain "go-first,".
 func goFirstMash(low string) bool {
-	for {
-		i := strings.Index(low, "go-first")
-		if i < 0 {
-			return false
-		}
-		if i == 0 || low[i-1] != '.' {
-			return true
-		}
-		low = low[i+len("go-first"):]
-	}
+	return strings.Contains(low, "go-first,")
 }
 
 func ProcessState(s string) bool {
@@ -475,18 +462,6 @@ var (
 		"still stores and pack",
 		"lock the recap row",
 		"recap-as-failed",
-		"loop residue", "the product keep is",
-		"inspect-recap",
-		"gates mostly match",
-		"gold they-found",
-		"recap bodies",
-		"still keep they-found",
-		"checks out recap",
-		"obey-worthy",
-		"contains-skipped",
-		"redis/named-lock",
-		"tests-failed-to",
-		"lock-list recap",
 	}
 	processState = []string{
 		"in this session", "the next stop", "next test that matters",
