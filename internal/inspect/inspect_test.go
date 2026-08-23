@@ -49,6 +49,9 @@ func TestBuildAndAskInspect(t *testing.T) {
 	if !strings.Contains(buf.String(), "acme/api") || !strings.Contains(buf.String(), "records 1") {
 		t.Fatal(buf.String())
 	}
+	if !strings.Contains(buf.String(), "debug") || !strings.Contains(buf.String(), "not uploaded") {
+		t.Fatalf("debug log missing: %s", buf.String())
+	}
 
 	det, err := Build(st, "acme/api")
 	if err != nil || det.Detail == nil || len(det.Detail.Recent) != 1 {

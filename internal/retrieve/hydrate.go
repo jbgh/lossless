@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"lossless/internal/claim"
+	"lossless/internal/debuglog"
 	"lossless/internal/store"
 )
 
@@ -231,6 +232,17 @@ func (e Engine) recordAsk(req Request, q query, seedPaths []string, out Response
 		}
 	}
 	_ = e.Store.AppendActions(acts)
+	debuglog.Append(e.Store.Root, debuglog.Event{
+		At:         at,
+		Kind:       "ask",
+		Project:    q.ProjectKey,
+		Workspace:  req.WorkspaceRoot,
+		SessionID:  sess,
+		SessionSet: strings.TrimSpace(req.SessionID) != "",
+		Identity:   debuglog.Identity(req.Project, q.ProjectKey),
+		Hits:       len(out.Context),
+		Warns:      len(out.Warnings),
+	})
 }
 
 func warnClaimID(w string) string {

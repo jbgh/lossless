@@ -70,7 +70,11 @@ func MetaFailedTalk(s string) bool {
 	if containsAny(s, metaFailed) {
 		return true
 	}
-	low := Fold(s)
+	low := Fold(strings.TrimSpace(s))
+	low = strings.TrimPrefix(low, "- ")
+	if strings.HasPrefix(low, "lossless flags") {
+		return true
+	}
 	if goFirstMash(low) || stillExtractsNoObject(low) {
 		return true
 	}
@@ -406,6 +410,9 @@ var (
 		"i'll go with", "i will go with",
 		"let's go with", "lets go with", "i'll switch",
 		"i'll try",
+		"i'll match", "i will match",
+		"i'll slow", "i will slow",
+		"i'll verify", "i will verify",
 		"i'll implement", "i will implement",
 		"i'll replace", "i'll swap",
 		"i'll rewrite", "i will rewrite",
@@ -437,6 +444,8 @@ var (
 		"background notification", "checking #", "pr #", "pr-size-check",
 		"which of those", "re-pushing", "exit 0",
 		"github actions", "actions workflow", "actions job",
+		"failed to tap", "no matches found for",
+		"assertion failed", "--- fail:",
 	}
 	failedObject = []string{
 		"failed items", "re-queues failed", "pre-failed skip",

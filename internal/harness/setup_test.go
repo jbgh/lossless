@@ -106,6 +106,15 @@ func TestDoctorBeforeAndAfterSetup(t *testing.T) {
 	if daemon.OK {
 		t.Fatal("daemon should be down")
 	}
+	var identity Check
+	for _, c := range after.Checks {
+		if c.Name == "identity" {
+			identity = c
+		}
+	}
+	if !identity.OK {
+		t.Fatalf("identity %+v", identity)
+	}
 }
 
 func TestDoctorDaemonAndRemoteURL(t *testing.T) {
@@ -175,6 +184,9 @@ func TestInstallUserServiceWritesUnit(t *testing.T) {
 	}
 	if runtime.GOOS == "linux" && !strings.Contains(s, "EnvironmentFile") {
 		t.Fatal(s)
+	}
+	if !strings.Contains(s, "PATH") || !strings.Contains(s, "/usr/bin") {
+		t.Fatalf("daemon PATH missing: %s", s)
 	}
 }
 

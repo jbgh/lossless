@@ -115,3 +115,33 @@ func TestGitOutputFailure(t *testing.T) {
 		t.Fatal("expected empty")
 	}
 }
+
+func TestFromWorkspaceGitOriginEmptyPATH(t *testing.T) {
+	dir := t.TempDir()
+	cmd := exec.Command("git", "init")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%s", out)
+	}
+	cmd = exec.Command("git", "remote", "add", "origin", "https://git.memora.pics/memora/memora.git")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%s", out)
+	}
+	t.Setenv("PATH", "/nonexistent")
+	got := FromWorkspace(dir)
+	if got != "memora/memora" {
+		t.Fatalf("PATH-less git: %q", got)
+	}
+	ok, detail := Identity(dir)
+	if !ok || detail != "memora/memora" {
+		t.Fatalf("identity %v %q", ok, detail)
+	}
+}
+
+func TestIdentityNoGitCwd(t *testing.T) {
+	ok, detail := Identity(t.TempDir())
+	if !ok {
+		t.Fatalf("empty dir should not fail: %q", detail)
+	}
+}

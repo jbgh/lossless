@@ -112,6 +112,27 @@ func TestSkipProse(t *testing.T) {
 	if SkipProse("I'll stick with postgres instead of mysql.") {
 		t.Fatal("i'll stick with is a decision")
 	}
+	if !SkipProse("I'll match open zoom to the dismiss spring and find why the panel vanished.") {
+		t.Fatal("i'll match planning")
+	}
+	if !SkipProse("I'll slow the open easeOut so it matches a swipe-down.") {
+		t.Fatal("i'll slow planning")
+	}
+	if !SkipProse("I'll verify the generated output in a throwaway copy.") {
+		t.Fatal("i'll verify planning")
+	}
+	if !SkipProse("Lossless flags an old iOS open failure: the flyer sat behind the dest.") {
+		t.Fatal("lossless flags meta")
+	}
+	if SkipProse("Redis token bucket failed after lossless flags were rewritten in src/middleware/auth.ts.") {
+		t.Fatal("lossless flags mid-sentence keep")
+	}
+	if !SkipProse("Failed to tap Button (First Match): No matches found for Lightbox.") {
+		t.Fatal("qa tap status")
+	}
+	if !SkipProse("lightbox_test.go:44: assertion failed") {
+		t.Fatal("pasted go test")
+	}
 	if !SkipProse("Failed work first, then what already shipped.") {
 		t.Fatal("readme failed-first")
 	}

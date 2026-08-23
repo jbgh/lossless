@@ -15,6 +15,10 @@ import (
 
 var pathRE = regexp.MustCompile(`(?:[\w.-]+/)+[\w.-]+\.[A-Za-z0-9]+`)
 
+// fileStemRE is a basename with a letter-led extension (`LightboxView.swift`,
+// `auth.ts`). Versions like 0.1.13 do not match (ext starts with a digit).
+var fileStemRE = regexp.MustCompile(`(?:^|[\s` + "`" + `'"/(])([A-Za-z][\w.-]*\.[A-Za-z][A-Za-z0-9]{0,6})\b`)
+
 var priority = map[string]int{"failed": 5, "decision": 4, "constraint": 3, "state": 2, "thread": 1}
 
 type ExtractOpts struct {
@@ -294,7 +298,36 @@ func slashNorm(s string) string {
 }
 
 func findPaths(s string) []string {
-	return pathRE.FindAllString(slashNorm(s), -1)
+	s = slashNorm(s)
+	full := pathRE.FindAllString(s, -1)
+	dropBase := map[string]bool{}
+	for _, p := range full {
+		if len(redact.FilterPaths([]string{p})) == 0 {
+			dropBase[filepath.Base(p)] = true
+		}
+	}
+	out := append([]string{}, full...)
+	for _, m := range fileStemRE.FindAllStringSubmatch(s, -1) {
+		if len(m) < 2 {
+			continue
+		}
+		stem := m[1]
+		if dropBase[stem] {
+			continue
+		}
+		dup := false
+		for _, p := range full {
+			if p == stem || filepath.Base(p) == stem {
+				dup = true
+				break
+			}
+		}
+		if dup {
+			continue
+		}
+		out = append(out, stem)
+	}
+	return out
 }
 
 func stripPaths(s string) string {

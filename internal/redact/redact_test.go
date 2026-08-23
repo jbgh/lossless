@@ -72,6 +72,10 @@ func TestFilterPaths(t *testing.T) {
 	if len(got) != 2 || got[0] != "src/ok.go" || got[1] != ".github/workflows/ci.yml" {
 		t.Fatalf("dotgit/pct/pub/nm/dist: %v", got)
 	}
+	got = FilterPaths([]string{"LightboxView.swift", "MediaViewerScreen.kt", "git.memora.pics"})
+	if len(got) != 2 || got[0] != "LightboxView.swift" || got[1] != "MediaViewerScreen.kt" {
+		t.Fatalf("file stem: %v", got)
+	}
 }
 
 func TestLineRedacts(t *testing.T) {

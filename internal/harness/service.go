@@ -125,6 +125,7 @@ func launchdPlist(exe, dataHome, url, token string) []byte {
 		fmt.Fprintf(&env, "    <key>%s</key>\n    <string>%s</string>\n", xmlEscape(k), xmlEscape(v))
 	}
 	add("LOSSLESS_HOME", dataHome)
+	add("PATH", daemonPath())
 	if base := DaemonBase(url); base != defaultDaemon {
 		add("LOSSLESS_URL", base)
 	}
@@ -165,6 +166,14 @@ func launchdPlist(exe, dataHome, url, token string) []byte {
 `, serviceLabel, xmlEscape(exe), xmlEscape(dataHome), xmlEscape(log), xmlEscape(log), envBlock))
 }
 
+func daemonPath() string {
+	base := "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
+	if p := os.Getenv("PATH"); p != "" {
+		return base + ":" + p
+	}
+	return base
+}
+
 func systemdUnit(exe, dataHome, url, token string) []byte {
 	_ = url
 	_ = token
@@ -173,13 +182,14 @@ Description=lossless memory daemon
 After=default.target
 
 [Service]
+Environment=PATH=%s
 EnvironmentFile=%s
 ExecStart=%s serve --watch --home %s
 Restart=on-failure
 
 [Install]
 WantedBy=default.target
-`, systemdQuote(serviceEnvPath(dataHome)), systemdQuote(exe), systemdQuote(dataHome)))
+`, systemdQuote(daemonPath()), systemdQuote(serviceEnvPath(dataHome)), systemdQuote(exe), systemdQuote(dataHome)))
 }
 
 func systemdQuote(s string) string {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.14 — 2026-08-23
+
+- `FromWorkspace` finds git at a known absolute path when PATH is empty. A checkout with origin keys `owner/repo`; a checkout with no origin still keys `path-*`. `doctor` identity FAILs only when origin exists and the key is still `path-*`. The user service sets PATH.
+- Extract: file stems (`LightboxView.swift`) become paths on that sentence. QA tap-failures, prefix `Lossless flags`, and I'll-match / I'll-slow / I'll-verify planning skip. `Search` / `Home` / `Albums` are sentence starters. Pathless Redis still grounds. Nearby stays user-only.
+- Local debug JSONL at `debug/events.jsonl`: ask identity and catch-up extract skip counts. `inspect` prints the last lines. Not uploaded. `doctor` does not phone home.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.13 — 2026-08-20
 
 - Claims cite the source turn on tape. Catch-up and append offsets are file-absolute. The cite is the message envelope. `get_record` opens the covering excerpt.

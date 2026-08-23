@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"lossless/internal/claim"
+	"lossless/internal/debuglog"
 	"lossless/internal/projectkey"
 	"lossless/internal/retrieve"
 	"lossless/internal/store"
@@ -32,6 +33,8 @@ type Report struct {
 	Ask        *AskView             `json:"ask,omitempty"`
 	Extract    *ExtractView         `json:"extract,omitempty"`
 	Prune      *PruneResult         `json:"prune,omitempty"`
+	Debug      []debuglog.Event     `json:"debug,omitempty"`
+	DebugPath  string               `json:"debug_path,omitempty"`
 }
 
 type ProjectDetail struct {
@@ -111,6 +114,12 @@ func Build(st *store.Store, project string) (Report, error) {
 	}
 	rep.CursorNote = cursorNotes(allSess, curs)
 	rep.Notes = healthNotes(stats, curs)
+	rep.DebugPath = debuglog.Path(st.Root)
+	keyFilter := ""
+	if project != "" {
+		keyFilter = projectkey.Normalize(project)
+	}
+	rep.Debug = debuglog.Tail(st.Root, 12, keyFilter)
 	if project == "" {
 		rep.Cursors = curs
 		return rep, nil
@@ -316,6 +325,16 @@ func Format(w io.Writer, r Report) {
 				fmt.Sprintf("path-* × %d", hidden), hidClaims, "—", "—", "—", "—", "—",
 				byteSize(hidRaw), "no git origin")
 		}
+		if r.DebugPath != "" {
+			fmt.Fprintf(w, "\ndebug  %s  (local, not uploaded)\n", r.DebugPath)
+			if len(r.Debug) == 0 {
+				fmt.Fprintln(w, "  (none yet)")
+			}
+			for _, ev := range r.Debug {
+				fmt.Fprintf(w, "  %s  %s  identity=%s  project=%s  sid=%s  hits=%d  extracted=%d\n",
+					ev.At, ev.Kind, ev.Identity, clip(ev.Project, 22), clip(ev.SessionID, 12), ev.Hits, ev.Extracted)
+			}
+		}
 		if len(r.Notes) > 0 {
 			fmt.Fprintln(w)
 			for _, n := range r.Notes {
@@ -375,6 +394,16 @@ func Format(w io.Writer, r Report) {
 			for i, h := range a.Hits {
 				fmt.Fprintf(w, "    %d [%s] %s\n", i+1, h.Type, clip(h.Text, 88))
 			}
+		}
+	}
+	if r.DebugPath != "" {
+		fmt.Fprintf(w, "\ndebug  %s  (local, not uploaded)\n", r.DebugPath)
+		if len(r.Debug) == 0 {
+			fmt.Fprintln(w, "  (none yet)")
+		}
+		for _, ev := range r.Debug {
+			fmt.Fprintf(w, "  %s  %s  identity=%s  sid=%s  hits=%d  extracted=%d\n",
+				ev.At, ev.Kind, ev.Identity, clip(ev.SessionID, 16), ev.Hits, ev.Extracted)
 		}
 	}
 	if r.Ask != nil {

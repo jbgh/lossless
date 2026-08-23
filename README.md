@@ -184,7 +184,7 @@ A remote home is documented and manual. lossless does not provision a cloud or s
 ```bash
 lossless setup              # hooks + MCP + skill + user service
 lossless doctor             # daemon, hooks, MCP, service
-lossless inspect            # tape vs claims vs last packs; --ask --jsonl --prune
+lossless inspect            # tape vs claims vs last packs vs local debug; --ask --jsonl --prune
 lossless ask --project KEY [--question "..."] [--goal "..."] [--path FILE]
 lossless remember --type decision --text "..."
 lossless catch-up --jsonl FILE --workspace DIR --harness grok

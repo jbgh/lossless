@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"lossless/internal/claim"
+	"lossless/internal/redact"
 )
 
 func TestExtractClassifiesAndDrops(t *testing.T) {
@@ -374,6 +375,34 @@ func TestGroundedFailed(t *testing.T) {
 	}
 	if !GroundedFailed("Bench failed", []string{"testdata/bench/cases/01-auth.json"}) {
 		t.Fatal("pathful Bench paths")
+	}
+	if GroundedFailed("Search frames never show a failed kids at the beach query.", nil) {
+		t.Fatal("Search is not an identifier")
+	}
+	if !GroundedFailed("Redis token bucket failed in staging.", nil) {
+		t.Fatal("Redis keep")
+	}
+	if !GroundedFailed("Coil’s loading slot never runs in Empty.", nil) && !GroundedFailed("Coil's loading slot never runs in Empty.", nil) {
+		t.Fatal("Coil identifier")
+	}
+	if !GroundedFailed("One unit test failed: familyId is not reaching the lightbox from Home/Albums/Search/Map/Favorites.", nil) {
+		t.Fatal("familyId / Home keep")
+	}
+}
+
+func TestFindPathsFileStem(t *testing.T) {
+	got := findPaths("openHeroFrame failed in LightboxView.swift before the cubic lerp.")
+	if len(redact.FilterPaths(got)) == 0 {
+		t.Fatalf("stem %v", got)
+	}
+	if find := findPaths("Albums has no pull-to-refresh in `AlbumsScreen`."); len(redact.FilterPaths(find)) != 0 {
+		t.Fatalf("type name is not a path: %v", find)
+	}
+	if find := findPaths("shipped 0.1.13 and standing 4.0."); len(redact.FilterPaths(find)) != 0 {
+		t.Fatalf("version is not a path: %v", find)
+	}
+	if find := findPaths("The lodash suite failed in node_modules/lodash/index.js during install."); len(redact.FilterPaths(find)) != 0 {
+		t.Fatalf("dropped dep basename leaked: %v", find)
 	}
 }
 

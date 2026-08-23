@@ -143,7 +143,27 @@ func remotePath(p string) bool {
 	if host == "" || strings.HasPrefix(host, ".") {
 		return false
 	}
+	// LightboxView.swift is a file stem, not a host.
+	if !strings.Contains(n, "/") && codeFileStem(host) {
+		return false
+	}
 	return strings.Contains(host, ".")
+}
+
+func codeFileStem(p string) bool {
+	i := strings.LastIndex(p, ".")
+	if i <= 0 || i == len(p)-1 {
+		return false
+	}
+	switch p[i+1:] {
+	case "swift", "kt", "kts", "ts", "tsx", "js", "jsx", "mjs", "cjs",
+		"go", "java", "m", "mm", "h", "hpp", "c", "cc", "cpp", "rs",
+		"py", "rb", "php", "cs", "json", "toml", "yaml", "yml",
+		"md", "proto", "sql", "gradle":
+		return true
+	default:
+		return false
+	}
 }
 
 // Line returns the line to append to raw. Secret lines become {"_redacted":true}.

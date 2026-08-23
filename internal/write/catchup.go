@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"lossless/internal/claim"
+	"lossless/internal/debuglog"
 	"lossless/internal/projectkey"
 	"lossless/internal/redact"
 	"lossless/internal/store"
@@ -177,12 +178,14 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 			return out, err
 		}
 	}
+	tr := &ExtractTrace{}
 	recs := Extract(msgs, ExtractOpts{
 		ProjectKey:    project,
 		WorkspaceRoot: req.WorkspaceRoot,
 		Harness:       req.Harness,
 		SessionID:     session,
 		Source:        req.Source,
+		Trace:         tr,
 	})
 	for _, rec := range recs {
 		sup, err := st.WriteClaim(rec)
@@ -212,6 +215,21 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 		Project: project, Harness: req.Harness, SessionID: session,
 		WorkspaceRoot: req.WorkspaceRoot, Source: req.Source,
 	}, clean.String())
+	if out.Copied > 0 || out.Extracted > 0 {
+		debuglog.Append(st.Root, debuglog.Event{
+			Kind:      "catchup",
+			Project:   project,
+			Workspace: req.WorkspaceRoot,
+			SessionID: session,
+			Identity:  debuglog.Identity(req.Project, project),
+			Copied:    out.Copied,
+			Extracted: out.Extracted,
+			Messages:  tr.Messages,
+			Sentences: tr.Sentences,
+			Kept:      tr.Kept,
+			Skip:      tr.SkipCounts,
+		})
+	}
 	return out, nil
 }
 

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"lossless/internal/projectkey"
 	"lossless/internal/store"
 	"lossless/internal/version"
 	"lossless/internal/write"
@@ -192,6 +193,9 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 	} else {
 		add("url", true, "loopback")
 	}
+
+	idOK, idDetail := projectkey.Identity("")
+	add("identity", idOK, idDetail)
 
 	hookOK, hookDetail := checkFiles(map[string]string{
 		"grok":     filepath.Join(userHome, ".grok", "hooks", "lossless.json"),
