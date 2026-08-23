@@ -40,24 +40,28 @@ If `~/.lossless/active/<owner__repo>.md` exists and this turn has not asked, rea
 
 ```
 ask({
-  workspace_root: <absolute repo path, usually cwd>,
+  workspace_root: <absolute path of this git checkout>,
   goal: <one sentence: what you are about to do>,
   question: <the user's ask, or "what must I not forget">,
   paths: [<repo-relative files you will touch>],
-  session_id: <if the harness gave you one>
+  session_id: <harness session id>
 })
 ```
 
-`project` is optional if `workspace_root` is set. Do not invent a search query. Do not rank. Send current work; lossless returns ≤5 records in `context`.
+`workspace_root` is this repo's checkout (the one with `origin`), not a sibling clone. `project` is optional then — lossless derives `owner/repo` from origin. Do not invent a search query. Do not rank.
+
+Pass `session_id` whenever the harness has one (Grok/Claude/Codex/Pi/OpenCode session id). Omit it only if the harness did not give one. Do not send `default`.
+
+Send current work. lossless returns ≤5 records in `context`.
 
 ## After context returns
 
-The pack is a bibliography of at most five cites, not the tape. Packed `text` is the cite sentence.
+The pack is a bibliography of at most five cites, not the tape. Packed `text` is the cite sentence. `has_excerpt` means `get_record` can open the source turn.
 
 - Treat `warnings` as blocking unless the user overrides.
 - Do not repeat a `failed` without new evidence.
 - Do not undo a `decision` or violate a `constraint`.
-- Before you change extract/gate/behavior, or skip work because a warning says a decision may already cover, call `get_record` on **that one** id if `has_excerpt` is true. Do not GET all five. Do not GET a self-contained lock (weights, no-LLM, version match).
+- If a warning says a decision may already cover, or the packed sentence is not enough to act, call `get_record` on **that one** id when `has_excerpt` is true. Do not GET all five.
 - `remember` only for a durable fact the tape will miss. It does not replace catch-up.
 
 You are not searching memory. You are telling lossless what you are doing so it can keep the window honest.

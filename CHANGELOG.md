@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.15 — 2026-08-23
+
+- Skill and always-on rule: pass `session_id` when the harness has one; `workspace_root` is this git checkout. `get_record` opens one packed cite when `has_excerpt` and the sentence is not enough to act. MCP `ask` copy matches. Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.14 — 2026-08-23
 
 - `FromWorkspace` finds git at a known absolute path when PATH is empty. A checkout with origin keys `owner/repo`; a checkout with no origin still keys `path-*`. `doctor` identity FAILs only when origin exists and the key is still `path-*`. The user service sets PATH.
