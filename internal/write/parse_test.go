@@ -1,6 +1,7 @@
 package write
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -232,5 +233,34 @@ func TestClip(t *testing.T) {
 	c := clip(s)
 	if len(c) >= len(s) || !strings.Contains(c, "…") {
 		t.Fatal(len(c))
+	}
+}
+
+func TestParseKeepsWorkflowFindingsJSON(t *testing.T) {
+	issue := "Settings opens Family instead of the child list."
+	inner := `{"asked":true,"pad":"` + strings.Repeat("x", 2500) + `","findings":[{"issue":"` + issue + `","severity":"high"}],"ok":true}`
+	if len(inner) <= 2000 {
+		t.Fatalf("need longer than clip: %d", len(inner))
+	}
+	raw, err := json.Marshal(map[string]any{"type": "assistant", "content": inner})
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs, _ := ParseJSONL(string(raw)+"\n", 0)
+	if len(msgs) != 1 || msgs[0].Skip {
+		t.Fatalf("%+v", msgs)
+	}
+	if !strings.Contains(msgs[0].Text, issue) || strings.Contains(msgs[0].Text, "…") {
+		t.Fatalf("clipped workflow json: %d %q", len(msgs[0].Text), msgs[0].Text[:min(80, len(msgs[0].Text))])
+	}
+	got := Extract(msgs, ExtractOpts{ProjectKey: "acme/api"})
+	ok := false
+	for _, r := range got {
+		if r.Type == "failed" && strings.Contains(r.Text, "Settings opens Family") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("issue not lifted: %+v", got)
 	}
 }

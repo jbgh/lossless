@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.18 — 2026-08-24
+
+- Extract lifts `findings[].issue` from child-loop JSON that has `asked` and `severity` as **faileds** (even `instead of` QA English). Leftover prose in the same turn still extracts. JSON `"severity"` shards skip. Ask packets stay skipped. Findings JSON without `asked` is not a loop body.
+- Prefix `Lossless flagged` is pack echo. I'll-search / I'll-map / I'll-open skip as whole-word planning. `The failed X record is unrelated` and `Prior failure was another surface` skip. `I'll stick with` / `I'll clearly` / `I'll open-source` still store. Pathless Redis still grounds.
+- Ask paths drop `/tmp` and `qa-report.md`. Sent `session_id=default` is omitted (project catch-up, not exact locate of a fake id). Watcher catch-up nested Claude JSONL when cwd is in the transcript; unknown-cwd still skips. Skill/rule: subagents pass their own session id; workflow children ask only if the tool exists.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.17 — 2026-08-24
 
 - Extract: I'll-merge / I'll-clear / I'll-measure skip when the verb is a whole word (`I'll clear it`). `I'll clearly` / `I'll cleartext` / `I'll stick with` still store. Prefix `Lossless returned` is pack echo, same class as `Lossless flags`.

@@ -50,7 +50,9 @@ ask({
 
 `workspace_root` is this repo's checkout (the one with `origin`), not a sibling clone. `project` is optional then — lossless derives `owner/repo` from origin. Do not invent a search query. Do not rank.
 
-Pass `session_id` whenever the harness has one (Grok/Claude/Codex/Pi/OpenCode session id). Omit it only if the harness did not give one. Do not send `default`.
+Pass `session_id` whenever the harness has one (Grok/Claude/Codex/Pi/OpenCode session id). Subagents and workflow children pass **their** session id, not the parent's. Do not send `default`. Omit it only if the harness did not give one. Paths are repo-relative files in this checkout, not `/tmp` reports.
+
+Grok `spawn_subagent` inherits MCP when the parent has lossless. Workflow `agent()` children often do not; if `ask` is missing, do not invent a call. If it is present, call it once before the work.
 
 Send current work. lossless returns ≤5 records in `context`.
 

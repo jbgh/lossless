@@ -82,6 +82,78 @@ func TestExtractSkipsSkillTalkAndFragments(t *testing.T) {
 	}
 }
 
+func TestExtractLiftsWorkflowFindings(t *testing.T) {
+	body := "```json\n" + `{"asked":true,"findings":[{"issue":"Children load 429 is dismissed into a false empty state.","severity":"high","evidence":"/tmp/phone-qa/f028.png"},{"issue":"Settings opens Family instead of the child list.","severity":"high","evidence":"/tmp/y.png"}],"ok":true}` + "\n```"
+	got := Extract([]Message{{Role: "assistant", Text: body, Offset: 1}}, ExtractOpts{ProjectKey: "acme/api"})
+	var blob string
+	for _, r := range got {
+		blob += r.Text + "\n"
+		if strings.Contains(r.Text, `"severity"`) || strings.Contains(r.Text, "/tmp/") {
+			t.Fatalf("json chip stored: %+v", r)
+		}
+	}
+	if !strings.Contains(blob, "Children load 429") || !strings.Contains(blob, "Settings opens Family") {
+		t.Fatalf("issues not lifted: %+v", got)
+	}
+	for _, r := range got {
+		if r.Type != "failed" {
+			t.Fatalf("lifted issue not failed: %+v", r)
+		}
+	}
+}
+
+func TestExtractWorkflowJSONKeepsLeftoverProse(t *testing.T) {
+	body := "Redis token bucket failed in src/middleware/auth.ts staging.\n```json\n" +
+		`{"asked":true,"findings":[{"issue":"Settings opens Family instead of the child list.","severity":"high"}],"ok":true}` +
+		"\n```\nI'll stick with JWT next."
+	got := Extract([]Message{{Role: "assistant", Text: body, Offset: 1}}, ExtractOpts{ProjectKey: "acme/api"})
+	var blob string
+	types := map[string]bool{}
+	for _, r := range got {
+		blob += r.Type + ":" + r.Text + "\n"
+		types[r.Type] = true
+		if strings.Contains(r.Text, `"severity"`) {
+			t.Fatalf("json stored: %+v", r)
+		}
+	}
+	if !strings.Contains(blob, "Redis") || !strings.Contains(blob, "JWT") || !strings.Contains(blob, "Settings opens Family") {
+		t.Fatalf("lost leftover or issue: %s", blob)
+	}
+	if !types["failed"] || !types["decision"] {
+		t.Fatalf("types %+v %s", types, blob)
+	}
+}
+
+func TestExtractIgnoresFindingsJSONWithoutAsked(t *testing.T) {
+	body := `{"findings":[{"issue":"Consider extracting a helper.","severity":"high"}]}` +
+		"\nWe decided to use jose, not jsonwebtoken, for Edge."
+	got := Extract([]Message{{Role: "assistant", Text: body, Offset: 1}}, ExtractOpts{ProjectKey: "acme/api"})
+	for _, r := range got {
+		if strings.Contains(r.Text, "extracting a helper") {
+			t.Fatalf("non-loop findings lifted: %+v", r)
+		}
+	}
+	ok := false
+	for _, r := range got {
+		if strings.Contains(r.Text, "jose") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("jose lost: %+v", got)
+	}
+}
+
+func TestExtractSkipsJSONSeverityShard(t *testing.T) {
+	got := Extract([]Message{
+		{Role: "assistant", Text: `","severity":"high","evidence":"/tmp/phone-qa/f028.png"},{"issue":"Mute works`, Offset: 1},
+		{Role: "assistant", Text: "Redis token bucket failed in staging.", Offset: 2},
+	}, ExtractOpts{ProjectKey: "acme/api"})
+	if len(got) != 1 || !strings.Contains(got[0].Text, "Redis") {
+		t.Fatalf("%+v", got)
+	}
+}
+
 func TestExtractKeepsDurableFromEarlyInLongSession(t *testing.T) {
 	var msgs []Message
 	msgs = append(msgs, Message{

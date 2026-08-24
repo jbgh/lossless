@@ -78,6 +78,46 @@ func TestAskCatchUpOmitsSidUsesStoredWorkspace(t *testing.T) {
 	}
 }
 
+func TestAskCatchUpTreatsDefaultSidAsOmitted(t *testing.T) {
+	st := tmpStore(t)
+	ws := filepath.Join(t.TempDir(), "acme-api")
+	current := writeJSONL(t, filepath.Join(ws, "s-current"), "tape.jsonl", catchUpLine)
+	behindBody := `{"type":"assistant","content":"Use limiter, not Redis, in src/middleware/auth.ts."}` + "\n"
+	behind := writeJSONL(t, filepath.Join(ws, "s-behind"), "tape.jsonl", behindBody)
+	for _, s := range []store.Session{
+		{JSONL: current, SessionID: "s-current", Harness: "grok", Workspace: ws, Project: "acme/api"},
+		{JSONL: behind, SessionID: "s-behind", Harness: "grok", Workspace: ws, Project: "acme/api"},
+	} {
+		if err := st.UpsertSession(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := write.CatchUp(st, write.CatchUpRequest{
+		JSONL: current, Project: "acme/api", WorkspaceRoot: ws,
+		Harness: "grok", SessionID: "s-current", Source: "turn",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := askAt(t, st, Request{
+		Project:       "acme/api",
+		WorkspaceRoot: ws,
+		SessionID:     "default",
+		Question:      "what limiter",
+		Goal:          "keep catch-up local",
+		Paths:         []string{"src/middleware/auth.ts", "internal/write/catchup.go"},
+	})
+	got := sessionClaims(t, st, "acme/api", "s-behind")
+	if len(got) == 0 {
+		t.Fatalf("default sid skipped project catch-up: %+v", out)
+	}
+	if len(sessionClaims(t, st, "acme/api", "default")) != 0 {
+		t.Fatal("bound a fake session default")
+	}
+	if len(sessionClaims(t, st, "acme/api", "chat_history")) != 0 {
+		t.Fatal("named session chat_history")
+	}
+}
+
 func TestAskCatchUpLocatesUnknownSid(t *testing.T) {
 	st := tmpStore(t)
 	home := t.TempDir()

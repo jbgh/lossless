@@ -117,13 +117,12 @@ func Discover(opts Options, known []store.Session) []Target {
 			if !strings.HasSuffix(path, ".jsonl") {
 				return nil
 			}
-			// project-level session files only, not nested agent dumps
-			rel, _ := filepath.Rel(opts.ClaudeRoot, path)
-			if strings.Count(filepath.ToSlash(rel), "/") != 1 {
+			cwd := harness.PeekClaudeCWD(path)
+			if cwd == "" {
 				return nil
 			}
 			sid := strings.TrimSuffix(filepath.Base(path), ".jsonl")
-			add(Target{JSONL: path, Harness: "claude", SessionID: sid, Workspace: harness.PeekClaudeCWD(path)})
+			add(Target{JSONL: path, Harness: "claude", SessionID: sid, Workspace: cwd})
 			return nil
 		})
 	}

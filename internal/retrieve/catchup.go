@@ -29,6 +29,7 @@ func (e Engine) maybeCatchUp(req Request) {
 	if e.Store == nil {
 		return
 	}
+	req.SessionID = CleanSessionID(req.SessionID)
 	if req.SessionID != "" {
 		if sess, ok := e.Store.SessionByID(req.SessionID); ok && sess.JSONL != "" {
 			e.catchUpKnown(req, sess)

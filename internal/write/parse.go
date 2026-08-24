@@ -218,7 +218,13 @@ func finishMessage(m Message) (Message, bool) {
 		m.Text = ""
 		return m, true
 	}
-	m.Text = clip(m.Text)
+	if _, _, ok := splitWorkflowMessage(m.Text); ok {
+		if len(m.Text) > 32<<10 {
+			m.Text = m.Text[:32<<10]
+		}
+	} else {
+		m.Text = clip(m.Text)
+	}
 	return m, true
 }
 

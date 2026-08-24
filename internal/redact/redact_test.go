@@ -76,6 +76,13 @@ func TestFilterPaths(t *testing.T) {
 	if len(got) != 2 || got[0] != "LightboxView.swift" || got[1] != "MediaViewerScreen.kt" {
 		t.Fatalf("file stem: %v", got)
 	}
+	got = FilterPaths([]string{
+		"/tmp/phone-qa/qa-report.md", "tmp/phone-qa/f028.png", "qa-report.md",
+		"src/tmp/scratch.go", "src/middleware/auth.ts",
+	})
+	if len(got) != 1 || got[0] != "src/middleware/auth.ts" {
+		t.Fatalf("scratch: %v", got)
+	}
 }
 
 func TestLineRedacts(t *testing.T) {

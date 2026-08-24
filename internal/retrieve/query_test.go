@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"lossless/internal/claim"
@@ -82,6 +83,50 @@ func TestNormalizeAndHelpers(t *testing.T) {
 		t.Fatalf("jwt should remain a symbol: %v", q.Symbols)
 	}
 	_ = os.Remove(filepath.Join(dir, "nope"))
+}
+
+func TestCleanSessionID(t *testing.T) {
+	for _, s := range []string{"", "default", "Default", "none", "null", "undefined", "  DEFAULT  "} {
+		if CleanSessionID(s) != "" {
+			t.Fatalf("%q", s)
+		}
+	}
+	if CleanSessionID("sess-1") != "sess-1" {
+		t.Fatal(CleanSessionID("sess-1"))
+	}
+}
+
+func TestNormalizeDropsScratchAskPaths(t *testing.T) {
+	q, err := normalize(Request{
+		Project:  "acme/api",
+		Question: "what failed on qa",
+		Goal:     "fix settings",
+		Paths:    []string{"/tmp/phone-qa/qa-report.md", "tmp/phone-qa/f028.png", "qa-report.md", "src/middleware/auth.ts"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range q.PathKeys {
+		if strings.Contains(strings.ToLower(k), "qa-report") || strings.Contains(strings.ToLower(k), "tmp") || strings.Contains(k, "f028") {
+			t.Fatalf("scratch leaked: %v", q.PathKeys)
+		}
+	}
+	ok := false
+	for _, k := range q.PathKeys {
+		if strings.Contains(k, "auth") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("lost repo path: %v", q.PathKeys)
+	}
+	if q.SessionID != "" {
+		t.Fatalf("sid %q", q.SessionID)
+	}
+	q, err = normalize(Request{Project: "acme/api", SessionID: "default", Question: "why redis"})
+	if err != nil || q.SessionID != "" {
+		t.Fatalf("default sid: %+v %v", q, err)
+	}
 }
 
 func TestMustJSONAndToHit(t *testing.T) {

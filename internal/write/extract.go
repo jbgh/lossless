@@ -88,7 +88,20 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			continue
 		}
 		near := nearby(msg, usable)
-		for _, sent := range splitSentences(msg.Text) {
+		sents := splitSentences(msg.Text)
+		fromFindings := map[string]bool{}
+		if issues, rest, ok := splitWorkflowMessage(msg.Text); ok {
+			tr.skip("workflow-json", msg.Text)
+			sents = splitSentences(rest)
+			for _, issue := range issues {
+				fromFindings[issue] = true
+				sents = append(sents, issue)
+			}
+			if len(sents) == 0 {
+				continue
+			}
+		}
+		for _, sent := range sents {
 			if skipSentence(sent) {
 				reason := "skip-prose"
 				if !gate.SkipProse(sent) {
@@ -99,6 +112,9 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			}
 			paths := redact.FilterPaths(claim.Uniq(append(findPaths(sent), near...)))
 			typ := classify(sent, msg)
+			if fromFindings[sent] {
+				typ = "failed"
+			}
 			if typ == "state" && gate.ProcessState(sent) {
 				tr.skip("process-state", sent)
 				continue

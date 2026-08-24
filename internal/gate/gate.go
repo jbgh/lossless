@@ -41,7 +41,7 @@ func Planning(s string) bool {
 	if containsAny(s, planning) {
 		return true
 	}
-	return planningVerb(s, []string{"merge", "clear", "measure"})
+	return planningVerb(s, []string{"merge", "clear", "measure", "search", "map", "open"})
 }
 
 // planningVerb is I'll / I will + verb not as a prefix of a longer word
@@ -78,6 +78,25 @@ func planningVerbAt(low, p string) bool {
 	return false
 }
 
+// packEcho is the agent talking about a packed failed, not a new failure.
+func packEcho(low string) bool {
+	if strings.Contains(low, "the failed ") && strings.Contains(low, " record is unrelated") {
+		return true
+	}
+	return strings.HasPrefix(low, "prior failure was another")
+}
+
+// JSONFragment is a chopped workflow/ask JSON shard, not a claim.
+func JSONFragment(s string) bool {
+	t := strings.TrimSpace(s)
+	if strings.HasPrefix(t, `","`) || strings.HasPrefix(t, `", "`) {
+		return true
+	}
+	t = strings.TrimLeft(t, "\"'`")
+	return strings.HasPrefix(t, `severity":`) || strings.HasPrefix(t, `evidence":`) ||
+		strings.HasPrefix(t, `issue":`)
+}
+
 func SessionOp(s string) bool {
 	return containsAny(s, sessionOp)
 }
@@ -109,7 +128,11 @@ func MetaFailedTalk(s string) bool {
 	}
 	low := Fold(strings.TrimSpace(s))
 	low = strings.TrimPrefix(low, "- ")
-	if strings.HasPrefix(low, "lossless flags") || strings.HasPrefix(low, "lossless returned") {
+	if strings.HasPrefix(low, "lossless flags") || strings.HasPrefix(low, "lossless returned") ||
+		strings.HasPrefix(low, "lossless flagged") {
+		return true
+	}
+	if packEcho(low) {
 		return true
 	}
 	if goFirstMash(low) || stillExtractsNoObject(low) {
@@ -386,6 +409,9 @@ func SkipProse(s string) bool {
 		return true
 	}
 	if exampleDrop(t) {
+		return true
+	}
+	if JSONFragment(t) {
 		return true
 	}
 	t = strings.TrimLeft(t, "\"“”'`")

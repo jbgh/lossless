@@ -189,7 +189,7 @@ func addSymbols(dst, toks []string) []string {
 }
 
 func (e Engine) resolveSession(req Request, q query) string {
-	if s := strings.TrimSpace(req.SessionID); s != "" {
+	if s := CleanSessionID(req.SessionID); s != "" {
 		return s
 	}
 	if q.SessionID != "" {

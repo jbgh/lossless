@@ -148,6 +148,36 @@ func TestSkipProse(t *testing.T) {
 	if !SkipProse("Lossless returned prior-failure and constraint hits.") {
 		t.Fatal("lossless returned pack echo")
 	}
+	if !SkipProse("Lossless flagged a prior overlay/Cancel failure.") {
+		t.Fatal("lossless flagged pack echo")
+	}
+	if SkipProse("Redis token bucket failed after lossless flagged 429 in src/middleware/auth.ts.") {
+		t.Fatal("lossless flagged mid-sentence keep")
+	}
+	if !SkipProse("I'll search Gitea for existing tickets and confirm root causes.") {
+		t.Fatal("i'll search planning")
+	}
+	if !SkipProse("The failed HomeView record is unrelated; I'll map Favorites/Lightbox controls.") {
+		t.Fatal("failed record pack echo")
+	}
+	if !SkipProse("I'll open it next, then Upgrade and Log Out.") {
+		t.Fatal("i'll open planning")
+	}
+	if !SkipProse("Prior failure was another surface, not Settings.") {
+		t.Fatal("prior failure pack echo")
+	}
+	if !SkipProse(`","severity":"high","evidence":"/tmp/phone-qa/frames/f028.png"`) {
+		t.Fatal("json severity shard")
+	}
+	if SkipProse("I'll stick with JWT next.") {
+		t.Fatal("i'll stick with keep")
+	}
+	if SkipProse("I'll open-source the JWT limiter instead of forking.") {
+		t.Fatal("i'll open-source keep")
+	}
+	if SkipProse("I will open-source the SDK instead of forking.") {
+		t.Fatal("i will open-source keep")
+	}
 	if SkipProse("Redis token bucket failed after lossless flags were rewritten in src/middleware/auth.ts.") {
 		t.Fatal("lossless flags mid-sentence keep")
 	}

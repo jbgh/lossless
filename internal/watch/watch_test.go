@@ -43,11 +43,16 @@ func TestDiscoverAndTick(t *testing.T) {
 		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// nested dump ignored
+	// nested dump without cwd stays skipped; nested with cwd is catch-up
 	if err := os.MkdirAll(filepath.Join(cdir, "agent"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	_ = os.WriteFile(filepath.Join(cdir, "agent", "nested.jsonl"), []byte("x\n"), 0o644)
+	nestedOK := filepath.Join(cdir, "agent", "nested-ok.jsonl")
+	if err := os.WriteFile(nestedOK, []byte(`{"type":"user","cwd":"`+ws+`","message":{"role":"user","content":"go"}}`+"\n"+
+		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	xdir := filepath.Join(root, "codex", "2026", "08", "14")
 	if err := os.MkdirAll(xdir, 0o755); err != nil {
@@ -100,7 +105,7 @@ func TestDiscoverAndTick(t *testing.T) {
 			}
 		}
 	}
-	if grok != 1 || claude != 1 || codex != 1 || pi != 1 {
+	if grok != 1 || claude != 2 || codex != 1 || pi != 1 {
 		t.Fatalf("discover grok=%d claude=%d codex=%d pi=%d %+v", grok, claude, codex, pi, found)
 	}
 
@@ -113,7 +118,7 @@ func TestDiscoverAndTick(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.CatchUps < 4 { // grok + claude (peeked cwd) + codex + pi
+	if res.CatchUps < 5 { // grok + claude + nested claude with cwd + codex + pi
 		t.Fatalf("catch_ups=%d seen=%d", res.CatchUps, res.Seen)
 	}
 	claims, _ := st.ListActive("jay/dev") // FromOrigin? FromWorkspace of /Users/jay/dev/api

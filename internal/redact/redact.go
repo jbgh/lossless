@@ -51,7 +51,7 @@ func FilterPaths(paths []string) []string {
 	var out []string
 	for _, p := range paths {
 		p = normalizeRelPath(p)
-		if p == "" || traversalPath(p) || remotePath(p) || gitDirPath(p) || depDirPath(p) || sensitivePath.MatchString(p) {
+		if p == "" || traversalPath(p) || remotePath(p) || gitDirPath(p) || depDirPath(p) || scratchPath(p) || sensitivePath.MatchString(p) {
 			continue
 		}
 		out = append(out, p)
@@ -101,6 +101,18 @@ func traversalPath(p string) bool {
 		}
 	}
 	return false
+}
+
+func scratchPath(p string) bool {
+	n := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(p), "\\", "/"))
+	if n == "tmp" || strings.HasPrefix(n, "tmp/") || strings.Contains(n, "/tmp/") {
+		return true
+	}
+	base := n
+	if i := strings.LastIndex(n, "/"); i >= 0 {
+		base = n[i+1:]
+	}
+	return base == "qa-report.md"
 }
 
 func gitDirPath(p string) bool {

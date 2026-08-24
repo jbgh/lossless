@@ -8,6 +8,7 @@ import (
 	"lossless/internal/claim"
 	"lossless/internal/gate"
 	"lossless/internal/projectkey"
+	"lossless/internal/redact"
 	"lossless/internal/write"
 )
 
@@ -71,6 +72,17 @@ func resolveProject(req Request) (string, error) {
 	return "", errBadRequest
 }
 
+// CleanSessionID drops sentinels children send instead of omitting the field.
+// "default" must not exact-locate or bind a fake action tape id.
+func CleanSessionID(s string) string {
+	s = strings.TrimSpace(s)
+	switch strings.ToLower(s) {
+	case "", "default", "none", "null", "undefined":
+		return ""
+	}
+	return s
+}
+
 func normalize(req Request) (query, error) {
 	project, err := resolveProject(req)
 	if err != nil {
@@ -78,7 +90,7 @@ func normalize(req Request) (query, error) {
 	}
 	qtoks := claim.Tokens(req.Question)
 	gtoks := claim.Tokens(req.Goal)
-	paths := claim.PathKeys(req.Paths)
+	paths := claim.PathKeys(redact.FilterPaths(req.Paths))
 	var symbols []string
 	seen := map[string]bool{}
 	addSym := func(s string) {
@@ -115,7 +127,7 @@ func normalize(req Request) (query, error) {
 		LookupTokens:   lookup,
 		PathKeys:       paths,
 		Symbols:        symbols,
-		SessionID:      strings.TrimSpace(req.SessionID),
+		SessionID:      CleanSessionID(req.SessionID),
 		Served:         map[string]bool{},
 		Dwell:          map[string]bool{},
 		Warned:         map[string]bool{},
