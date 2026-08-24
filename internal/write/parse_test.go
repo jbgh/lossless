@@ -238,9 +238,9 @@ func TestClip(t *testing.T) {
 
 func TestParseKeepsWorkflowFindingsJSON(t *testing.T) {
 	issue := "Settings opens Family instead of the child list."
-	inner := `{"asked":true,"pad":"` + strings.Repeat("x", 2500) + `","findings":[{"issue":"` + issue + `","severity":"high"}],"ok":true}`
-	if len(inner) <= 2000 {
-		t.Fatalf("need longer than clip: %d", len(inner))
+	inner := `{"asked":true,"pad":"` + strings.Repeat("x", 40*1024) + `","findings":[{"issue":"` + issue + `","severity":"high"}],"ok":true}`
+	if len(inner) <= 32<<10 {
+		t.Fatalf("need longer than 32k prefix: %d", len(inner))
 	}
 	raw, err := json.Marshal(map[string]any{"type": "assistant", "content": inner})
 	if err != nil {

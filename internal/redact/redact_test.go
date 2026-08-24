@@ -78,9 +78,9 @@ func TestFilterPaths(t *testing.T) {
 	}
 	got = FilterPaths([]string{
 		"/tmp/phone-qa/qa-report.md", "tmp/phone-qa/f028.png", "qa-report.md",
-		"src/tmp/scratch.go", "src/middleware/auth.ts",
+		"src/tmp/scratch.go", "docs/qa-report.md", "src/middleware/auth.ts",
 	})
-	if len(got) != 1 || got[0] != "src/middleware/auth.ts" {
+	if len(got) != 3 || got[0] != "src/tmp/scratch.go" || got[1] != "docs/qa-report.md" || got[2] != "src/middleware/auth.ts" {
 		t.Fatalf("scratch: %v", got)
 	}
 }

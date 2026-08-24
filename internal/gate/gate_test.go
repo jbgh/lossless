@@ -157,6 +157,27 @@ func TestSkipProse(t *testing.T) {
 	if !SkipProse("I'll search Gitea for existing tickets and confirm root causes.") {
 		t.Fatal("i'll search planning")
 	}
+	if !SkipProse("I'll map Favorites/Lightbox controls.") {
+		t.Fatal("i'll map planning")
+	}
+	if !SkipProse("Lossless will not abort a child if ask is missing.") {
+		t.Fatal("lossless will pack echo")
+	}
+	if !SkipProse("Lossless ask returned the USB-only / cream-hole.") {
+		t.Fatal("lossless ask returned pack echo")
+	}
+	if SkipProse("Redis token bucket failed after lossless will retry in src/middleware/auth.ts.") {
+		t.Fatal("lossless will mid-sentence keep")
+	}
+	if !SkipProse("READ-ONLY: do not push, edit, or merge.") {
+		t.Fatal("read-only instruction")
+	}
+	if !SkipProse("Return APPROVE or REQUEST_CHANGES with findings ranked by severity.") {
+		t.Fatal("approve rubric")
+	}
+	if !SkipProse("Now I understand the failure.") {
+		t.Fatal("now i understand")
+	}
 	if !SkipProse("The failed HomeView record is unrelated; I'll map Favorites/Lightbox controls.") {
 		t.Fatal("failed record pack echo")
 	}

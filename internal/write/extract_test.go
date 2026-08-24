@@ -124,6 +124,71 @@ func TestExtractWorkflowJSONKeepsLeftoverProse(t *testing.T) {
 	}
 }
 
+func TestExtractWorkflowJSONKeepsLeftoverAfterLeadingFence(t *testing.T) {
+	body := "```json\n" +
+		`{"asked":true,"findings":[{"issue":"Settings opens Family instead of the child list.","severity":"high"}],"ok":true}` +
+		"\n```\nI'll stick with JWT next."
+	got := Extract([]Message{{Role: "assistant", Text: body, Offset: 1}}, ExtractOpts{ProjectKey: "acme/api"})
+	var blob string
+	for _, r := range got {
+		blob += r.Type + ":" + r.Text + "\n"
+	}
+	if !strings.Contains(blob, "JWT") || !strings.Contains(blob, "Settings opens Family") {
+		t.Fatalf("lost leftover after fence: %s", blob)
+	}
+}
+
+func TestExtractIgnoresAskedFalse(t *testing.T) {
+	body := `{"asked":false,"findings":[{"issue":"Consider extracting a helper.","severity":"high"}]}` +
+		"\nWe decided to use jose, not jsonwebtoken, for Edge."
+	got := Extract([]Message{{Role: "assistant", Text: body, Offset: 1}}, ExtractOpts{ProjectKey: "acme/api"})
+	for _, r := range got {
+		if strings.Contains(r.Text, "extracting a helper") {
+			t.Fatalf("asked=false lifted: %+v", r)
+		}
+	}
+	ok := false
+	for _, r := range got {
+		if strings.Contains(r.Text, "jose") {
+			ok = true
+		}
+	}
+	if !ok {
+		t.Fatalf("jose lost: %+v", got)
+	}
+}
+
+func TestExtractSkipsInstructionChrome(t *testing.T) {
+	got := Extract([]Message{
+		{Role: "assistant", Text: "READ-ONLY: do not push, edit, or merge.", Offset: 1},
+		{Role: "assistant", Text: "Now I understand the failure in src/middleware/auth.ts.", Offset: 2},
+		{Role: "assistant", Text: "Return APPROVE or REQUEST_CHANGES with findings ranked by severity.", Offset: 3},
+		{Role: "assistant", Text: "Redis token bucket failed in src/middleware/auth.ts staging.", Offset: 4},
+	}, ExtractOpts{ProjectKey: "acme/api"})
+	if len(got) != 1 || !strings.Contains(got[0].Text, "Redis") {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestExtractKeepsSrcTmpFailed(t *testing.T) {
+	got := Extract([]Message{{
+		Role: "assistant", Offset: 1,
+		Text: "Redis token bucket failed in src/tmp/limiter.ts staging.",
+	}}, ExtractOpts{ProjectKey: "acme/api"})
+	ok := false
+	for _, r := range got {
+		if r.Type == "failed" && strings.Contains(r.Text, "Redis") {
+			ok = true
+			if len(r.Paths) == 0 {
+				t.Fatalf("src/tmp path dropped: %+v", r)
+			}
+		}
+	}
+	if !ok {
+		t.Fatalf("src/tmp failed lost: %+v", got)
+	}
+}
+
 func TestExtractIgnoresFindingsJSONWithoutAsked(t *testing.T) {
 	body := `{"findings":[{"issue":"Consider extracting a helper.","severity":"high"}]}` +
 		"\nWe decided to use jose, not jsonwebtoken, for Edge."

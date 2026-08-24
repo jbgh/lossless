@@ -53,6 +53,15 @@ func TestDiscoverAndTick(t *testing.T) {
 		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	subDir := filepath.Join(cdir, "uuid-1", "subagents")
+	if err := os.MkdirAll(subDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	subDump := filepath.Join(subDir, "agent-deadbeef.jsonl")
+	if err := os.WriteFile(subDump, []byte(`{"type":"user","cwd":"`+ws+`","message":{"role":"user","content":"go"}}`+"\n"+
+		`{"type":"assistant","content":"READ-ONLY: do not push, edit, or merge."}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	xdir := filepath.Join(root, "codex", "2026", "08", "14")
 	if err := os.MkdirAll(xdir, 0o755); err != nil {

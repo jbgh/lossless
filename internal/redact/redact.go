@@ -105,14 +105,10 @@ func traversalPath(p string) bool {
 
 func scratchPath(p string) bool {
 	n := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(p), "\\", "/"))
-	if n == "tmp" || strings.HasPrefix(n, "tmp/") || strings.Contains(n, "/tmp/") {
+	if n == "tmp" || strings.HasPrefix(n, "tmp/") {
 		return true
 	}
-	base := n
-	if i := strings.LastIndex(n, "/"); i >= 0 {
-		base = n[i+1:]
-	}
-	return base == "qa-report.md"
+	return n == "qa-report.md"
 }
 
 func gitDirPath(p string) bool {

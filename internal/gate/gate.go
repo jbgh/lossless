@@ -114,6 +114,33 @@ func AgentPrompt(s string) bool {
 	return strings.HasPrefix(low, "can you ") || strings.HasPrefix(low, "could you ")
 }
 
+// InstructionChrome is Claude Task/reviewer prompt text, not a product claim.
+func InstructionChrome(s string) bool {
+	low := Fold(strings.TrimSpace(s))
+	low = strings.TrimPrefix(low, "- ")
+	low = strings.TrimLeft(low, "\"“”'`*# ")
+	if strings.HasPrefix(low, "read-only") {
+		return true
+	}
+	if strings.Contains(low, "(read-only") {
+		return true
+	}
+	if strings.HasPrefix(low, "now i understand the failure") {
+		return true
+	}
+	if strings.HasPrefix(low, "rank any findings by severity") {
+		return true
+	}
+	if strings.HasPrefix(low, "for each:") && strings.Contains(low, "severity") {
+		return true
+	}
+	if strings.HasPrefix(low, "return ") &&
+		(strings.Contains(low, "approve or request") || strings.Contains(low, "ranked findings")) {
+		return true
+	}
+	return false
+}
+
 func StatusFailed(s string) bool {
 	return containsAny(s, statusFailed)
 }
@@ -129,7 +156,8 @@ func MetaFailedTalk(s string) bool {
 	low := Fold(strings.TrimSpace(s))
 	low = strings.TrimPrefix(low, "- ")
 	if strings.HasPrefix(low, "lossless flags") || strings.HasPrefix(low, "lossless returned") ||
-		strings.HasPrefix(low, "lossless flagged") {
+		strings.HasPrefix(low, "lossless flagged") || strings.HasPrefix(low, "lossless will") ||
+		strings.HasPrefix(low, "lossless ask returned") {
 		return true
 	}
 	if packEcho(low) {
@@ -412,6 +440,9 @@ func SkipProse(s string) bool {
 		return true
 	}
 	if JSONFragment(t) {
+		return true
+	}
+	if InstructionChrome(t) {
 		return true
 	}
 	t = strings.TrimLeft(t, "\"“”'`")

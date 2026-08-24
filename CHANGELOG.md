@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.19 — 2026-08-24
+
+- Watcher skips Claude `subagents/` and `agent-*.jsonl` dumps, including rows already in the session table. Nested JSONL with cwd that is not a subagent file still catch-up. Unknown-cwd still skips.
+- Extract skips READ-ONLY (prefix, quoted, or `(READ-ONLY`) / APPROVE-or-REQUEST_CHANGES / `For each: title, severity` reviewer chrome and `Now I understand the failure`. Prefix `Lossless will` and `Lossless ask returned` are pack echo. Mid-sentence lossless will still stores.
+- Child-loop leftover prose after a leading findings fence still extracts. `asked` must be true. Parse keeps findings by compacting the loop body, not a 32KB prefix.
+- Ask/extract drop `tmp/` prefix and exact `qa-report.md`. `src/tmp/…` and `docs/qa-report.md` stay. Skill: omit `session_id` if the prompt does not have one; do not invent; do not send `default`.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.18 — 2026-08-24
 
 - Extract lifts `findings[].issue` from child-loop JSON that has `asked` and `severity` as **faileds** (even `instead of` QA English). Leftover prose in the same turn still extracts. JSON `"severity"` shards skip. Ask packets stay skipped. Findings JSON without `asked` is not a loop body.

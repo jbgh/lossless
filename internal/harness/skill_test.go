@@ -22,7 +22,7 @@ func TestInstallSkillsWritesEveryHarness(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(body)
-	for _, need := range []string{"name: lossless", "ask", "workspace_root", "when not to call", "active/<owner__repo>.md", "get_record", "has_excerpt", "session_id", "do not send `default`"} {
+	for _, need := range []string{"name: lossless", "ask", "workspace_root", "when not to call", "active/<owner__repo>.md", "get_record", "has_excerpt", "session_id", "do not send `default`", "do not invent"} {
 		if !strings.Contains(strings.ToLower(s), strings.ToLower(need)) {
 			t.Fatalf("missing %q in skill", need)
 		}

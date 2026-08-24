@@ -75,7 +75,7 @@ Install order: **Grok → Claude → Codex → Pi → OpenCode**. That is popula
 
 ### Claude Code
 
-- Locate: hook field `transcript_path`. Do not guess if it is present. The watcher peeks `cwd` from user/attachment lines so Claude JSONL catch-up without a prior hook, including nested JSONL when cwd is in the transcript. The project-dir slug is not reversible. Unknown-cwd files still skip. Do not rewrite `cleanupPeriodDays`.
+- Locate: hook field `transcript_path`. Do not guess if it is present. The watcher peeks `cwd` from user/attachment lines so Claude JSONL catch-up without a prior hook, including nested JSONL when cwd is in the transcript. `subagents/` and `agent-*.jsonl` dumps skip. The project-dir slug is not reversible. Unknown-cwd files still skip. Do not rewrite `cleanupPeriodDays`.
 - Fire: `Stop`, `UserPromptSubmit` (write observe only), `PreCompact`, `SessionEnd`. No `additionalContext`.
 - Normalize: `message.role` / `message.content` (string or parts).
 - Install: `~/.claude/settings.json` hooks (user scope) so it is not per-repo.

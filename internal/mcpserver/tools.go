@@ -21,7 +21,7 @@ func toolDefs() []map[string]any {
 					"workspace_root": map[string]any{"type": "string", "description": "Absolute git checkout of this repo (origin derives owner/repo). Used for [verify] mtimes."},
 					"goal":           map[string]any{"type": "string", "description": "What the agent is about to do."},
 					"paths":          map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Repo-relative files in this checkout, not /tmp reports."},
-					"session_id":     map[string]any{"type": "string", "description": "Harness session id when present (child's own id in a subagent or workflow). Omit only if the harness did not give one. Never send default."},
+					"session_id":     map[string]any{"type": "string", "description": "Harness session id from this prompt (child's own id in a subagent or workflow). Omit if the prompt does not have one. Do not invent. Never send default."},
 					"limit_tokens":   map[string]any{"type": "integer", "description": "Token budget for context. Default 1200."},
 				},
 			},

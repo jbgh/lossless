@@ -88,6 +88,9 @@ func Discover(opts Options, known []store.Session) []Target {
 		out = append(out, t)
 	}
 	for _, s := range known {
+		if s.Harness == "claude" && claudeSubagentDump(s.JSONL) {
+			continue
+		}
 		add(Target{JSONL: s.JSONL, Harness: s.Harness, SessionID: s.SessionID, Workspace: s.Workspace, Project: s.Project})
 	}
 	if opts.GrokRoot != "" {
@@ -115,6 +118,11 @@ func Discover(opts Options, known []store.Session) []Target {
 				return nil
 			}
 			if !strings.HasSuffix(path, ".jsonl") {
+				return nil
+			}
+			// Task/workflow dumps are instruction chrome, not product tape.
+			// Nested JSONL with cwd that is not under subagents/ still catch-up.
+			if claudeSubagentDump(path) {
 				return nil
 			}
 			cwd := harness.PeekClaudeCWD(path)
@@ -323,6 +331,16 @@ func Tick(st *store.Store, opts Options) (Result, error) {
 		}
 	}
 	return res, nil
+}
+
+// claudeSubagentDump is Claude Code Task/workflow JSONL, not a session tape.
+func claudeSubagentDump(path string) bool {
+	n := filepath.ToSlash(path)
+	if strings.Contains(n, "/subagents/") {
+		return true
+	}
+	base := strings.ToLower(filepath.Base(n))
+	return strings.HasPrefix(base, "agent-") && strings.HasSuffix(base, ".jsonl")
 }
 
 func Run(ctx context.Context, st *store.Store, opts Options) error {

@@ -101,15 +101,24 @@ func TestNormalizeDropsScratchAskPaths(t *testing.T) {
 		Project:  "acme/api",
 		Question: "what failed on qa",
 		Goal:     "fix settings",
-		Paths:    []string{"/tmp/phone-qa/qa-report.md", "tmp/phone-qa/f028.png", "qa-report.md", "src/middleware/auth.ts"},
+		Paths:    []string{"/tmp/phone-qa/qa-report.md", "tmp/phone-qa/f028.png", "qa-report.md", "src/tmp/limiter.ts", "src/middleware/auth.ts"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, k := range q.PathKeys {
-		if strings.Contains(strings.ToLower(k), "qa-report") || strings.Contains(strings.ToLower(k), "tmp") || strings.Contains(k, "f028") {
+		if k == "qa-report.md" || strings.HasPrefix(strings.ToLower(k), "tmp/") || strings.Contains(k, "f028") {
 			t.Fatalf("scratch leaked: %v", q.PathKeys)
 		}
+	}
+	keptTmp := false
+	for _, k := range q.PathKeys {
+		if strings.Contains(k, "limiter") {
+			keptTmp = true
+		}
+	}
+	if !keptTmp {
+		t.Fatalf("lost src/tmp path: %v", q.PathKeys)
 	}
 	ok := false
 	for _, k := range q.PathKeys {
@@ -169,6 +178,15 @@ func TestExtractNoiseAndJobOverlap(t *testing.T) {
 	}
 	if !extractNoise(claim.Record{Type: "failed", Text: "The live ask just returned five `failed`s, and four look like extract noise."}) {
 		t.Fatal("backticked type mention")
+	}
+	if !extractNoise(claim.Record{Type: "constraint", Text: "READ-ONLY: do not push, edit, or merge."}) {
+		t.Fatal("read-only")
+	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "Now I understand the failure.", Paths: []string{"src/middleware/auth.ts"}}) {
+		t.Fatal("now i understand")
+	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "Lossless will not abort a child if ask is missing."}) {
+		t.Fatal("lossless will")
 	}
 	if !extractNoise(claim.Record{Type: "failed", Text: "## Investigation: why those uploads failed"}) {
 		t.Fatal("heading")

@@ -505,7 +505,7 @@ func TestMainDispatch(t *testing.T) {
 		t.Fatalf("unknown %d %s", code, out)
 	}
 	out, code = run("version")
-	if code != 0 || !strings.Contains(out, "lossless") || !strings.Contains(out, "0.1.18") {
+	if code != 0 || !strings.Contains(out, "lossless") || !strings.Contains(out, "0.1.19") {
 		t.Fatalf("version %d %s", code, out)
 	}
 	out, code = run("help")
