@@ -53,6 +53,43 @@ func TestCatchUpCopiesIntoOwnedRaw(t *testing.T) {
 	}
 }
 
+func TestCatchUpSawCompact(t *testing.T) {
+	st := tmpStore(t)
+	dir := t.TempDir()
+	src := writeJSONL(t, dir, "chat.jsonl",
+		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}`+"\n")
+	first, err := CatchUp(st, CatchUpRequest{JSONL: src, Project: "acme/api", Harness: "grok", SessionID: "s-c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.SawCompact {
+		t.Fatal("first ingest")
+	}
+	prev, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(src, append(prev, []byte(`{"type":"compaction","content":"compacted"}`+"\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := CatchUp(st, CatchUpRequest{JSONL: src, Project: "acme/api", Harness: "grok", SessionID: "s-c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.SawCompact {
+		t.Fatal("missed compaction delta")
+	}
+	plain := writeJSONL(t, t.TempDir(), "plain.jsonl",
+		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}`+"\n")
+	res2, err := CatchUp(st, CatchUpRequest{JSONL: plain, Project: "acme/api", Harness: "grok", SessionID: "s-p"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.SawCompact {
+		t.Fatal("plain first ingest")
+	}
+}
+
 func TestCatchUpRefusesLiveTestIngest(t *testing.T) {
 	root := filepath.Join(os.TempDir(), "ll-refuse-live")
 	if err := os.MkdirAll(root, 0o700); err != nil {

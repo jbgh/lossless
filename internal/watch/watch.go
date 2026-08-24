@@ -9,6 +9,7 @@ import (
 
 	"lossless/internal/harness"
 	"lossless/internal/projectkey"
+	"lossless/internal/retrieve"
 	"lossless/internal/store"
 	"lossless/internal/write"
 )
@@ -309,6 +310,10 @@ func Tick(st *store.Store, opts Options) (Result, error) {
 		if !out.Noop && out.Copied > 0 {
 			res.CatchUps++
 			_, _ = write.FlushPush(st.Root)
+		}
+		if out.SawCompact {
+			req.Source = "compact"
+			retrieve.RefreshActive(st, st.Root, req, out.RawPath)
 		}
 		idle := opts.IdleSeal
 		if idle <= 0 {

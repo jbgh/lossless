@@ -36,6 +36,7 @@ type CatchUpResult struct {
 	RawPath    string   `json:"raw_path"`
 	Sealed     string   `json:"sealed,omitempty"`
 	Noop       bool     `json:"noop"`
+	SawCompact bool     `json:"saw_compact,omitempty"`
 }
 
 func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
@@ -173,6 +174,16 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 	out.RawPath = rawPath
 
 	msgs, _ := ParseJSONL(clean.String(), rawBase)
+	// First ingest of an old file must not refresh checkout. Only a
+	// compact line in a delta after a cursor already existed.
+	if srcOff > 0 {
+		for _, m := range msgs {
+			if m.Compact {
+				out.SawCompact = true
+				break
+			}
+		}
+	}
 	if xs := ChunkExcerpts(session, project, msgs); len(xs) > 0 {
 		if err := st.WriteExcerpts(now.UTC().Format("2006-01"), xs); err != nil {
 			return out, err

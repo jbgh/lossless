@@ -121,8 +121,32 @@ func TestSkipProse(t *testing.T) {
 	if !SkipProse("I'll verify the generated output in a throwaway copy.") {
 		t.Fatal("i'll verify planning")
 	}
+	if !SkipProse("I'll merge each one as it goes green instead of waiting for the whole batch.") {
+		t.Fatal("i'll merge planning")
+	}
+	if !SkipProse("xcodebuild failed on the leftover xcresult; I'll clear it and restart.") {
+		t.Fatal("i'll clear planning")
+	}
+	if !SkipProse("I'll measure the open animation on a 30fps sim.") {
+		t.Fatal("i'll measure planning")
+	}
+	if SkipProse("I'll stick with postgres instead of mysql.") {
+		t.Fatal("i'll stick with still a decision")
+	}
+	if SkipProse("I will clearly stick with JWT next.") {
+		t.Fatal("i'll clearly is not i'll clear")
+	}
+	if SkipProse("I'll cleartext JWTs in src/auth.ts instead of hashing.") {
+		t.Fatal("i'll cleartext is not i'll clear")
+	}
+	if SkipProse("Redis token bucket failed after lossless returned 429 in src/middleware/auth.ts.") {
+		t.Fatal("lossless returned mid-sentence keep")
+	}
 	if !SkipProse("Lossless flags an old iOS open failure: the flyer sat behind the dest.") {
 		t.Fatal("lossless flags meta")
+	}
+	if !SkipProse("Lossless returned prior-failure and constraint hits.") {
+		t.Fatal("lossless returned pack echo")
 	}
 	if SkipProse("Redis token bucket failed after lossless flags were rewritten in src/middleware/auth.ts.") {
 		t.Fatal("lossless flags mid-sentence keep")

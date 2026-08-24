@@ -47,7 +47,7 @@ Vectors and graphs are optional indexes later. They do not change this split.
 |---------------------|-------------|-----------|
 | **All intelligence in the model** (memory is raw FTS/grep) | Simple store. cass. | Every model writes a different query. Anti-regression is optional. We are not a product. |
 | **All intelligence in memory** (LLM rerank, "figure out what they need") | Magical demos. | Network, cost, hook timeouts, a second agent that can hallucinate your past. Secrets leave the box if the reranker is hosted. |
-| **Split (this design)** | Same context from Grok, Claude, Codex. Warnings are deterministic. Store stays local and testable. | We must *force the ask* via skill/hook. Models that ignore the skill get nothing. |
+| **Split (this design)** | Same context from Grok, Claude, Codex. Warnings are deterministic. Store stays local and testable. | The skill must call `ask`. Models that ignore the skill get nothing. |
 
 Letta puts memory tools in the agent's hands (self-edit). claude-mem auto-injects compressed observations. Grok's own memory auto-searches on first turn and after compact. cass is a human search box.
 
@@ -105,7 +105,7 @@ The shipped skill says: before implementing, call `ask` with the current goal an
 
 The **model** fills `goal` / `paths` / `question` from the user turn. That is "who writes the query" in practice: the same agent that is about to edit code.
 
-This is the only portable path. Grok cannot hook-inject. Codex has no PreCompact inject.
+This is the only portable path. lossless does not inject through a harness API.
 
 Risk: the model forgets to call. Mitigation: skill is global and short; evals that ignore the skill fail in real use, not in unit tests. lossless does not inject through a harness API (`additionalContext`, first-turn memory, PostCompact).
 
@@ -183,7 +183,7 @@ The packet is not written back as a new claim. It is already derived from claims
 | After compact | active file from owned raw + skill | Window just became a summary |
 | User asks "did we already…" | model | Explicit |
 
-**Hole:** auto-compact mid-turn. The next model call in the *same* turn may not go through UserPromptSubmit and Grok cannot inject on PostCompact. The model only has the compact summary plus the still-loaded skill. If it does not call `ask`, that turn is under-informed.
+**Hole:** auto-compact mid-turn. The next model call in the *same* turn may not go through UserPromptSubmit. Grok PostCompact does not write the pull file (that is PreCompact). The model only has the compact summary plus the still-loaded skill. If it does not call `ask`, that turn is under-informed.
 
 Mitigations, in order:
 

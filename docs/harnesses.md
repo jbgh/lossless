@@ -33,7 +33,7 @@ adapter.on(native_event):
 
 Installers differ. Catch-up does not.
 
-Universal fallback, every harness: a **directory watch** on that harness's session root. If a compact hook misses or crashes, the watcher still copies new bytes. Hooks are the timely path — PreCompact must finish the raw copy before the window shrinks. The watcher is how we still remember everything.
+Universal fallback, every harness: a **directory watch** on that harness's session root. If a compact hook misses or crashes, the watcher still copies new bytes. Compact **checkout** (`active/<owner__repo>.md`) is separate: PreCompact is the timely path; the watcher writes that file only when the new chunk contains `type=compaction` (Pi). Grok compact does not write that line — Grok checkout stays the PreCompact hook.
 
 ---
 

@@ -134,7 +134,10 @@ func Handler(st *store.Store, token string) http.Handler {
 			return
 		}
 		go func() { _, _ = write.FlushPush(st.Root) }()
-		if retrieve.CompactSource(req.Source) {
+		if retrieve.CompactSource(req.Source) || (out.SawCompact && req.Source != "compacted") {
+			if out.SawCompact {
+				req.Source = "compact"
+			}
 			go retrieve.RefreshActive(st, st.Root, req, out.RawPath)
 		}
 		writeJSON(w, http.StatusOK, out)

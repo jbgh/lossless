@@ -142,6 +142,48 @@ func TestDiscoverAndTick(t *testing.T) {
 	}
 }
 
+func TestTickWritesActiveOnCompactionDelta(t *testing.T) {
+	root := t.TempDir()
+	ws := "/Users/jay/dev/api"
+	sid := "sess-compact"
+	gdir := filepath.Join(root, "grok", harness.EncodeCWD(ws), sid)
+	if err := os.MkdirAll(gdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gfile := filepath.Join(gdir, "chat_history.jsonl")
+	body := `{"type":"user","content":"keep jose in src/middleware/auth.ts"}` + "\n" +
+		`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."}` + "\n"
+	if err := os.WriteFile(gfile, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	opts := Options{GrokRoot: filepath.Join(root, "grok")}
+	if _, err := Tick(st, opts); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(st.Root, "active")); !os.IsNotExist(err) {
+		t.Fatal("grow without compaction wrote checkout")
+	}
+	if err := os.WriteFile(gfile, []byte(body+`{"type":"compaction","content":"window compacted"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Tick(st, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.CatchUps < 1 {
+		t.Fatalf("catch_ups=%d", res.CatchUps)
+	}
+	ents, err := os.ReadDir(filepath.Join(st.Root, "active"))
+	if err != nil || len(ents) == 0 {
+		t.Fatalf("checkout missing after compaction delta: %v", err)
+	}
+}
+
 func TestIdleSeal(t *testing.T) {
 	root := t.TempDir()
 	ws := "/Users/jay/dev/api"

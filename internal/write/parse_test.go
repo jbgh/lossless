@@ -23,6 +23,7 @@ func TestParseJSONLSkipsAndRoles(t *testing.T) {
 		``,
 		`not-json`,
 		`{"_redacted":true}`,
+		`{"type":"compaction","content":"compacted"}`,
 		`{"type":"system","content":"sys"}`,
 		`{"type":"reasoning","content":"think"}`,
 		`{"type":"backend_tool_call","content":"x"}`,
@@ -64,6 +65,22 @@ func TestParseJSONLSkipsAndRoles(t *testing.T) {
 	msgs, _ = ParseJSONL(bom, 0)
 	if len(msgs) != 1 || msgs[0].Skip || !strings.Contains(msgs[0].Text, "jose") {
 		t.Fatalf("BOM: %+v", msgs)
+	}
+}
+
+func TestParseJSONLCompactionFlag(t *testing.T) {
+	msgs, _ := ParseJSONL(`{"type":"compaction","content":"x"}`+"\n"+`{"type":"assistant","content":"ok go"}`+"\n", 0)
+	n := 0
+	for _, m := range msgs {
+		if m.Compact {
+			n++
+			if !m.Skip {
+				t.Fatal("compaction must skip extract")
+			}
+		}
+	}
+	if n != 1 {
+		t.Fatalf("compact=%d %+v", n, msgs)
 	}
 }
 

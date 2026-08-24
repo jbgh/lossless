@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.17 — 2026-08-24
+
+- Extract: I'll-merge / I'll-clear / I'll-measure skip when the verb is a whole word (`I'll clear it`). `I'll clearly` / `I'll cleartext` / `I'll stick with` still store. Prefix `Lossless returned` is pack echo, same class as `Lossless flags`.
+- Watcher writes the compact checkout when a **new** chunk (cursor already set) contains `type=compaction` — Pi's compact line. Grok compact does not write that line; Grok checkout is still PreCompact. A turn catch-up that copies that line still writes the pull file. Not an inject. Stop stays write-only.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.16 — 2026-08-24
 
 - After compact, `~/.lossless/active/<owner__repo>.md` is a hot ask from **owned raw** (last user line + paths) and a bibliography (`id`, `has_excerpt`). Cite lines stay blockquoted. Written on PreCompact / compacting only, not PostCompact. Not an inject. The live harness file is not the input; compact checkout does not catch-up that file again while it may be shrinking. Stop stays write-only.

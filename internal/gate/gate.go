@@ -38,7 +38,44 @@ func hasPrefixFold(s string, prefixes []string) bool {
 }
 
 func Planning(s string) bool {
-	return containsAny(s, planning)
+	if containsAny(s, planning) {
+		return true
+	}
+	return planningVerb(s, []string{"merge", "clear", "measure"})
+}
+
+// planningVerb is I'll / I will + verb not as a prefix of a longer word
+// (I'll clear it skips; I'll clearly / I'll cleartext still store).
+func planningVerb(s string, verbs []string) bool {
+	low := Fold(s)
+	for _, v := range verbs {
+		for _, p := range []string{"i'll " + v, "i will " + v} {
+			if planningVerbAt(low, p) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func planningVerbAt(low, p string) bool {
+	for i := 0; i <= len(low); {
+		j := strings.Index(low[i:], p)
+		if j < 0 {
+			return false
+		}
+		j += i
+		end := j + len(p)
+		if end == len(low) {
+			return true
+		}
+		switch low[end] {
+		case ' ', '.', ';', ',', ':', '!', '?':
+			return true
+		}
+		i = j + 1
+	}
+	return false
 }
 
 func SessionOp(s string) bool {
@@ -72,7 +109,7 @@ func MetaFailedTalk(s string) bool {
 	}
 	low := Fold(strings.TrimSpace(s))
 	low = strings.TrimPrefix(low, "- ")
-	if strings.HasPrefix(low, "lossless flags") {
+	if strings.HasPrefix(low, "lossless flags") || strings.HasPrefix(low, "lossless returned") {
 		return true
 	}
 	if goFirstMash(low) || stillExtractsNoObject(low) {

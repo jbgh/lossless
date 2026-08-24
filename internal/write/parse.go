@@ -6,11 +6,12 @@ import (
 )
 
 type Message struct {
-	Role   string
-	Text   string
-	Error  bool
-	Skip   bool // system, reasoning, synthetic, own ask I/O — raw only
-	Offset int64
+	Role    string
+	Text    string
+	Error   bool
+	Skip    bool // system, reasoning, synthetic, own ask I/O — raw only
+	Compact bool // session compact event; not a claim
+	Offset  int64
 }
 
 func ParseJSONL(chunk string, base int64) (msgs []Message, consumed int64) {
@@ -122,8 +123,10 @@ func normalize(o map[string]any, offset int64, ownIDs map[string]bool) (Message,
 	}
 	typ, _ := o["type"].(string)
 	switch typ {
+	case "compaction":
+		return Message{Skip: true, Compact: true, Offset: offset}, true
 	case "session", "model_change", "thinking_level_change",
-		"compaction", "branch_summary", "custom", "label",
+		"branch_summary", "custom", "label",
 		"session_info", "custom_message",
 		"last-prompt", "mode", "permission-mode", "attachment",
 		"ai-title", "file-history-snapshot", "file-history-delta":
