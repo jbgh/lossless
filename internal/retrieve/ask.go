@@ -78,7 +78,9 @@ type traceDrop struct {
 }
 
 func (e Engine) prepare(req Request) (prep, error) {
-	e.maybeCatchUp(req)
+	if !req.skipCatchUp {
+		e.maybeCatchUp(req)
+	}
 	q, err := normalize(req)
 	if err != nil {
 		return prep{}, err

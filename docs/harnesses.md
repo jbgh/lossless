@@ -12,6 +12,8 @@ The wrong version of that idea is five memory systems. The right version is one 
 
 If a harness cannot answer (1), the adapter may POST already-normalized messages. It still must not rank, store, or redact differently.
 
+Do not read harness memory products (`MEMORY.md`, `/flush`, `/dream`, `memory_search`, `parent_session_id`, Claude `additionalContext`). Compact checkout uses owned `raw/`. If the live session file is rewritten or deleted, the tape is still there.
+
 ---
 
 ## Shared contract

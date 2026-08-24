@@ -19,6 +19,9 @@ type Request struct {
 	Paths         []string `json:"paths,omitempty"`
 	SessionID     string   `json:"session_id,omitempty"`
 	LimitTokens   int      `json:"limit_tokens,omitempty"`
+	// skipCatchUp is set by compact checkout. Catch-up already ran;
+	// the live harness file may be shrinking. JSON/MCP cannot set this.
+	skipCatchUp bool
 }
 
 type Hit struct {

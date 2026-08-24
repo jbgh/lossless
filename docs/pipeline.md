@@ -15,8 +15,8 @@ This is the decision that decides whether we are a database or a second agent. W
 | Is memory "smart"? | **No LLM inside lossless.** No second brain. Typed pack + warnings is the only intelligence. |
 | Is memory "just a database"? | **Almost.** Indexes + a fixed ranker + a packer. Not raw FTS for the model to interpret. |
 | Who writes the query? | **Nobody writes a search string as the product.** The harness or the model sends *work context* (goal, paths, last user text). Memory compiles that into FTS / path / symbol lookups. |
-| Who is obligated to call? | **The harness layer** (skill always; hook when the harness can inject). If nobody calls, the store is a diary. |
-| What happens after return? | Packet becomes an ordinary tool result (or one injected block). The **agent** decides. Warnings are blocking unless the user overrides. Then catch-up writes the turn as usual, **skipping our own ask I/O** so we do not remember our own output. |
+| Who is obligated to call? | **The skill.** Compact writes `~/.lossless/active/<owner__repo>.md` for the model to read or to call `ask`. No harness inject API. If nobody calls, the store is a diary. |
+| What happens after return? | Packet becomes an ordinary tool result. The **agent** decides. Warnings are blocking unless the user overrides. Then catch-up writes the turn as usual, **skipping our own ask I/O** so we do not remember our own output. |
 
 Vectors and graphs are optional indexes later. They do not change this split.
 
@@ -70,7 +70,7 @@ We take Grok/claude-mem's **obligation** (something must call) and cass's **hone
     │     1. Work context is assembled   ← harness or model
     │     2. POST /v1/ask                ← one round trip
     │     3. Memory pipeline             ← retrieval.md
-    │     4. Packet lands in the window  ← tool result or inject
+    │     4. Packet lands in the window  ← tool result (or the active-file checkout after compact)
     │     5. Agent acts                  ← obey warnings
     │     6. Later catch_up copies this turn, minus our ask I/O
     │
@@ -107,23 +107,19 @@ The **model** fills `goal` / `paths` / `question` from the user turn. That is "w
 
 This is the only portable path. Grok cannot hook-inject. Codex has no PreCompact inject.
 
-Risk: the model forgets to call. Mitigation: skill is global and short; Claude SessionStart can add one line "call ask"; evals that ignore the skill fail in real use, not in our unit tests.
+Risk: the model forgets to call. Mitigation: skill is global and short; evals that ignore the skill fail in real use, not in unit tests. lossless does not inject through a harness API (`additionalContext`, first-turn memory, PostCompact).
 
-### Caller B — the adapter (when the harness allows)
+### Caller B — compact checkout (pull)
 
-Claude `additionalContext` is specified, not shipped. After compact, `~/.lossless/active/<owner__repo>.md` is written from a real ask (0.1.5). Stop and `UserPromptSubmit` stay write-only. See [roadmap.md](roadmap.md).
-
-Used for **cold** moments when the model has not spoken yet or just lost the window.
+After compact catch-up, lossless writes `~/.lossless/active/<owner__repo>.md` from a real `ask`. The hot ask reads **owned raw**, not the live harness file. Stop and `UserPromptSubmit` stay write-only. See [roadmap.md](roadmap.md).
 
 | Moment | Who | Work context |
 |--------|-----|----------------|
-| Session start | adapter | `project` + `cwd`; `paths` = nothing or files from the last claim in this repo; no goal → **cold ask** |
-| PreCompact / just-compacted | adapter | last human user line → `goal`/`question`; recent edited paths from the tail of raw → `paths` → **hot ask** |
+| New session | skill | model calls `ask` with current goal and paths |
+| PreCompact / just-compacted | compact hook copies tape; then active file | last human user line + paths from **owned raw** → hot ask → `active/<owner__repo>.md`. Skill: if that file exists and this turn has not asked, read it or call ask. |
 | Human CLI | you | whatever you type |
 
-If the harness can put the packet into the next prompt (`additionalContext` on Claude SessionStart / UserPromptSubmit), the adapter does that. If it cannot (Grok), the adapter writes `~/.lossless/active/<project_key>.md` and the skill says "if that file exists and you have not asked yet, read it or call ask."
-
-The adapter **never** invents a clever search string. It copies last user text and paths. Memory ranks.
+The adapter **never** invents a clever search string. It does not read harness memory files. Memory ranks.
 
 ### Caller C — we do not do this
 
@@ -164,7 +160,7 @@ No scan of the whole store. No network. Claim vectors are on-box and optional. E
 
 ## After context returns
 
-1. **Land in the window.** Tool result on `ask`, or one injected block. Not a hidden system rewrite of history.
+1. **Land in the window.** Tool result on `ask`. After compact, the same pack may also be in `~/.lossless/active/<owner__repo>.md` for the skill to read. Not a hidden system rewrite of history. Not `additionalContext`.
 2. **Agent policy (skill, not memory):**
    - Read `warnings` first.
    - `failed` warning → do not repeat that approach unless the user says to.
@@ -183,8 +179,8 @@ The packet is not written back as a new claim. It is already derived from claims
 | When | Caller | Why |
 |------|--------|-----|
 | Before implementing | model + skill | Main anti-regression gate |
-| New session | adapter cold ask + skill | Empty window |
-| After compact | adapter hot ask if inject exists; else skill | Window just became a summary |
+| New session | skill | Empty window |
+| After compact | active file from owned raw + skill | Window just became a summary |
 | User asks "did we already…" | model | Explicit |
 
 **Hole:** auto-compact mid-turn. The next model call in the *same* turn may not go through UserPromptSubmit and Grok cannot inject on PostCompact. The model only has the compact summary plus the still-loaded skill. If it does not call `ask`, that turn is under-informed.
@@ -193,8 +189,8 @@ Mitigations, in order:
 
 1. PreCompact catch-up has already saved raw (write path). Nothing is *lost*.
 2. Skill: "If the conversation was just compacted, call ask before more edits."
-3. Claude SessionStart / just-compacted inject is **0.2b**, not shipped. See [roadmap.md](roadmap.md).
-4. lossless does **not** pretend Grok PostCompact can inject.
+3. Compact writes `~/.lossless/active/<owner__repo>.md` from owned raw (0.1.16). Skill: read it or call ask. Not `additionalContext`.
+4. lossless does **not** inject on Grok PostCompact or Claude SessionStart.
 
 So: compact cannot lose the past (write). Compact *can* lose a turn of awareness (read) until the model or the next user prompt asks. That is honest.
 

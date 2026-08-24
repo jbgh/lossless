@@ -1,6 +1,7 @@
 package retrieve
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -178,7 +179,7 @@ func TestAskCatchUpUnknownSidWithoutWorkspaceIsNoop(t *testing.T) {
 	}
 }
 
-func TestAskCatchUpDoesNotCrossWorktree(t *testing.T) {
+func TestAskCatchUpOmitsSidDeltasProjectWorktrees(t *testing.T) {
 	st := tmpStore(t)
 	root := t.TempDir()
 	wsA := filepath.Join(root, "tree-a")
@@ -203,8 +204,89 @@ func TestAskCatchUpDoesNotCrossWorktree(t *testing.T) {
 	if len(sessionClaims(t, st, "acme/api", "s-tree-a")) == 0 {
 		t.Fatal("did not ingest this worktree")
 	}
-	if len(sessionClaims(t, st, "acme/api", "s-tree-b")) != 0 {
-		t.Fatal("ingested the other worktree")
+	if len(sessionClaims(t, st, "acme/api", "s-tree-b")) == 0 {
+		t.Fatal("did not delta the other stored worktree")
+	}
+	if len(sessionClaims(t, st, "acme/api", "chat_history")) != 0 {
+		t.Fatal("named session chat_history")
+	}
+}
+
+func TestAskCatchUpSkipsHugeFirstIngestOnOmittedSid(t *testing.T) {
+	st := tmpStore(t)
+	dir := t.TempDir()
+	small := writeJSONL(t, dir, "small.jsonl", `{"type":"assistant","content":"Use limiter, not Redis, in src/middleware/auth.ts."}`+"\n")
+	hugeBody := `{"type":"assistant","content":"` + strings.Repeat("x", catchUpStoredMaxFirstBytes+1) + ` failed in src/middleware/auth.ts."}` + "\n"
+	huge := writeJSONL(t, dir, "huge.jsonl", hugeBody)
+	for _, s := range []store.Session{
+		{JSONL: small, SessionID: "s-small", Harness: "grok", Workspace: dir, Project: "acme/api"},
+		{JSONL: huge, SessionID: "s-huge", Harness: "grok", Workspace: dir + "/child", Project: "acme/api"},
+	} {
+		if err := st.UpsertSession(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = askAt(t, st, Request{
+		Project:       "acme/api",
+		WorkspaceRoot: dir,
+		Question:      "what limiter",
+		Goal:          "keep limiter in-process",
+		Paths:         []string{"src/middleware/auth.ts"},
+	})
+	if len(sessionClaims(t, st, "acme/api", "s-small")) == 0 {
+		t.Fatal("skipped the small stored delta")
+	}
+	if len(sessionClaims(t, st, "acme/api", "s-huge")) != 0 {
+		t.Fatal("first-ingested a huge unknown-cursor file")
+	}
+}
+
+func TestStoredCatchUpDeltaShrinkIgnoresFirstIngestCap(t *testing.T) {
+	st := tmpStore(t)
+	body := `{"type":"assistant","content":"` + strings.Repeat("x", catchUpStoredMaxFirstBytes+8) + `"}` + "\n"
+	p := writeJSONL(t, t.TempDir(), "tape.jsonl", body)
+	if err := st.SetCursor(p, int64(len(body))+100); err != nil {
+		t.Fatal(err)
+	}
+	d, skip := storedCatchUpDelta(st, p)
+	if skip {
+		t.Fatal("shrink skipped as first ingest")
+	}
+	if d != int64(len(body)) {
+		t.Fatalf("delta=%d want %d", d, len(body))
+	}
+}
+
+func TestAskCatchUpPrefersThisWorkspaceUnderBudget(t *testing.T) {
+	st := tmpStore(t)
+	root := t.TempDir()
+	for i := 0; i < catchUpStoredMaxSessions; i++ {
+		ws := filepath.Join(root, fmt.Sprintf("child-%d", i))
+		f := writeJSONL(t, ws, "tape.jsonl", `{"type":"assistant","content":"Use limiter, not Redis, in src/middleware/auth.ts."}`+"\n")
+		if err := st.UpsertSession(store.Session{
+			JSONL: f, SessionID: fmt.Sprintf("s-child-%d", i), Harness: "grok",
+			Workspace: ws, Project: "acme/api",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	parent := filepath.Join(root, "parent")
+	pf := writeJSONL(t, parent, "tape.jsonl", `{"type":"assistant","content":"Stripe invoice webhook failed in src/billing/export.ts."}`+"\n")
+	if err := st.UpsertSession(store.Session{
+		JSONL: pf, SessionID: "s-parent", Harness: "grok",
+		Workspace: parent, Project: "acme/api",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_ = askAt(t, st, Request{
+		Project:       "acme/api",
+		WorkspaceRoot: parent,
+		Question:      "what failed on billing",
+		Goal:          "fix stripe export",
+		Paths:         []string{"src/billing/export.ts"},
+	})
+	if len(sessionClaims(t, st, "acme/api", "s-parent")) == 0 {
+		t.Fatal("budget spent on other worktrees; this workspace skipped")
 	}
 }
 

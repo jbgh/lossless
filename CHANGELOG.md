@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.16 — 2026-08-24
+
+- After compact, `~/.lossless/active/<owner__repo>.md` is a hot ask from **owned raw** (last user line + paths) and a bibliography (`id`, `has_excerpt`). Cite lines stay blockquoted. Written on PreCompact / compacting only, not PostCompact. Not an inject. The live harness file is not the input; compact checkout does not catch-up that file again while it may be shrinking. Stop stays write-only.
+- Omitted `session_id` catch-up stored sessions for this `owner/repo` that are behind, with a budget. This workspace is first so other worktrees cannot spend the cap. A shrink still reset-on-shrink; the first-ingest cap does not apply. Exact locate only when `session_id` is set and unknown. Do not walk harness homes for newest mtime. A 17 MB first ingest still stays off this path.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.15 — 2026-08-23
 
 - Skill and always-on rule: pass `session_id` when the harness has one; `workspace_root` is this git checkout. `get_record` opens one packed cite when `has_excerpt` and the sentence is not enough to act. MCP `ask` copy matches. Pack of five and 4.0 / 2.5 unchanged.

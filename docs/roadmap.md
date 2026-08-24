@@ -29,16 +29,17 @@ Shipped in 0.1.0 / 0.1.1: install and update, five harness adapters, doctor / in
 | Five records, not the log | Not cass. Not a hosted fact cache. |
 | Cursor reset-on-shrink | A rewritten smaller JSONL must not leave catch-up no-op past EOF. |
 | Pathless two-hop still packs the grounded failed | Do not blunt the pack filter. |
+| Adapters only: locate the session file, map the event, normalize a line | Harness memory APIs, `additionalContext`, `parent_session_id`, `MEMORY.md`, and compact leaving the live JSONL intact can change. Compact checkout and `ask` read owned raw and the project store. |
 
 If a later idea needs one of those to work, it is the wrong idea.
 
 ## Review notes (what the first draft missed)
 
-1. **`maybeCatchUp` is narrower than 0.1.1 sounds.** It runs only when `session_id` is set *and* that session is already in the store with a JSONL path. A first `ask` in a new session, or an MCP call that omits `session_id`, does not ingest the live harness file. Compile can read newest *owned raw*. It does not locate the live harness file.
+1. **`maybeCatchUp` (0.1.16):** omitted `session_id` catch-up stored sessions for this `owner/repo` that are behind, with a budget. Set-but-unknown `session_id` is exact locate only (Codex/Pi without cwd). Compile can read newest *owned raw*. It does not locate the live harness file. OpenCode unknown sid still has no file locate.
 
-2. **Caller B Claude inject is specified, not shipped.** No hook writes `additionalContext`. The Grok/Codex **pull** file `~/.lossless/active/<owner__repo>.md` is written after compact catch-up (0.1.5). Stop still does not inject.
+2. **Claude `additionalContext` inject is cut, not deferred.** Compact checkout is the pull file `~/.lossless/active/<owner__repo>.md` plus the skill. Stop still does not inject.
 
-3. **Stop-inject is forbidden, not deferred.** "Do not use Stop hooks to nag or auto-inject packs" is a decision. 0.2 may add a pack only at session start and just-compacted, and only where the harness can do that honestly. Stop stays write-only.
+3. **Stop-inject is forbidden, not deferred.** Compact checkout is the pull file plus the skill. Stop stays write-only.
 
 4. **OpenCode watcher is on `opencode.db` (0.1.6).** The plugin still POSTs catch-up. A missed plugin no longer loses the tape.
 
@@ -64,14 +65,13 @@ If a later idea needs one of those to work, it is the wrong idea.
 0.2a ask is complete when someone asks     (shipped 0.1.2)
   → 0.4 harness holes                      (shipped 0.1.6)
   → 0.3 extract / inspect-clean            (shape gates 0.1.9; success bar open)
-  → 0.2b Claude inject                     (active file already 0.1.5; inject after README rewrite)
-  → 0.6 child-session locate
+  → 0.6 child-session locate               (watcher + stored sessions; not harness child metadata)
   → 0.5 indexes, only after a named miss
 ```
 
-The tape is infinite. The checkout is five records. Infinite context is not a bigger pack and not retuned 4.0 / 2.5. It is: catch-up every harness file (including children), extract only obey-worthy claims, check out after compact. Multi-model is already `owner/repo`. Multi-agent is still parent-only locate — that is 0.6.
+The tape is infinite. The checkout is five records. Infinite context is not a bigger pack and not retuned 4.0 / 2.5. It is: catch-up every harness file (including children), extract only obey-worthy claims, check out after compact. Multi-model is already `owner/repo`. Multi-agent is watcher + stored sessions + `owner/repo` catch-up (0.1.16); remaining 0.6 is the same locate as parents, not `parent_session_id`.
 
-0.3 comes before 0.2b Claude inject so a session-start pack cannot inject extract residue. Claude `additionalContext` is a copy change, not a silent exception to "if the skill is ignored, the store is a diary." Do not start 0.5 without a named paraphrase miss. 0.1.9 gated inspect-recap / gates-mostly-match / go-first mash / hyphenated They-found lock-lists. 0.1.11–0.1.12 dropped the fail-closed recap contains-skips. Shape skips stay. 0.3 stays open until live inspect recent is obey-worthy. Do not start 0.2b until then.
+Compact pull (`active/<owner__repo>.md`) shipped 0.1.5 / 0.1.16. Claude `additionalContext` is cut. Do not start 0.5 without a named paraphrase miss. 0.1.9 gated inspect-recap / gates-mostly-match / go-first mash / hyphenated They-found lock-lists. 0.1.11–0.1.12 dropped the fail-closed recap contains-skips. Shape skips stay. 0.3 stays open until live inspect recent is obey-worthy. Do not start 0.6 until then.
 
 ---
 
@@ -86,21 +86,20 @@ The model already calls `ask`. The pack must include this session's latest claim
 
 Success: an MCP `ask` that sends only `workspace_root` + `goal` + `paths` still catch-up stored sessions for that workspace that are behind. An `ask` with `session_id` set, file on disk, row not yet in the store, still catch-up that file. `inspect` recent claims do not include "I'll ask lossless…". After the gate: `inspect --prune`.
 
+0.1.16: omitted `session_id` catch-up is `owner/repo` with a budget, not exact workspace path. Locate rules unchanged. Compact `active/<owner__repo>.md` is a hot ask plus bibliography. Not Claude inject.
+
 First-run doctor `ask` is not this slice. Empty tape stays valid. `docs/algorithm.md` step 1 still says "if `session_id` is set" and must move with this slice.
 
-### 0.2b — Checkout at session start and just-compacted
+### 0.2b — Compact checkout is pull (shipped; inject cut)
 
-This is the product-shaped hole. The tape survives compact. The window does not. Do not start this slice until 0.2a is shipped and the inject shape is still wanted.
+The tape survives compact. The window does not. Checkout is `~/.lossless/active/<owner__repo>.md` from a hot ask on **owned raw**, plus the skill. That does not use a harness inject API.
 
 | Feature | What it is | What it is not |
 |---------|------------|----------------|
-| Claude cold/hot inject | SessionStart and just-compacted: one `additionalContext` block from a real `ask`. | Not every turn. Not Stop. Not a hidden rewrite of history. |
-| Grok / Codex active file | After compact / session start, write `~/.lossless/active/<project>.md`. Skill says: if that file exists and this turn has not asked, read it or call `ask`. | Not pretending Grok PostCompact can inject. |
-| Skill line | Point at the active file. Keep the rule one screen. | Not a longer skill. |
+| Active file | After compact catch-up, write `~/.lossless/active/<project>.md` from owned raw (last user line + paths). Bibliography cites (`id`, `has_excerpt`). Cite lines blockquoted. Skill: if that file exists and this turn has not asked, read it or call `ask`. (0.1.5 / 0.1.16) | Not `additionalContext`. Not Stop-inject. Not reading `chat_history.jsonl` after the harness rewrote it. |
+| New session | Skill calls `ask`. | Not a SessionStart hook that depends on one vendor. |
 
-Do not start until 0.2a is on the channel **and** `inspect --project` recent claims are obey-worthy (0.3). Claude `additionalContext` ships only after README "Not auto-injection" is rewritten to: not every turn, not Stop, not the raw log. Grok/Codex `active/<project>.md` is still pull (the model must read it). Split those two if the copy fight is unresolved: keep the active file, cut Claude inject.
-
-SessionStart / just-compacted hooks stay fail-open. Catch-up must still skip own ask payloads after a pack lands in the window. Stop stays write-only. UserPromptSubmit every turn is not this slice.
+Claude `additionalContext` is cut. Stop stays write-only. UserPromptSubmit every turn is not this slice.
 
 ### 0.3 — Extract is the intelligence
 
@@ -131,11 +130,11 @@ A new harness after that is still: locate + event map + line parser + installer.
 
 ### 0.6 — Child sessions are tape
 
-The pitch is multi-agent: a parent that spawns reviewers still has one project pack. Today locate follows the parent JSONL. Grok `spawn_subagent`, Claude subagents, and Codex child threads write their own files. If those are not catch-up, the child's failed work dies when the parent window thins.
+The pitch is multi-agent: a parent that spawns reviewers still has one project pack. Child sessions are more files in the same session roots the watcher already tails. 0.1.16 omitted-sid catch-up deltas stored sessions for this `owner/repo`, so a parent ask can ingest a behind child that is already a store row.
 
 | Feature | What it is | What it is not |
 |---------|------------|----------------|
-| Locate child transcripts | Same catch-up core. Discover the child's JSONL / sqlite row. Claims stay `owner/repo`. | Not a per-agent store. Not newest-mtime across children. Not injecting the child's raw log. |
+| Locate child transcripts | Same adapter as the parent: session file + event map + line parse. Watcher copies new JSONL / sqlite rows. Claims stay `owner/repo`. | Not Grok `parent_session_id` / `subagents/meta.json`. Not Claude subagent `MEMORY.md`. Not newest-mtime. Not injecting the child's raw log. |
 | Session id stays the child's | Action tape per `session_id`. Ask in the parent still packs project claims. | Not merging two conversations into one session file. |
 
 Success: a child session that burned Redis is in the project pack when the parent asks. A sibling child's shop claims do not leak.
@@ -170,6 +169,7 @@ Remote home stays manual: TLS + token + local sidecar. No cloud image, no org AC
 - Windows
 - Memory that decides when to speak
 - Auto-inject of the full raw log
+- Claude `additionalContext`, Grok first-turn memory inject, `parent_session_id` locate
 - Retrieve on every tool call
 - Learned ranker / Phoenix
 - Age gates
@@ -181,4 +181,4 @@ Remote home stays manual: TLS + token + local sidecar. No cloud image, no org AC
 
 ## How to use this file
 
-Visibility is the loop. After each slice: `lossless inspect --project <owner/repo>` and `lossless doctor`. Do not retune 4.0 / 2.5. Do not start 0.5 without a named miss. Do not start 0.2b Claude inject until 0.3 has cleaned recent claims. Do not start 0.6 until 0.3 is clean.
+Visibility is the loop. After each slice: `lossless inspect --project <owner/repo>` and `lossless doctor`. Do not retune 4.0 / 2.5. Do not start 0.5 without a named miss. Do not start 0.6 until 0.3 is clean. Do not add Claude `additionalContext` or any harness memory API.

@@ -441,8 +441,11 @@ func TestRunHookGrok(t *testing.T) {
 }
 
 func TestHookSource(t *testing.T) {
-	if hookSource("pre_compact", "turn") != "compact" || hookSource("PostCompact", "turn") != "compact" {
+	if hookSource("pre_compact", "turn") != "compact" || hookSource("PreCompact", "turn") != "compact" {
 		t.Fatal("compact")
+	}
+	if hookSource("PostCompact", "turn") != "compacted" || hookSource("session.compacted", "turn") != "compacted" {
+		t.Fatal("after compact")
 	}
 	if hookSource("stop", "compact") != "turn" || hookSource("session.idle", "compact") != "turn" {
 		t.Fatal("turn")
@@ -502,7 +505,7 @@ func TestMainDispatch(t *testing.T) {
 		t.Fatalf("unknown %d %s", code, out)
 	}
 	out, code = run("version")
-	if code != 0 || !strings.Contains(out, "lossless") || !strings.Contains(out, "0.1.15") {
+	if code != 0 || !strings.Contains(out, "lossless") || !strings.Contains(out, "0.1.16") {
 		t.Fatalf("version %d %s", code, out)
 	}
 	out, code = run("help")

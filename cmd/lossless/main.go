@@ -848,6 +848,8 @@ func hookSource(name, fallback string) string {
 		return "turn"
 	case n == "userpromptsubmit" || n == "user_prompt_submit" || n == "prompt_submit":
 		return "turn"
+	case strings.Contains(n, "postcompact") || strings.Contains(n, "compacted"):
+		return "compacted"
 	case strings.Contains(n, "compact"):
 		return "compact"
 	default:

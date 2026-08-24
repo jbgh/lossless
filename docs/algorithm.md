@@ -62,7 +62,7 @@ Catch-up is fail-open. Ingest is picky on purpose. Extract is allowed to drop al
 
 One MCP/REST call. Target p50 < 500ms, p95 < 2s at 10k claims. Never scan the full project table.
 
-1. **catch-up this session** — fail-open. If `session_id` is set and the store already has that session, copy complete lines the index has not ingested. If `session_id` is set but unknown, exact locate of that id only (Codex/Pi without cwd, so they cannot fall back to newest-mtime). If `session_id` is omitted, catch-up stored sessions for this workspace that are behind. Do not walk a harness home for newest mtime.
+1. **catch-up this session** — fail-open. If `session_id` is set and the store already has that session, copy complete lines the index has not ingested. If `session_id` is set but unknown, exact locate of that id only (Codex/Pi without cwd, so they cannot fall back to newest-mtime). If `session_id` is omitted, catch-up stored sessions for this `owner/repo` that are behind, with a budget. Never first-ingest a 17 MB unknown file on that path. Do not walk a harness home for newest mtime. CatchUp always receives the real session id.
 2. **normalize** — `project_key`, question/goal tokens, path keys + basename, identifier symbols. Rich if a path is set or there are ≥2 tokens. Rich asks are never overwritten.
 3. **compile if thin, then hydrate** — empty question + goal: last 40 messages / 32k chars fill the query. Then load this session’s served / dwell / continue tape. Claims are shared by project; the action tape is this session only.
 4. **candidates · union · cap 400** — FTS ∪ path ∪ symbol ∪ failed/decision/constraint. Pathless asks hop through files the first hits named. Empty union: last 8 faileds. Optional kNN if an embedder is attached.

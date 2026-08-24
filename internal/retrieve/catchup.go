@@ -10,12 +10,21 @@ import (
 	"lossless/internal/write"
 )
 
+const (
+	// Omitted-sid ask is a delta on rows the store already knows.
+	// Never first-ingest a 17 MB unknown file on this path.
+	catchUpStoredMaxSessions   = 8
+	catchUpStoredMaxFirstBytes = 1 << 20
+	catchUpStoredMaxDeltaBytes = 2 << 20
+)
+
 // maybeCatchUp copies complete session lines that hooks/watch have not
 // ingested yet so ask packs this session's latest claims.
 //
 // Store-first: omitted session_id catch-up stored sessions for this
-// workspace that are behind. A set-but-unknown session_id is exact
-// locate only. Never walk a harness home for newest mtime.
+// owner/repo that are behind, with a budget. A set-but-unknown
+// session_id is exact locate only. Never walk a harness home for
+// newest mtime. CatchUp always receives the real session id.
 func (e Engine) maybeCatchUp(req Request) {
 	if e.Store == nil {
 		return
@@ -106,22 +115,71 @@ func (e Engine) catchUpStoredWorkspace(req Request) {
 	if err != nil {
 		return
 	}
-	ws := filepath.Clean(req.WorkspaceRoot)
 	proj := projectkey.Normalize(req.Project)
 	if proj == "" && req.WorkspaceRoot != "" {
 		proj = projectkey.FromWorkspace(req.WorkspaceRoot)
 	}
+	ws := ""
+	if req.WorkspaceRoot != "" {
+		ws = filepath.Clean(req.WorkspaceRoot)
+	}
+	var same, other []store.Session
 	for _, s := range sess {
 		if s.JSONL == "" || s.SessionID == "" {
 			continue
 		}
-		if req.WorkspaceRoot != "" {
-			if filepath.Clean(s.Workspace) != ws {
+		if proj != "" {
+			if projectkey.Normalize(s.Project) != proj {
 				continue
 			}
-		} else if proj == "" || projectkey.Normalize(s.Project) != proj {
+		} else if ws == "" || filepath.Clean(s.Workspace) != ws {
+			continue
+		}
+		if ws != "" && filepath.Clean(s.Workspace) == ws {
+			same = append(same, s)
+		} else {
+			other = append(other, s)
+		}
+	}
+	var n int
+	var copied int64
+	for _, s := range append(same, other...) {
+		if n >= catchUpStoredMaxSessions {
+			break
+		}
+		delta, skip := storedCatchUpDelta(e.Store, s.JSONL)
+		if skip {
+			continue
+		}
+		if copied+delta > catchUpStoredMaxDeltaBytes && n > 0 {
 			continue
 		}
 		e.catchUpKnown(req, s)
+		n++
+		copied += delta
 	}
+}
+
+func storedCatchUpDelta(st *store.Store, jsonl string) (delta int64, skip bool) {
+	fi, err := os.Stat(jsonl)
+	if err != nil || !fi.Mode().IsRegular() {
+		return 0, true
+	}
+	size := fi.Size()
+	cur := st.Cursor(jsonl)
+	if cur == size {
+		return 0, true
+	}
+	if cur > size {
+		// Shrink: CatchUp resets. Do not apply the first-ingest cap.
+		return size, false
+	}
+	if cur == 0 && size > catchUpStoredMaxFirstBytes {
+		return 0, true
+	}
+	d := size - cur
+	if d < 0 {
+		d = 0
+	}
+	return d, false
 }
