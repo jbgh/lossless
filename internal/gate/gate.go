@@ -41,7 +41,7 @@ func Planning(s string) bool {
 	if containsAny(s, planning) {
 		return true
 	}
-	return planningVerb(s, []string{"merge", "clear", "measure", "search", "map", "open"})
+	return planningVerb(s, []string{"merge", "clear", "measure", "search", "map", "open", "call", "shrink", "point"})
 }
 
 // planningVerb is I'll / I will + verb not as a prefix of a longer word
@@ -83,7 +83,18 @@ func packEcho(low string) bool {
 	if strings.Contains(low, "the failed ") && strings.Contains(low, " record is unrelated") {
 		return true
 	}
-	return strings.HasPrefix(low, "prior failure was another")
+	if strings.HasPrefix(low, "prior failure was another") {
+		return true
+	}
+	if strings.HasPrefix(low, "the earlier failed ") {
+		return true
+	}
+	if strings.HasPrefix(low, "that failed ") &&
+		(strings.Contains(low, "`") || strings.Contains(low, "already fixed") ||
+			strings.Contains(low, "already superseded") || strings.Contains(low, " was the ")) {
+		return true
+	}
+	return false
 }
 
 // JSONFragment is a chopped workflow/ask JSON shard, not a claim.
@@ -256,10 +267,34 @@ func Truncated(s string) bool {
 	if ConstraintFragment(s) && (strings.Contains(s, "`") || strings.Contains(s, "|") || strings.Contains(low, "…")) {
 		return true
 	}
-	if leadingFileFragment(s) || yamlTreeDump(s) || trailingShortVersion(s) {
+	if leadingFileFragment(s) || yamlTreeDump(s) || trailingShortVersion(s) || leadingWordChop(s) {
 		return true
 	}
 	if strings.Count(s, "(") > strings.Count(s, ")") {
+		return true
+	}
+	return false
+}
+
+// leadingWordChop is a mid-word cut at the start ("tially but restrict").
+// "env exists; do not print secrets" and "qa-fix-loop …" stay.
+func leadingWordChop(s string) bool {
+	fields := strings.Fields(strings.TrimSpace(s))
+	if len(fields) < 2 {
+		return false
+	}
+	w := strings.Trim(fields[0], "\"“”'`.,;:()[]")
+	if w == "" {
+		return false
+	}
+	if w[0] < 'a' || w[0] > 'z' {
+		return false
+	}
+	if strings.ContainsAny(w, "/._-#") || len(w) > 8 {
+		return false
+	}
+	switch Fold(strings.Trim(fields[1], "\"“”'`.,;:()[]")) {
+	case "but", "and", "or", "so", "then":
 		return true
 	}
 	return false
@@ -517,6 +552,11 @@ var (
 		"i'll run", "i will run", "i'll-run",
 		"i'll rerun", "i will rerun",
 		"the next hour", "we will use the next", "we'll use the next",
+		"let me check", "let me get", "let me look", "let me read",
+		"let me also", "let me focus", "let me investigate", "let me abort",
+		"let me find", "let me search", "let me decode", "let me wait",
+		"let me see", "let me inspect", "let me call", "let me take",
+		"let me start", "let me wrap",
 	}
 	sessionOp = []string{
 		"don't ask", "do not ask", "don't change source", "don't delete data",

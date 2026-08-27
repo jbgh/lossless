@@ -188,6 +188,15 @@ func TestExtractNoiseAndJobOverlap(t *testing.T) {
 	if !extractNoise(claim.Record{Type: "failed", Text: "Lossless will not abort a child if ask is missing."}) {
 		t.Fatal("lossless will")
 	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "Let me also check what the previous failure on pipeline 1906 was about."}) {
+		t.Fatal("let me check")
+	}
+	if !extractNoise(claim.Record{Type: "failed", Text: "That failed `agent-verify` is already fixed (ktlint, then re-run passed)."}) {
+		t.Fatal("that failed agent-verify")
+	}
+	if !extractNoise(claim.Record{Type: "constraint", Text: "tially but restrict which steps receive it (remove from steps that don't need any Gitea API)."}) {
+		t.Fatal("tially chop")
+	}
 	if !extractNoise(claim.Record{Type: "failed", Text: "## Investigation: why those uploads failed"}) {
 		t.Fatal("heading")
 	}

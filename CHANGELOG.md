@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.20 — 2026-08-27
+
+- Extract/ask skip I'll-call / I'll-shrink / I'll-point and `Let me check/get/look` planning. `Let me ask` / `I'll stick with` / `I'll clearly` stay.
+- `That failed \`agent-verify\`` already-fixed talk and `The earlier failed … already superseded` skip as pack echo. Pathless Redis still stores.
+- Mid-word chops (`tially but restrict…`) skip. `env exists; do not print secrets` stays.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.19 — 2026-08-24
 
 - Watcher skips Claude `subagents/` and `agent-*.jsonl` dumps, including rows already in the session table. Nested JSONL with cwd that is not a subagent file still catch-up. Unknown-cwd still skips.

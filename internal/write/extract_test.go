@@ -158,6 +158,20 @@ func TestExtractIgnoresAskedFalse(t *testing.T) {
 	}
 }
 
+func TestExtractSkipsMemoraProcessTalk(t *testing.T) {
+	got := Extract([]Message{
+		{Role: "assistant", Text: "I'll call lossless first, then inspect the iOS evidence frames and the Home overlay/See-all code that failed live.", Offset: 1},
+		{Role: "assistant", Text: "Let me also check what the previous failure on pipeline 1906 was about.", Offset: 2},
+		{Role: "assistant", Text: "That failed `agent-verify` is already fixed (ktlint, then re-run passed).", Offset: 3},
+		{Role: "assistant", Text: "The earlier failed Gradle install is already superseded.", Offset: 4},
+		{Role: "assistant", Text: "tially but restrict which steps receive it (remove from steps that don't need any Gitea API).", Offset: 5},
+		{Role: "assistant", Text: "Redis token bucket failed in src/middleware/auth.ts staging.", Offset: 6},
+	}, ExtractOpts{ProjectKey: "acme/api"})
+	if len(got) != 1 || got[0].Type != "failed" || !strings.Contains(got[0].Text, "Redis") {
+		t.Fatalf("%+v", got)
+	}
+}
+
 func TestExtractSkipsInstructionChrome(t *testing.T) {
 	got := Extract([]Message{
 		{Role: "assistant", Text: "READ-ONLY: do not push, edit, or merge.", Offset: 1},

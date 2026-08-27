@@ -160,6 +160,39 @@ func TestSkipProse(t *testing.T) {
 	if !SkipProse("I'll map Favorites/Lightbox controls.") {
 		t.Fatal("i'll map planning")
 	}
+	if !SkipProse("I'll call lossless first, then inspect the iOS evidence frames and the Home overlay/See-all code that failed live.") {
+		t.Fatal("i'll call planning")
+	}
+	if !SkipProse("I'll shrink the Upload and AI-card diffs instead of raising the gate.") {
+		t.Fatal("i'll shrink planning")
+	}
+	if !SkipProse("I'll point the live test at the cream failed tile, then run XCTest.") {
+		t.Fatal("i'll point planning")
+	}
+	if !SkipProse("Let me also check what the previous failure on pipeline 1906 was about.") {
+		t.Fatal("let me check planning")
+	}
+	if !SkipProse("Let me get the tail of the actual failure.") {
+		t.Fatal("let me get planning")
+	}
+	if SkipProse("Let me ask lossless what's already decided.") {
+		t.Fatal("let me ask keep")
+	}
+	if !SkipProse("That failed `agent-verify` is already fixed (ktlint, then re-run passed).") {
+		t.Fatal("that failed agent-verify")
+	}
+	if !SkipProse("That failed `agent-verify` was the ktlint hit on #3382 — already fixed and merged.") {
+		t.Fatal("that failed was the")
+	}
+	if !SkipProse("The earlier failed Gradle install is already superseded.") {
+		t.Fatal("earlier failed superseded")
+	}
+	if !SkipProse("tially but restrict which steps receive it (remove from steps that don't need any Gitea API).") {
+		t.Fatal("mid-word chop")
+	}
+	if SkipProse("env exists; do not print secret values") {
+		t.Fatal("env exists keep")
+	}
 	if !SkipProse("Lossless will not abort a child if ask is missing.") {
 		t.Fatal("lossless will pack echo")
 	}
