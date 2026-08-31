@@ -166,6 +166,16 @@ func FoldIdent(s string) string {
 	return b.String()
 }
 
+// HasAlias reports whether ExpandIdent knows a package alias for s.
+// Those tokens are code identifiers even when they read as plain words.
+func HasAlias(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "jwt", "jsonwebtoken":
+		return true
+	}
+	return false
+}
+
 // ExpandIdent returns the token plus coding-identifier aliases.
 // jsonwebtoken ↔ jwt is the same package, not an English synonym list.
 func ExpandIdent(s string) []string {

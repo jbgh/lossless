@@ -51,6 +51,7 @@ type query struct {
 	LookupTokens   []string
 	PathKeys       []string
 	Symbols        []string
+	ContentTokens  int
 	SessionID      string
 	Served         map[string]bool
 	Dwell          map[string]bool
@@ -147,20 +148,64 @@ func isHead(q query) bool {
 	return len(q.PathKeys) == 0 && len(q.Symbols) == 0 && len(q.LookupTokens) == 0
 }
 
-func hasSharedIdent(qSym, rSym []string) bool {
-	if len(qSym) == 0 || len(rSym) == 0 {
+// sharedCodeIdent is the "shared identifier" strong-overlap trigger
+// (docs/algorithm.md §7). Extract stores every word of a claim as a
+// symbol, so a bare intersection is "any shared word" — weak. Strong
+// needs the shared symbol to be code-shaped, or the ask to be a
+// targeted lookup naming exactly one content token ("why not jose").
+func sharedCodeIdent(qSym, recSyms []string, contentTokens int) bool {
+	if len(qSym) == 0 || len(recSyms) == 0 {
 		return false
 	}
 	set := map[string]bool{}
-	for _, s := range rSym {
+	for _, s := range qSym {
 		set[strings.ToLower(s)] = true
 	}
-	for _, s := range qSym {
-		if set[strings.ToLower(s)] {
+	for _, s := range recSyms {
+		if !set[strings.ToLower(s)] {
+			continue
+		}
+		if contentTokens == 1 || codeShaped(s) {
 			return true
 		}
 	}
 	return false
+}
+
+// codeShaped reports a token that reads as code, not prose: separators,
+// digits, an internal capital (camelCase), or a known package alias.
+// Sentence case ("Staging") is prose.
+func codeShaped(s string) bool {
+	if claim.HasAlias(s) {
+		return true
+	}
+	hasInnerUpper, hasLower := false, false
+	for i, r := range s {
+		switch {
+		case r == '_' || r == '-' || r == '.' || r == '/':
+			return true
+		case unicode.IsDigit(r):
+			return true
+		case unicode.IsUpper(r):
+			if i > 0 {
+				hasInnerUpper = true
+			}
+		case unicode.IsLower(r):
+			hasLower = true
+		}
+	}
+	return hasInnerUpper && hasLower
+}
+
+func contentTokenCount(qtoks, gtoks []string) int {
+	seen := map[string]bool{}
+	for _, t := range append(append([]string{}, qtoks...), gtoks...) {
+		t = strings.ToLower(strings.TrimSpace(t))
+		if isContentToken(t) {
+			seen[t] = true
+		}
+	}
+	return len(seen)
 }
 
 func identLower(s string) bool {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.21 — 2026-08-31
+
+- Strong overlap needs a code-shaped shared identifier (camelCase, digits, separators, `jwt` ↔ `jsonwebtoken`) or a one-content-token targeted ask (`why not jsonwebtoken`). One shared plain word (`staging`) is weak again: score only, no warning, no force-pack. Gold Redis / jose / tokenBucket asks still warn.
+- `remember` rejects secret-bearing text before the manual tape or the store sees it. Messages catch-up redacts the virtual spool on write and removes it after ingest.
+- Tokenless serve refuses a foreign Host or Origin (DNS rebind, cross-origin POST). Loopback clients and token-mode remotes unchanged.
+- `inspect --ask` writes no ask/warn action rows. Observing the tape does not change the next pack.
+- `evictFailed` respects `limit_tokens`: lowest score out first, job-1 faileds last, a lone record may still exceed. Home-push cursor advances only on a durable enqueue. `Append` check-and-set runs under the session lock. A lost claim-hash race indexes nothing — no orphan FTS, export, or vector. Excerpt lookup misses stop littering empty monthly shards. Local `make lossless` stamps the latest tag, not 0.1.12.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.20 — 2026-08-27
 
 - Extract/ask skip I'll-call / I'll-shrink / I'll-point and `Let me check/get/look` planning. `Let me ask` / `I'll stick with` / `I'll clearly` stay.

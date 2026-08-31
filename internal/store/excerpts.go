@@ -147,7 +147,13 @@ func excerptMonths(hint time.Time) []string {
 }
 
 func (s *Store) lookupExcerpt(month string, ref *claim.TranscriptRef) (Excerpt, bool) {
-	db, err := sql.Open("sqlite", s.excerptPath(month))
+	p := s.excerptPath(month)
+	// Opening a missing shard would create an empty one — a lookup miss
+	// across 13 months must not litter index/ with empty monthly files.
+	if _, err := os.Stat(p); err != nil {
+		return Excerpt{}, false
+	}
+	db, err := sql.Open("sqlite", sqliteURI(p))
 	if err != nil {
 		return Excerpt{}, false
 	}

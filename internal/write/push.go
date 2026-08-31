@@ -220,14 +220,17 @@ func FlushPush(home string) (int, error) {
 	return n, first
 }
 
-func MaybeEnqueuePush(home string, req CatchUpRequest, body string, prev int64) {
+// MaybeEnqueuePush reports whether the delta is safe to account as
+// pushed: spooled durably, or nothing to push at all. A false return
+// means the caller must not advance its home-push cursor.
+func MaybeEnqueuePush(home string, req CatchUpRequest, body string, prev int64) bool {
 	if !HomeIsRemote() || strings.TrimSpace(body) == "" {
-		return
+		return true
 	}
 	if err := CheckHomeURL(); err != nil {
-		return
+		return false
 	}
-	_, _ = WritePush(home, PushJob{
+	_, err := WritePush(home, PushJob{
 		Project:   req.Project,
 		Harness:   req.Harness,
 		SessionID: req.SessionID,
@@ -237,6 +240,7 @@ func MaybeEnqueuePush(home string, req CatchUpRequest, body string, prev int64) 
 		PrevOff:   prev,
 		Body:      body,
 	})
+	return err == nil
 }
 
 func postAppend(job PushJob) error {

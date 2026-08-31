@@ -56,6 +56,13 @@ func Append(st *store.Store, req AppendRequest) (AppendResult, error) {
 	if req.Source == "" {
 		req.Source = "append"
 	}
+	// Serialize check-and-set with other appends and catch-up: the
+	// conflict check reads the cursor that only advances after the write.
+	unlock, err := lockSession(st, req.Project, req.SessionID)
+	if err != nil {
+		return out, err
+	}
+	defer unlock()
 	key := appendCursorKey(req.Client, req.SessionID)
 	body := req.Body
 	if !strings.HasSuffix(string(body), "\n") {

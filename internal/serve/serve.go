@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -227,8 +228,37 @@ func Handler(st *store.Store, token string) http.Handler {
 	})
 	if strings.TrimSpace(token) != "" {
 		h = withBearer(h, token)
+	} else {
+		h = withLocalOnly(h)
 	}
 	return h
+}
+
+// withLocalOnly guards the tokenless loopback listener. DNS rebinding
+// reaches it with a foreign Host; cross-origin XHR carries a foreign
+// Origin (text/plain POSTs skip preflight). Both would let a web page
+// read the index or poison memory via /v1/remember. Token mode needs
+// neither check: a browser cannot attach the bearer cross-origin.
+func withLocalOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !loopback(r.Host) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "loopback only"})
+			return
+		}
+		if o := r.Header.Get("Origin"); o != "" && !loopbackOrigin(o) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-origin request refused"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func loopbackOrigin(o string) bool {
+	u, err := url.Parse(o)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	return loopback(u.Host)
 }
 
 func ListenAndServe(addr, token string, st *store.Store) error {

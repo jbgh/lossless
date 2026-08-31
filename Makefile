@@ -1,4 +1,4 @@
-VERSION ?= 0.1.12
+VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
 LDFLAGS := -s -w -X lossless/internal/version.Version=$(VERSION)
 
 .PHONY: test cover cover-html vet bench lossless dist

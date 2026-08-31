@@ -218,13 +218,19 @@ func (s *Store) WriteClaim(rec claim.Record) (superseded string, err error) {
 	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
+	inserted := true
 	err = withBusyRetry(func() error {
 		var e error
-		superseded, e = s.writeClaimOnce(rec)
+		superseded, inserted, e = s.writeClaimOnce(rec)
 		return e
 	})
 	if err != nil {
 		return "", err
+	}
+	if !inserted {
+		// Lost the idx_hash_active race: the winner's row carries the
+		// claim. Index, export, and vector must not reference this id.
+		return "", nil
 	}
 	_ = s.reindex(rec)
 	if superseded != "" {
@@ -263,20 +269,27 @@ func withBusyRetry(fn func() error) error {
 	return err
 }
 
-func (s *Store) writeClaimOnce(rec claim.Record) (superseded string, err error) {
+// testHookAfterHashCheck, when set, runs between the duplicate-hash check
+// and the row upsert. Tests use it to land a racing writer's row.
+var testHookAfterHashCheck func(tx *sql.Tx)
+
+func (s *Store) writeClaimOnce(rec claim.Record) (superseded string, inserted bool, err error) {
 	tx, err := s.DB.Begin()
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	var existing string
 	_ = tx.QueryRow(
 		`SELECT id FROM records WHERE claim_hash = ? AND status = 'active' AND id != ?`,
 		rec.ClaimHash, rec.ID,
 	).Scan(&existing)
+	if testHookAfterHashCheck != nil {
+		testHookAfterHashCheck(tx)
+	}
 	if existing != "" {
 		if _, err := tx.Exec(`UPDATE records SET status = 'superseded' WHERE id = ?`, existing); err != nil {
 			_ = tx.Rollback()
-			return "", err
+			return "", false, err
 		}
 		rec.Supersedes = existing
 		superseded = existing
@@ -284,14 +297,14 @@ func (s *Store) writeClaimOnce(rec claim.Record) (superseded string, err error) 
 	if err := s.upsertRowTx(tx, rec); err != nil {
 		_ = tx.Rollback()
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") && strings.Contains(err.Error(), "claim_hash") {
-			return "", nil
+			return "", false, nil
 		}
-		return "", err
+		return "", false, err
 	}
 	if err := tx.Commit(); err != nil {
-		return "", err
+		return "", false, err
 	}
-	return superseded, nil
+	return superseded, true, nil
 }
 
 const claimCols = `id, type, project_key, workspace_root, harness, session_id, created_at, text, why,

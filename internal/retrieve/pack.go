@@ -314,7 +314,28 @@ func evictFailed(packed, all []scored, limit int) []scored {
 	if len(packed) > PackCap {
 		packed = packed[:PackCap]
 	}
-	_ = limit
+	// Re-adding a failed does not suspend limit_tokens. Evict lowest score
+	// first, job-1 faileds last; like pack, a lone record may exceed limit.
+	est := func(c scored) int { return estimateTokens(mustJSON(toHit(c, false))) }
+	total := 0
+	for _, p := range packed {
+		total += est(p)
+	}
+	for len(packed) > 1 && total > limit {
+		idx := -1
+		for i := len(packed) - 1; i >= 0; i-- {
+			if packed[i].rec.Type == "failed" && packed[i].failedOverlap == 1 {
+				continue
+			}
+			idx = i
+			break
+		}
+		if idx < 0 {
+			idx = len(packed) - 1
+		}
+		total -= est(packed[idx])
+		packed = append(packed[:idx], packed[idx+1:]...)
+	}
 	return packed
 }
 

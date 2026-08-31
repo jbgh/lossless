@@ -46,6 +46,9 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 			return out, err
 		} else if p != "" {
 			req.JSONL = p
+			// The staging file is regenerated whole on the next dump and
+			// the byte cursor lives in the store, so never leave it behind.
+			defer func() { _ = os.Remove(p) }()
 		} else {
 			return out, fmt.Errorf("path_to_jsonl required")
 		}
@@ -281,8 +284,11 @@ func enqueueHomePush(st *store.Store, req CatchUpRequest, body string) {
 	}
 	key := "home-push:" + req.SessionID
 	prev := st.Cursor(key)
-	MaybeEnqueuePush(st.Root, req, body, prev)
-	_ = st.SetCursor(key, prev+int64(len(body)))
+	// A cursor past an unenqueued delta wedges home replay forever:
+	// every later job's PrevOff runs ahead of home's accepted_through.
+	if MaybeEnqueuePush(st.Root, req, body, prev) {
+		_ = st.SetCursor(key, prev+int64(len(body)))
+	}
 }
 
 func materializeSource(st *store.Store, req *CatchUpRequest) (string, error) {
@@ -353,8 +359,8 @@ func writeVirtualJSONL(st *store.Store, session string, msgs []map[string]any) (
 		if err != nil {
 			continue
 		}
-		b.Write(line)
-		b.WriteByte('\n')
+		// Staged plaintext is still bytes at rest under the home.
+		b.WriteString(redact.Line(string(line)))
 	}
 	if b.Len() > 8<<20 {
 		return "", fmt.Errorf("virtual session too large")

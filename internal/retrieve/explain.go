@@ -54,7 +54,6 @@ func (e Engine) Explain(req Request) (Trace, error) {
 	if err != nil {
 		return Trace{}, err
 	}
-	e.recordAsk(req, p.q, p.seed, p.out)
 	now := e.now().UTC()
 	tr := Trace{Project: p.out.Project, Warnings: p.out.Warnings}
 	for _, c := range p.packed {
