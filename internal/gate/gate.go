@@ -421,9 +421,25 @@ func theyFoundReviewList(s string) bool {
 
 func FixtureTalk(s string) bool {
 	low := Fold(s)
-	return strings.Contains(low, "fixture") || strings.Contains(low, "quoted the") ||
-		strings.Contains(low, "quoting the")
+	if strings.Contains(low, "quoted the") || strings.Contains(low, "quoting the") {
+		return true
+	}
+	if !strings.Contains(low, "fixture") {
+		return false
+	}
+	// A repo whose tests use real fixtures names the artifact: a tick, a
+	// dotted file with a real extension, or a deep path. "e.g." and
+	// "read/write" are not artifacts; self-talk stays gated.
+	if strings.Contains(s, "`") || fixtureFileRE.MatchString(s) || deepPathRE.MatchString(s) {
+		return false
+	}
+	return true
 }
+
+var (
+	fixtureFileRE = regexp.MustCompile(`\b[\w-]+\.[A-Za-z][A-Za-z0-9]{1,6}\b`)
+	deepPathRE    = regexp.MustCompile(`\b[\w.-]+/[\w.-]+/[\w.-]+`)
+)
 
 func ChromePrefix(s string) bool {
 	s = strings.TrimSpace(s)
@@ -635,3 +651,18 @@ var (
 		"#", ">", "|", "{", "<!--", "---", "+++", "<<<<<<", ">>>>>>", "======",
 	}
 )
+
+// ArrowChrome reports diagram or instruction shape: any rune from the
+// Unicode arrow or box-drawing blocks. Real rename talk uses words or
+// ASCII "->" and stays; the caller spares sentences anchored by a path,
+// tick, or bold span.
+func ArrowChrome(s string) bool {
+	for _, r := range s {
+		if (r >= 0x2190 && r <= 0x21FF) || // arrows
+			(r >= 0x27F0 && r <= 0x27FF) || // long arrows
+			(r >= 0x2500 && r <= 0x257F) { // box drawing
+			return true
+		}
+	}
+	return false
+}

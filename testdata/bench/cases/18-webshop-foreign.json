@@ -1,0 +1,41 @@
+{
+  "id": "webshop-foreign",
+  "project": "shopco/web",
+  "now": "2026-08-31T12:00:00Z",
+  "sessions": [
+    {"harness": "grok", "session_id": "grok-webshop", "file": "sessions/grok-webshop.jsonl"}
+  ],
+  "write": {
+    "min_extracted": 4,
+    "must_extract_types": ["failed", "decision", "constraint"],
+    "must_extract_substrings": ["zustand", "Hydration", "fixture products.json"],
+    "must_not_extract_substrings": ["refactor the cart next"]
+  },
+  "asks": [
+    {
+      "name": "cart-hydration",
+      "request": {
+        "question": "why does the cart flicker after server render",
+        "goal": "fix cart hydration",
+        "paths": ["src/components/ProductCard.tsx"]
+      },
+      "must_include_substrings": ["Hydration"],
+      "must_include_types": ["failed"],
+      "must_warn": "failed"
+    },
+    {
+      "name": "state-library",
+      "request": {"question": "which state library did we pick for the cart"},
+      "must_include_substrings": ["zustand"]
+    },
+    {
+      "name": "e2e-fixture-repo",
+      "request": {
+        "question": "what broke in the cypress cart test",
+        "goal": "fix cypress e2e",
+        "paths": ["cypress/e2e/cart.cy.ts"]
+      },
+      "must_include_substrings": ["fixture products.json"]
+    }
+  ]
+}

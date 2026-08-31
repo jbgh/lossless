@@ -126,7 +126,13 @@ func RunDir(root, home string) (Report, error) {
 			dir = filepath.Join(home, c.ID)
 		} else {
 			var err error
-			dir, err = os.MkdirTemp("", "lossless-bench-"+c.ID+"-")
+			// The home name matches the isolated-test-store pattern so
+			// refuseTestIngest admits fixture sessions here, exactly as
+			// it does under go test, while live homes keep refusing them.
+			// The literal 000 suffix guarantees the trailing digits the
+			// pattern requires even when the random part is short;
+			// TestBenchHomeAdmitsFixtureIngest pins the contract.
+			dir, err = os.MkdirTemp("", "TestBench"+alnumOnly(c.ID)+"*000")
 			if err != nil {
 				return Report{}, err
 			}
@@ -142,12 +148,30 @@ func RunDir(root, home string) (Report, error) {
 		}
 		rep.AskPass += sc.AskPass
 		rep.AskTotal += sc.AskTotal
-		rep.MeanRecall += sc.Recall
 	}
-	if n := len(rep.Cases); n > 0 {
-		rep.MeanRecall /= float64(n)
+	// Mean over cases that ask. A write-expectations-only case has no
+	// recall to report and must not read as zero.
+	askCases := 0
+	for _, sc := range rep.Cases {
+		if sc.AskTotal > 0 {
+			rep.MeanRecall += sc.Recall
+			askCases++
+		}
+	}
+	if askCases > 0 {
+		rep.MeanRecall /= float64(askCases)
 	}
 	return rep, nil
+}
+
+func alnumOnly(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func RunCase(root, home string, c Case) (CaseScore, error) {

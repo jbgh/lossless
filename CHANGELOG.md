@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.22 — 2026-08-31
+
+- Decisions need a referent to extract: a path, tick/bold span, code-shaped token (camelCase, kebab like `react-query`, version, acronym, `jwt` alias), a mid-sentence proper noun, or a use-X-not-Y / picked-X-over-Y / X-instead-of-Y shape. `I'll stick with keep.` and planning narration skip; `I'll stick with JWT next` and `We'll use postgres next` still store. A neighbor sentence's path grounds — and attaches, so the row stays retrievable. Bare digits, `e.g.`, and pronoun-only instead-of do not ground.
+- Unicode arrow and box-drawing sentences are chrome unless pathful or tick/bold-anchored (whole arrow + box blocks, not a character list). Workflow findings phrased with arrows still store as faileds.
+- Read-time noise gates apply only to automatic extraction: `remember`, `import`, and unknown-provenance rows pack whatever their shape. FixtureTalk spares sentences naming a real fixture artifact (dotted file with a real extension, deep path, tick); `e.g.` and `read/write` do not spare self-talk.
+- Foreign-repo bench: webshop (React/zustand/cypress) and pyapi (Python/Alembic/httpx) cases with planted noise that must not extract; mean-recall floor 0.95 gated in eval, mean counts only asking cases. `lossless bench` CLI homes read as test stores again — the scorecard had been silently refusing every fixture session (6/19); now 19/19, recall 1.00, contract pinned.
+- `inspect --prune` superseded 13 legacy residue claims on the live store. Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.21 — 2026-08-31
 
 - Strong overlap needs a code-shaped shared identifier (camelCase, digits, separators, `jwt` ↔ `jsonwebtoken`) or a one-content-token targeted ask (`why not jsonwebtoken`). One shared plain word (`staging`) is weak again: score only, no warning, no force-pack. Gold Redis / jose / tokenBucket asks still warn.

@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"lossless/internal/claim"
 	"lossless/internal/gate"
 	"lossless/internal/redact"
 )
@@ -172,4 +173,105 @@ func isQuestion(s string) bool {
 		return true
 	}
 	return questionRE.MatchString(low)
+}
+
+var pickedOverRE = regexp.MustCompile(`(?i)\b(?:picked|prefer(?:red)?)\s+\S+\s+over\s+\S+`)
+
+var insteadOfRE = regexp.MustCompile(`(?i)\b(\S+)\s+instead\s+of\s+(\S+)`)
+
+// verbObjRE: a classifying decision verb with a direct object names its
+// referent even in lowercase ("we'll use postgres next").
+var verbObjRE = regexp.MustCompile(`(?i)\b(?:we(?:'|’)?ll use|we will use|going with|go with|decided on|chose|picked)\s+([a-z][\w.+-]*)`)
+
+// GroundedDecision is true when a decision names a referent: a path, a
+// tick or bold span, a code-shaped token, a mid-sentence proper noun, an
+// acronym, or a use-X-not-Y / picked-X-over-Y shape. "I'll stick with
+// keep." has a commitment verb and no object: narration, not memory.
+func GroundedDecision(s string, paths []string) bool {
+	if len(paths) > 0 {
+		return true
+	}
+	if raw := findPaths(s); len(redact.FilterPaths(raw)) > 0 {
+		return true
+	}
+	if strings.Contains(s, "`") || strings.Contains(s, "**") {
+		return true
+	}
+	folded := gate.Fold(s)
+	if m := useNotRE.FindStringSubmatch(folded); m != nil && !useNotStop[strings.ToLower(m[1])] {
+		return true
+	}
+	if pickedOverRE.MatchString(folded) {
+		return true
+	}
+	// "X instead of Y" names two alternatives only when both sides are
+	// real objects; "that way instead of the other" is narration.
+	if m := insteadOfRE.FindStringSubmatch(folded); m != nil &&
+		!useNotStop[strings.Trim(m[1], ".,;:")] && !useNotStop[strings.Trim(m[2], ".,;:")] {
+		return true
+	}
+	if m := verbObjRE.FindStringSubmatch(folded); m != nil && !useNotStop[m[1]] {
+		return true
+	}
+	for i, w := range strings.Fields(s) {
+		w = strings.Trim(w, ".,;:()[]\"'*")
+		if w == "" {
+			continue
+		}
+		// Bare quantities and prose abbreviations read as code shapes
+		// but name nothing.
+		if pureDigits(w) || proseAbbrev[strings.ToLower(w)] {
+			continue
+		}
+		if claim.CodeShaped(w) {
+			return true
+		}
+		if acronym(w) {
+			return true
+		}
+		if i > 0 && len(w) >= 3 && w[0] >= 'A' && w[0] <= 'Z' && !allUpper(w) && lettersOnly(w) {
+			return true
+		}
+	}
+	return false
+}
+
+// lettersOnly excludes contractions: "I'm" is not a proper noun.
+func lettersOnly(s string) bool {
+	for _, r := range s {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')) {
+			return false
+		}
+	}
+	return true
+}
+
+func pureDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+var proseAbbrev = map[string]bool{
+	"e.g": true, "i.e": true, "eg": true, "ie": true,
+	"etc": true, "vs": true, "cf": true,
+}
+
+// acronym is 2-8 letters, all capitals: JWT, REST, SQL. Not "I".
+func acronym(s string) bool {
+	if len(s) < 2 || len(s) > 8 {
+		return false
+	}
+	for _, r := range s {
+		if r < 'A' || r > 'Z' {
+			return false
+		}
+	}
+	return true
 }

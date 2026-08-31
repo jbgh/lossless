@@ -1,0 +1,31 @@
+{
+  "id": "pyapi-foreign",
+  "project": "acme/pyapi",
+  "now": "2026-08-31T12:00:00Z",
+  "sessions": [
+    {"harness": "claude", "session_id": "claude-pyapi", "file": "sessions/claude-pyapi.jsonl", "source": "turn"}
+  ],
+  "write": {
+    "min_extracted": 3,
+    "must_extract_types": ["failed", "decision", "constraint"],
+    "must_extract_substrings": ["Alembic", "httpx", "paginate"],
+    "must_not_extract_substrings": ["stick with keep", "Production code"]
+  },
+  "asks": [
+    {
+      "name": "migration-retry",
+      "request": {
+        "goal": "rerun the orders migration",
+        "paths": ["migrations/versions/0042_orders.py"]
+      },
+      "must_include_substrings": ["Alembic"],
+      "must_include_types": ["failed"],
+      "must_warn": "failed"
+    },
+    {
+      "name": "client-library",
+      "request": {"question": "why not requests for the http client"},
+      "must_include_substrings": ["httpx"]
+    }
+  ]
+}

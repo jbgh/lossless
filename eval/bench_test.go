@@ -37,6 +37,12 @@ func TestSimBenchmarkSuite(t *testing.T) {
 			}
 		}
 	}
+	// Recall floor: a new extract gate that eats bench needles — the
+	// foreign-repo cases included — is a failed change, same law as the
+	// weights. Full suite scores 1.00 today.
+	if rep.MeanRecall < 0.95 {
+		t.Fatalf("mean recall %.2f below 0.95 floor", rep.MeanRecall)
+	}
 }
 
 func TestFormatReportSmoke(t *testing.T) {

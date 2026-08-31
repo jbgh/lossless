@@ -101,7 +101,7 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 				continue
 			}
 		}
-		for _, sent := range sents {
+		for k, sent := range sents {
 			if skipSentence(sent) {
 				reason := "skip-prose"
 				if !gate.SkipProse(sent) {
@@ -111,6 +111,16 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 				continue
 			}
 			paths := redact.FilterPaths(claim.Uniq(append(findPaths(sent), near...)))
+			// Grounding judges the sentence's own anchors. Paths inherited
+			// from nearby user turns still attach, but they must not make
+			// narration or chrome look like memory.
+			ownPaths := redact.FilterPaths(findPaths(sent))
+			// Workflow findings are failure memory whatever their
+			// phrasing; the arrow gate is for diagrams and instructions.
+			if !fromFindings[sent] && gate.ArrowChrome(sent) && len(ownPaths) == 0 && !strings.Contains(sent, "`") && !strings.Contains(sent, "**") {
+				tr.skip("arrow-chrome", sent)
+				continue
+			}
 			typ := classify(sent, msg)
 			if fromFindings[sent] {
 				typ = "failed"
@@ -128,6 +138,18 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 				}
 				tr.skip(reason, sent)
 				continue
+			}
+			// A referent one sentence away in the same message still
+			// grounds ("We decided to keep the limiter. See src/…") —
+			// and must then attach, or the read-time gate would leave
+			// the stored row unretrievable forever.
+			if typ == "decision" && !GroundedDecision(sent, ownPaths) {
+				np := neighborPathList(sents, k)
+				if len(np) == 0 {
+					tr.skip("ungrounded-decision", sent)
+					continue
+				}
+				paths = redact.FilterPaths(claim.Uniq(append(paths, np...)))
 			}
 			if typ == "" {
 				tr.skip("untyped", sent)
@@ -183,6 +205,17 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 	}
 	if tr != nil {
 		tr.Kept = len(out)
+	}
+	return out
+}
+
+func neighborPathList(sents []string, k int) []string {
+	var out []string
+	for _, j := range []int{k - 1, k + 1} {
+		if j < 0 || j >= len(sents) {
+			continue
+		}
+		out = append(out, redact.FilterPaths(findPaths(sents[j]))...)
 	}
 	return out
 }

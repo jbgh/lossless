@@ -366,7 +366,11 @@ func runBench(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	dir, err := os.MkdirTemp(*home, "bench-*")
+	// TestBench*000 matches the isolated-test-store pattern, so
+	// refuseTestIngest admits the fixture sessions into this
+	// disposable store the same way it does under go test. The 000
+	// suffix guarantees the trailing digits the pattern requires.
+	dir, err := os.MkdirTemp(*home, "TestBench*000")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

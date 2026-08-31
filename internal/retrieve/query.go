@@ -172,29 +172,9 @@ func sharedCodeIdent(qSym, recSyms []string, contentTokens int) bool {
 	return false
 }
 
-// codeShaped reports a token that reads as code, not prose: separators,
-// digits, an internal capital (camelCase), or a known package alias.
-// Sentence case ("Staging") is prose.
+// codeShaped is claim.CodeShaped: the one home for "reads as code".
 func codeShaped(s string) bool {
-	if claim.HasAlias(s) {
-		return true
-	}
-	hasInnerUpper, hasLower := false, false
-	for i, r := range s {
-		switch {
-		case r == '_' || r == '-' || r == '.' || r == '/':
-			return true
-		case unicode.IsDigit(r):
-			return true
-		case unicode.IsUpper(r):
-			if i > 0 {
-				hasInnerUpper = true
-			}
-		case unicode.IsLower(r):
-			hasLower = true
-		}
-	}
-	return hasInnerUpper && hasLower
+	return claim.CodeShaped(s)
 }
 
 func contentTokenCount(qtoks, gtoks []string) int {
@@ -354,6 +334,10 @@ func extractNoise(rec claim.Record) bool {
 	if t == "" || gate.SkipProse(t) || gate.ListChrome(t, true) {
 		return true
 	}
+	if !claim.ExplicitMemory(rec.Source) && gate.ArrowChrome(t) && len(rec.Paths) == 0 &&
+		!strings.Contains(t, "`") && !strings.Contains(t, "**") {
+		return true
+	}
 	switch rec.Type {
 	case "state":
 		if gate.NextI(t) || gate.ProcessState(t) {
@@ -361,6 +345,12 @@ func extractNoise(rec claim.Record) bool {
 		}
 	case "decision":
 		if gate.Planning(t) || gate.QuotedAttribution(t) || gate.NarrativeDecision(t) {
+			return true
+		}
+		// Legacy turn-extracted decisions with no referent. Explicit
+		// memory (remember, import, unknown provenance) stays whatever
+		// its shape.
+		if !claim.ExplicitMemory(rec.Source) && !write.GroundedDecision(t, rec.Paths) {
 			return true
 		}
 	case "constraint":

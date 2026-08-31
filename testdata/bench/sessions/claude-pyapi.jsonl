@@ -1,0 +1,7 @@
+{"type":"user","message":{"role":"user","content":"Ship the orders API. Run the Alembic migration first in migrations/versions/0042_orders.py."}}
+{"type":"assistant","message":{"role":"assistant","content":"Alembic migration failed on the orders table; the downgrade left a dangling index in migrations/versions/0042_orders.py."}}
+{"type":"assistant","message":{"role":"assistant","content":"We'll use httpx instead of requests for the client."}}
+{"type":"assistant","message":{"role":"assistant","content":"I'll stick with keep."}}
+{"type":"user","message":{"role":"user","content":"Always paginate list endpoints in app/api/orders.py."}}
+{"type":"assistant","message":{"role":"assistant","content":"Production code → test exists and failed first."}}
+{"type":"assistant","message":{"role":"assistant","content":"Working on the pagination cursor now."}}

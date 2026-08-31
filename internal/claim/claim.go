@@ -55,7 +55,8 @@ func FixtureSession(id string) bool {
 	case "grok-auth", "claude-jwt", "grok-billing", "grok-css-noise",
 		"grok-error-handling", "grok-hedge", "grok-long-tail",
 		"grok-postgres", "grok-redis-retry", "grok-secret",
-		"grok-two-fails", "sess1", "csess":
+		"grok-two-fails", "grok-webshop", "claude-pyapi",
+		"sess1", "csess":
 		return true
 	default:
 		return false
@@ -164,6 +165,69 @@ func FoldIdent(s string) string {
 		b.WriteRune(unicode.ToLower(r))
 	}
 	return b.String()
+}
+
+// CodeShaped reports a token that reads as code, not prose: an internal
+// capital (camelCase), a digit, a . / _ separator, a hyphen with a
+// leading capital, or a known package alias. Sentence case ("Redis") and
+// hyphenated English ("re-proposing") are prose; bare acronyms are the
+// caller's call.
+func CodeShaped(s string) bool {
+	if HasAlias(s) {
+		return true
+	}
+	hasInnerUpper, hasLower := false, false
+	for i, r := range s {
+		switch {
+		case r == '_' || r == '.' || r == '/':
+			return true
+		case r == '-':
+			if hyphenIdent(s) {
+				return true
+			}
+		case unicode.IsDigit(r):
+			return true
+		case unicode.IsUpper(r):
+			if i > 0 {
+				hasInnerUpper = true
+			}
+		case unicode.IsLower(r):
+			hasLower = true
+		}
+	}
+	return hasInnerUpper && hasLower
+}
+
+// hyphenIdent: Re-Check (leading capital) or kebab identifiers like
+// react-query and x-api-key. Hyphenated English ("re-proposing",
+// "so-called") starts with a standard prefix or particle — a closed
+// grammatical set, so it can stay a list without growing per repo.
+func hyphenIdent(s string) bool {
+	if s[0] >= 'A' && s[0] <= 'Z' {
+		return true
+	}
+	head, _, ok := strings.Cut(s, "-")
+	if !ok {
+		return false
+	}
+	switch strings.ToLower(head) {
+	case "re", "un", "non", "pre", "co", "de", "anti", "self", "well",
+		"semi", "multi", "over", "under", "cross", "half", "so", "mid",
+		"out", "off", "all", "ever", "long", "short", "one", "two":
+		return false
+	}
+	return true
+}
+
+// ExplicitMemory reports a claim source that was deliberate — remember,
+// a manual import, or unknown provenance. Read-time noise gates apply
+// only to automatic transcript extraction, never to these.
+func ExplicitMemory(source string) bool {
+	switch source {
+	case "remember", "import", "":
+		return true
+	}
+	return false
 }
 
 // HasAlias reports whether ExpandIdent knows a package alias for s.
