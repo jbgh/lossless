@@ -117,7 +117,7 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			ownPaths := redact.FilterPaths(findPaths(sent))
 			// Workflow findings are failure memory whatever their
 			// phrasing; the arrow gate is for diagrams and instructions.
-			if !fromFindings[sent] && gate.ArrowChrome(sent) && len(ownPaths) == 0 && !strings.Contains(sent, "`") && !strings.Contains(sent, "**") {
+			if !fromFindings[sent] && msg.Role != "user" && gate.ArrowChrome(sent) && len(ownPaths) == 0 && !strings.Contains(sent, "`") && !strings.Contains(sent, "**") {
 				tr.skip("arrow-chrome", sent)
 				continue
 			}

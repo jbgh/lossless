@@ -198,25 +198,37 @@ func CodeShaped(s string) bool {
 	return hasInnerUpper && hasLower
 }
 
-// hyphenIdent: Re-Check (leading capital) or kebab identifiers like
-// react-query and x-api-key. Hyphenated English ("re-proposing",
-// "so-called") starts with a standard prefix or particle — a closed
-// grammatical set, so it can stay a list without growing per repo.
+// hyphenIdent: Re-Check (leading capital), a kebab token with a digit
+// (sqlite3-wal), or three-plus segments with a one-letter segment
+// (x-api-key). Plain kebab words — react-query as much as follow-up —
+// are prose by shape; a decision naming a package is grounded by its
+// verb ("standardizing on react-query"), not by the hyphen.
 func hyphenIdent(s string) bool {
 	if s[0] >= 'A' && s[0] <= 'Z' {
 		return true
 	}
-	head, _, ok := strings.Cut(s, "-")
-	if !ok {
+	segs := strings.Split(s, "-")
+	if len(segs) < 2 {
 		return false
 	}
-	switch strings.ToLower(head) {
-	case "re", "un", "non", "pre", "co", "de", "anti", "self", "well",
-		"semi", "multi", "over", "under", "cross", "half", "so", "mid",
-		"out", "off", "all", "ever", "long", "short", "one", "two":
-		return false
+	for _, seg := range segs {
+		if seg == "" {
+			return false
+		}
+		for _, r := range seg {
+			if r >= '0' && r <= '9' {
+				return true
+			}
+		}
 	}
-	return true
+	if len(segs) >= 3 {
+		for _, seg := range segs {
+			if len(seg) == 1 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ExplicitMemory reports a claim source that was deliberate — remember,

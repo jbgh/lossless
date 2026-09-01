@@ -69,11 +69,11 @@ func TestHTTPBackendAgainstDaemon(t *testing.T) {
 	if err != nil || res.Extracted != 1 {
 		t.Fatal(res, err)
 	}
-	rec, ok, err := b.Get(res.IDs[0])
+	rec, ok, err := b.Get(res.IDs[0], "", "")
 	if err != nil || !ok || rec.Type != "failed" {
 		t.Fatal(rec, ok, err)
 	}
-	if _, ok, err := b.Get("missing"); err != nil || ok {
+	if _, ok, err := b.Get("missing", "", ""); err != nil || ok {
 		t.Fatal("missing", ok, err)
 	}
 }

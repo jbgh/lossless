@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -21,7 +22,8 @@ import (
 type Backend interface {
 	Ask(req retrieve.Request) (retrieve.Response, error)
 	Remember(rec claim.Record) (write.CatchUpResult, error)
-	Get(id string) (store.RecordView, bool, error)
+	// Get opens one record and books the dwell on the caller's session.
+	Get(id, project, session string) (store.RecordView, bool, error)
 }
 
 type Local struct {
@@ -36,10 +38,13 @@ func (l Local) Remember(rec claim.Record) (write.CatchUpResult, error) {
 	return write.Remember(l.Store, rec)
 }
 
-func (l Local) Get(id string) (store.RecordView, bool, error) {
+func (l Local) Get(id, project, session string) (store.RecordView, bool, error) {
 	rec, ok := l.Store.View(id)
 	if ok {
-		l.Store.RecordDwell(rec.ProjectKey, "", id)
+		if project == "" {
+			project = rec.ProjectKey
+		}
+		l.Store.RecordDwell(project, session, id)
 	}
 	return rec, ok, nil
 }
@@ -83,9 +88,20 @@ func (h HTTP) Remember(rec claim.Record) (write.CatchUpResult, error) {
 	return out, nil
 }
 
-func (h HTTP) Get(id string) (store.RecordView, bool, error) {
+func (h HTTP) Get(id, project, session string) (store.RecordView, bool, error) {
 	var rec store.RecordView
-	err := h.roundTrip(http.MethodGet, "/v1/records/"+id, nil, &rec)
+	q := url.Values{}
+	if project != "" {
+		q.Set("project", project)
+	}
+	if session != "" {
+		q.Set("session", session)
+	}
+	path := "/v1/records/" + url.PathEscape(id)
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	err := h.roundTrip(http.MethodGet, path, nil, &rec)
 	if err != nil {
 		if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "not found") {
 			return store.RecordView{}, false, nil

@@ -263,9 +263,24 @@ func diverseSkip(c scored, packed []scored, packedText [][]string) bool {
 }
 
 func evictFailed(packed, all []scored, limit int) []scored {
+	// Own copy: the caller traces its pre-evict pack.
+	packed = append([]scored(nil), packed...)
 	in := map[string]bool{}
 	for _, p := range packed {
 		in[p.rec.ID] = true
+	}
+	// Diversity is judged against packed faileds only: a failed that
+	// restates a packed decision is the job-1 row that must evict it.
+	packedFaileds := func() ([]scored, [][]string) {
+		var fs []scored
+		var texts [][]string
+		for _, p := range packed {
+			if p.rec.Type == "failed" {
+				fs = append(fs, p)
+				texts = append(texts, claim.Tokens(p.rec.Text))
+			}
+		}
+		return fs, texts
 	}
 	var missing []scored
 	for _, c := range all {
@@ -288,6 +303,11 @@ func evictFailed(packed, all []scored, limit int) []scored {
 	for _, m := range missing {
 		if typeCount(packed, "failed") >= PackTypeCap {
 			break
+		}
+		// The packer's diversity gate holds for re-adds too: two
+		// near-identical faileds are one warning, not two.
+		if fs, texts := packedFaileds(); diverseSkip(m, fs, texts) {
+			continue
 		}
 		if len(packed) < PackCap {
 			packed = append(packed, m)

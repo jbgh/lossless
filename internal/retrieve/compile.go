@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"lossless/internal/claim"
 	"lossless/internal/env"
@@ -22,7 +23,7 @@ func (e Engine) maybeCompile(req Request, q query) query {
 		return q
 	}
 	filled := req
-	path := e.locateSession(q.ProjectKey, q.WorkspaceRoot)
+	path := e.locateSessionFor(q.ProjectKey, q.WorkspaceRoot, q.SessionID)
 	tail := readTail(path)
 	if filled.Question == "" {
 		if u := lastUserText(tail); u != "" {
@@ -51,6 +52,26 @@ func (e Engine) maybeCompile(req Request, q query) query {
 	out.LookupTokens = uniq(append(out.LookupTokens, failedTokens(tail)...))
 	out.Head = isHead(out)
 	return out
+}
+
+// locateSessionFor prefers the asking session's own owned raw. Only a
+// sid-less ask falls back to the newest tape on the project, which may
+// be another conversation.
+func (e Engine) locateSessionFor(project, workspace, sid string) string {
+	if sid != "" && e.Store != nil {
+		// This month's live file, or last month's for a session that
+		// started before the boundary and has not rolled yet.
+		now := e.now()
+		// First of last month: AddDate(0,-1,0) normalizes Oct 31 to Oct 1.
+		prev := time.Date(now.Year(), now.Month()-1, 1, 0, 0, 0, 0, now.Location())
+		for _, t := range []time.Time{now, prev} {
+			p := e.Store.LiveRawPath(project, sid, t)
+			if fi, err := os.Stat(p); err == nil && fi.Size() > 0 {
+				return p
+			}
+		}
+	}
+	return e.locateSession(project, workspace)
 }
 
 func (e Engine) locateSession(project, workspace string) string {

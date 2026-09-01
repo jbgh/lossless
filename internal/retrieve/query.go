@@ -51,11 +51,12 @@ type query struct {
 	LookupTokens   []string
 	PathKeys       []string
 	Symbols        []string
+	OwnSymbols     []string // this ask's own symbols; hydrate adds inherited ones to Symbols only
 	ContentTokens  int
+	Targeted       bool // one content token and an interrogative: a lookup, not a task
 	SessionID      string
 	Served         map[string]bool
 	Dwell          map[string]bool
-	Warned         map[string]bool
 	Continue       bool
 	Cold           bool
 	Head           bool
@@ -128,10 +129,10 @@ func normalize(req Request) (query, error) {
 		LookupTokens:   lookup,
 		PathKeys:       paths,
 		Symbols:        symbols,
+		OwnSymbols:     append([]string(nil), symbols...),
 		SessionID:      CleanSessionID(req.SessionID),
 		Served:         map[string]bool{},
 		Dwell:          map[string]bool{},
-		Warned:         map[string]bool{},
 		Cold:           len(qtoks) == 0 && len(gtoks) == 0,
 		WorkspaceRoot:  req.WorkspaceRoot,
 		LimitTokens:    limit,
@@ -152,8 +153,9 @@ func isHead(q query) bool {
 // (docs/algorithm.md §7). Extract stores every word of a claim as a
 // symbol, so a bare intersection is "any shared word" — weak. Strong
 // needs the shared symbol to be code-shaped, or the ask to be a
-// targeted lookup naming exactly one content token ("why not jose").
-func sharedCodeIdent(qSym, recSyms []string, contentTokens int) bool {
+// targeted lookup: one content token plus an interrogative ("why not
+// jose"). "add tests" is a task whose verb is a stop word, not a lookup.
+func sharedCodeIdent(qSym, recSyms []string, targeted bool) bool {
 	if len(qSym) == 0 || len(recSyms) == 0 {
 		return false
 	}
@@ -165,11 +167,44 @@ func sharedCodeIdent(qSym, recSyms []string, contentTokens int) bool {
 		if !set[strings.ToLower(s)] {
 			continue
 		}
-		if contentTokens == 1 || codeShaped(s) {
+		if targeted || codeShaped(s) {
 			return true
 		}
 	}
 	return false
+}
+
+var interrogative = map[string]bool{
+	"why": true, "what": true, "which": true, "how": true, "should": true,
+	"did": true, "does": true, "is": true, "are": true, "can": true,
+	"could": true, "would": true, "where": true, "when": true, "who": true,
+}
+
+func hasInterrogative(qtoks, gtoks []string) bool {
+	for _, t := range append(append([]string{}, qtoks...), gtoks...) {
+		if interrogative[strings.ToLower(t)] {
+			return true
+		}
+	}
+	return false
+}
+
+// sharedCount is the size of the symbol intersection.
+func sharedCount(a, b []string) int {
+	set := map[string]bool{}
+	for _, s := range a {
+		set[strings.ToLower(s)] = true
+	}
+	n := 0
+	seen := map[string]bool{}
+	for _, s := range b {
+		l := strings.ToLower(s)
+		if set[l] && !seen[l] {
+			seen[l] = true
+			n++
+		}
+	}
+	return n
 }
 
 // codeShaped is claim.CodeShaped: the one home for "reads as code".
@@ -331,10 +366,22 @@ var jobOverlapStop = []string{
 
 func extractNoise(rec claim.Record) bool {
 	t := strings.TrimSpace(rec.Text)
-	if t == "" || gate.SkipProse(t) || gate.ListChrome(t, true) {
+	if t == "" {
 		return true
 	}
-	if !claim.ExplicitMemory(rec.Source) && gate.ArrowChrome(t) && len(rec.Paths) == 0 &&
+	// remember is deliberate memory: no read-time gate applies, whatever
+	// the sentence looks like. import and empty-source rows (bench seeds,
+	// fixtures, legacy) keep the shape gates and only skip the grounding
+	// gates below (claim.ExplicitMemory).
+	if rec.Source == "remember" {
+		return false
+	}
+	if gate.SkipProse(t) || gate.ListChrome(t, true) {
+		return true
+	}
+	// Constraints are user-typed by construction; an arrow there is
+	// memory, not a diagram.
+	if rec.Type != "constraint" && !claim.ExplicitMemory(rec.Source) && gate.ArrowChrome(t) && len(rec.Paths) == 0 &&
 		!strings.Contains(t, "`") && !strings.Contains(t, "**") {
 		return true
 	}
@@ -350,6 +397,10 @@ func extractNoise(rec claim.Record) bool {
 		// Legacy turn-extracted decisions with no referent. Explicit
 		// memory (remember, import, unknown provenance) stays whatever
 		// its shape.
+		// Attached paths are trusted: the extractor only stores a
+		// decision it grounded (own anchors or a neighbor sentence's
+		// path). Legacy rows that inherited a nearby user path are the
+		// residual; the extractor cannot create new ones.
 		if !claim.ExplicitMemory(rec.Source) && !write.GroundedDecision(t, rec.Paths) {
 			return true
 		}

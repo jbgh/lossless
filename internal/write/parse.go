@@ -138,6 +138,15 @@ func normalize(o map[string]any, offset int64, ownIDs map[string]bool) (Message,
 	if _, ok := o["synthetic_reason"]; ok {
 		return Message{Skip: true, Offset: offset}, true
 	}
+	// Claude Code flags: isMeta is shell/command output, isCompactSummary
+	// is the harness's own summary (re-extracting it duplicates claims;
+	// it does mark that a compact happened).
+	if b, _ := o["isMeta"].(bool); b {
+		return Message{Skip: true, Offset: offset}, true
+	}
+	if b, _ := o["isCompactSummary"].(bool); b {
+		return Message{Skip: true, Compact: true, Offset: offset}, true
+	}
 
 	if typ == "tool_result" {
 		id, _ := o["tool_call_id"].(string)
@@ -162,6 +171,11 @@ func normalize(o map[string]any, offset int64, ownIDs map[string]bool) (Message,
 		}
 	} else if msg, ok := o["message"].(map[string]any); ok {
 		role, _ = msg["role"].(string)
+		// A sidechain user turn is a parent's prompt to a subagent, not
+		// the user's constraint.
+		if sc, _ := o["isSidechain"].(bool); sc && role == "user" {
+			return Message{Skip: true, Offset: offset}, true
+		}
 		text = flattenSkippingOwn(msg["content"], ownIDs)
 		if text == "" {
 			text = flatten(msg["output"])
@@ -205,6 +219,13 @@ func finishMessage(m Message) (Message, bool) {
 	}
 	switch m.Role {
 	case "system", "developer":
+		m.Skip = true
+		m.Text = ""
+		return m, true
+	}
+	// Claude Code injects a skill body as a plain user text block. Its
+	// "Never …" lines are the skill's rules, not the user's constraints.
+	if m.Role == "user" && strings.HasPrefix(strings.TrimSpace(m.Text), "Base directory for this skill:") {
 		m.Skip = true
 		m.Text = ""
 		return m, true

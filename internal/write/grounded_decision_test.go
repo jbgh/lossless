@@ -122,3 +122,54 @@ func TestNeighborGroundedDecisionAttachesPath(t *testing.T) {
 	}
 	t.Fatalf("neighbor-grounded decision missing: %+v", got)
 }
+
+func TestGroundedDecisionSecondReviewShapes(t *testing.T) {
+	no := []string{
+		"Picked it over that.",
+		"We chose not to migrate.",
+		"OK, decided to keep going.",
+		"Decided to do the follow-up later.",
+		"“I'll stick with keep.”",
+		"_Decided_ to keep going.",
+		"Going with the trade-off for now.",
+	}
+	for _, s := range no {
+		if GroundedDecision(s, nil) {
+			t.Errorf("GroundedDecision(%q) = true, want false", s)
+		}
+	}
+	yes := []string{
+		"we're standardizing on react-query for server state",
+		"Switched to date-fns for formatting.",
+		"Settled on pgx for the pool.",
+		"Migrating to httpx for the client.",
+	}
+	for _, s := range yes {
+		if !GroundedDecision(s, nil) {
+			t.Errorf("GroundedDecision(%q) = false, want true", s)
+		}
+	}
+}
+
+func TestGroundedDecisionPackageFramesAndProcessNarration(t *testing.T) {
+	yes := []string{
+		"Replaced moment with date-fns across the app.",
+		"Decision: react-query for server state.",
+		"Keep using date-fns everywhere.",
+	}
+	for _, s := range yes {
+		if !GroundedDecision(s, nil) {
+			t.Errorf("GroundedDecision(%q) = false, want true", s)
+		}
+	}
+	no := []string{
+		"We decided to move to step 3.",
+		"Decided: switching to plan mode for now.",
+		"Decided to adopt whatever works.",
+	}
+	for _, s := range no {
+		if GroundedDecision(s, nil) {
+			t.Errorf("GroundedDecision(%q) = true, want false", s)
+		}
+	}
+}

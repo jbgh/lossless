@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"lossless/internal/claim"
+	"lossless/internal/projectkey"
 	"lossless/internal/retrieve"
 )
 
@@ -39,6 +40,7 @@ func toolDefs() []map[string]any {
 					"workspace_root": map[string]any{"type": "string"},
 					"paths":          map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 					"why":            map[string]any{"type": "string"},
+					"session_id":     map[string]any{"type": "string", "description": "Harness session id from this prompt, so the remember lands on this session's tape. Omit if the prompt does not have one."},
 				},
 			},
 		},
@@ -49,7 +51,10 @@ func toolDefs() []map[string]any {
 				"type":     "object",
 				"required": []string{"id"},
 				"properties": map[string]any{
-					"id": map[string]any{"type": "string"},
+					"id":             map[string]any{"type": "string"},
+					"project":        map[string]any{"type": "string"},
+					"workspace_root": map[string]any{"type": "string"},
+					"session_id":     map[string]any{"type": "string", "description": "Harness session id from this prompt, so the dwell is booked to this session. Omit if the prompt does not have one."},
 				},
 			},
 		},
@@ -105,6 +110,7 @@ func (s *Server) toolRemember(args json.RawMessage) (any, error) {
 	if rec.ProjectKey == "" {
 		rec.ProjectKey = body.Project
 	}
+	rec.SessionID = retrieve.CleanSessionID(rec.SessionID)
 	out, err := s.Backend.Remember(rec)
 	if err != nil {
 		return toolErr(err.Error()), nil
@@ -114,12 +120,19 @@ func (s *Server) toolRemember(args json.RawMessage) (any, error) {
 
 func (s *Server) toolGet(args json.RawMessage) (any, error) {
 	var p struct {
-		ID string `json:"id"`
+		ID            string `json:"id"`
+		Project       string `json:"project"`
+		WorkspaceRoot string `json:"workspace_root"`
+		SessionID     string `json:"session_id"`
 	}
 	if err := json.Unmarshal(args, &p); err != nil || p.ID == "" {
 		return toolErr("id required"), nil
 	}
-	rec, ok, err := s.Backend.Get(p.ID)
+	project := p.Project
+	if project == "" && p.WorkspaceRoot != "" {
+		project = projectkey.FromWorkspace(p.WorkspaceRoot)
+	}
+	rec, ok, err := s.Backend.Get(p.ID, project, retrieve.CleanSessionID(p.SessionID))
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}

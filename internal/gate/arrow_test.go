@@ -56,3 +56,26 @@ func TestFixtureTalkSelfTalkStillBlocked(t *testing.T) {
 		}
 	}
 }
+
+func TestArrowChromeDingbatBlocks(t *testing.T) {
+	for _, s := range []string{"Migration order: users ➔ orders ➔ invoices", "⬅ back to the list", "step ➡ next"} {
+		if !ArrowChrome(s) {
+			t.Errorf("ArrowChrome(%q) = false, want true", s)
+		}
+	}
+}
+
+// Stars, plus signs, and checklist squares decorate prose; only the arrow
+// sub-ranges are chrome.
+func TestArrowChromeSparesStarsAndPlus(t *testing.T) {
+	for _, s := range []string{"⭐ Standardizing on pgx for the pool going forward.", "Added retries ➕ backoff; the staging deploy still failed.", "⬜ todo"} {
+		if ArrowChrome(s) {
+			t.Errorf("ArrowChrome(%q) = true, want false", s)
+		}
+	}
+	for _, s := range []string{"users ➔ orders", "⬅ back", "⮕ next"} {
+		if !ArrowChrome(s) {
+			t.Errorf("ArrowChrome(%q) = false, want true", s)
+		}
+	}
+}

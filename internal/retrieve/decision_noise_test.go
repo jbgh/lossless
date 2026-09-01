@@ -68,3 +68,30 @@ func TestAskKeepsExplicitMemoryShapes(t *testing.T) {
 		t.Fatalf("imported prose decision dropped: %s", texts)
 	}
 }
+
+// remember rows pack whatever their shape: none of the read-time gates
+// apply to explicit memory.
+func TestAskKeepsRememberRowsOfAnyShape(t *testing.T) {
+	st := tmpStore(t)
+	rows := []claim.Record{
+		{ID: "01JRF", Type: "failed", Text: "the retry loop failed under load"},
+		{ID: "01JRD1", Type: "decision", Text: "Use the fixture builder for tests"},
+		{ID: "01JRD2", Type: "decision", Text: "I'll check the limiter budget before every deploy"},
+		{ID: "01JRC", Type: "constraint", Text: "Don't ask before running the migration"},
+	}
+	for _, r := range rows {
+		r.Source = "remember"
+		r.CreatedAt = "2026-08-13T00:00:00Z"
+		writeRec(t, st, r)
+	}
+	out := askAt(t, st, Request{
+		Project:  "acme/api",
+		Question: "retry loop fixture builder limiter budget migration",
+	})
+	texts := textsOf(out)
+	for _, want := range []string{"retry loop", "fixture builder", "limiter budget", "running the migration"} {
+		if !strings.Contains(texts, want) {
+			t.Fatalf("remember row %q dropped: %s", want, texts)
+		}
+	}
+}

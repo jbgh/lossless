@@ -89,6 +89,7 @@ func (e Engine) prepare(req Request) (prep, error) {
 	seedPaths := append([]string{}, q.PathKeys...)
 	q = e.hydrateActions(req, q)
 	q.ContentTokens = contentTokenCount(q.QuestionTokens, q.GoalTokens)
+	q.Targeted = q.ContentTokens == 1 && hasInterrogative(q.QuestionTokens, q.GoalTokens)
 	prof := selectProfile(q)
 	empty := Response{Context: []Hit{}, Warnings: []string{}, Project: q.ProjectKey}
 	p := prep{q: q, seed: seedPaths, out: empty}
@@ -429,7 +430,9 @@ func (e Engine) inferredPaths(ids []string) ([]string, error) {
 		if !ok {
 			continue
 		}
-		for _, k := range claim.PathKeys(rec.Paths) {
+		// Full paths only: a basename like main.go would hop into every
+		// directory that has one.
+		for _, k := range rec.Paths {
 			if k == "" || seen[k] {
 				continue
 			}
@@ -488,7 +491,15 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64,
 	s.agree = float64(nAgree) / 3
 	overlapTokens := append(append([]string{}, q.QuestionTokens...), q.GoalTokens...)
 	hits := contentOverlap(overlapTokens, jobOverlapText(rec.Text))
-	strong := s.path > 0 || sharedCodeIdent(qSym, rec.Symbols, q.ContentTokens) || s.symbol >= OverlapSymbolMin || hits >= OverlapStrongMin || s.vector >= VectorGate
+	// Strong overlap judges this ask's own symbols. Symbols inherited
+	// from the action tape rank (s.symbol) but never force-pack: a topic
+	// shift must not carry the old topic's job-1 warning. The Jaccard
+	// route needs two shared symbols; on a terse record one shared word
+	// alone clears 0.25.
+	ownSym := q.OwnSymbols
+	strong := s.path > 0 || sharedCodeIdent(ownSym, rec.Symbols, q.Targeted) ||
+		(jaccard(ownSym, rSym) >= OverlapSymbolMin && sharedCount(ownSym, rSym) >= 2) ||
+		hits >= OverlapStrongMin || s.vector >= VectorGate
 	weak := !strong && hits >= 1
 	switch rec.Type {
 	case "failed":

@@ -175,13 +175,34 @@ func isQuestion(s string) bool {
 	return questionRE.MatchString(low)
 }
 
-var pickedOverRE = regexp.MustCompile(`(?i)\b(?:picked|prefer(?:red)?)\s+\S+\s+over\s+\S+`)
+var pickedOverRE = regexp.MustCompile(`(?i)\b(?:picked|prefer(?:red)?)\s+(\S+)\s+over\s+(\S+)`)
+
+// decisionStop: words that follow a decision verb without naming
+// anything ("chose not", "keep going", "picked it over that").
+var decisionStop = map[string]bool{
+	"not": true, "to": true, "never": true, "going": true, "back": true,
+	"away": true, "ahead": true, "forward": true, "on": true, "it": true,
+	"them": true, "everything": true, "nothing": true, "something": true,
+	"one": true, "some": true, "both": true, "either": true, "neither": true,
+	// process words: "move to step 3", "switching to plan mode", "adopt whatever"
+	"step": true, "plan": true, "mode": true, "phase": true, "whatever": true,
+	"anything": true, "another": true, "later": true, "now": true, "next": true,
+	"around": true, "here": true, "there": true, "again": true,
+}
+
+// decisionColonRE: "Decision: react-query for server state".
+var decisionColonRE = regexp.MustCompile(`(?i)\bdecision:\s*([a-z][\w.+-]*)`)
+
+func decisionObject(w string) bool {
+	w = strings.ToLower(strings.Trim(w, ".,;:"))
+	return w != "" && !useNotStop[w] && !decisionStop[w]
+}
 
 var insteadOfRE = regexp.MustCompile(`(?i)\b(\S+)\s+instead\s+of\s+(\S+)`)
 
 // verbObjRE: a classifying decision verb with a direct object names its
 // referent even in lowercase ("we'll use postgres next").
-var verbObjRE = regexp.MustCompile(`(?i)\b(?:we(?:'|’)?ll use|we will use|going with|go with|decided on|chose|picked)\s+([a-z][\w.+-]*)`)
+var verbObjRE = regexp.MustCompile(`(?i)\b(?:we(?:'|’)?ll use|we will use|going with|go with|decided on|chose|picked|standardiz(?:e|ed|ing) on|switch(?:ed|ing)? to|migrat(?:e|ed|ing) to|adopt(?:ed|ing)?|settled? on|mov(?:e|ed|ing) to|replac(?:e|ed|ing)\s+\S+\s+with|(?:keep|kept|continu(?:e|ed|ing))\s+using)\s+([a-z][\w.+-]*)`)
 
 // GroundedDecision is true when a decision names a referent: a path, a
 // tick or bold span, a code-shaped token, a mid-sentence proper noun, an
@@ -201,7 +222,7 @@ func GroundedDecision(s string, paths []string) bool {
 	if m := useNotRE.FindStringSubmatch(folded); m != nil && !useNotStop[strings.ToLower(m[1])] {
 		return true
 	}
-	if pickedOverRE.MatchString(folded) {
+	if m := pickedOverRE.FindStringSubmatch(folded); m != nil && decisionObject(m[1]) && decisionObject(m[2]) {
 		return true
 	}
 	// "X instead of Y" names two alternatives only when both sides are
@@ -210,11 +231,14 @@ func GroundedDecision(s string, paths []string) bool {
 		!useNotStop[strings.Trim(m[1], ".,;:")] && !useNotStop[strings.Trim(m[2], ".,;:")] {
 		return true
 	}
-	if m := verbObjRE.FindStringSubmatch(folded); m != nil && !useNotStop[m[1]] {
+	if m := verbObjRE.FindStringSubmatch(folded); m != nil && decisionObject(m[1]) {
+		return true
+	}
+	if m := decisionColonRE.FindStringSubmatch(folded); m != nil && decisionObject(m[1]) {
 		return true
 	}
 	for i, w := range strings.Fields(s) {
-		w = strings.Trim(w, ".,;:()[]\"'*")
+		w = strings.Trim(w, ".,;:()[]\"'*_—–“”‘’")
 		if w == "" {
 			continue
 		}
@@ -226,7 +250,7 @@ func GroundedDecision(s string, paths []string) bool {
 		if claim.CodeShaped(w) {
 			return true
 		}
-		if acronym(w) {
+		if acronym(w) && !acronymStop[w] {
 			return true
 		}
 		if i > 0 && len(w) >= 3 && w[0] >= 'A' && w[0] <= 'Z' && !allUpper(w) && lettersOnly(w) {
@@ -261,6 +285,14 @@ func pureDigits(s string) bool {
 var proseAbbrev = map[string]bool{
 	"e.g": true, "i.e": true, "eg": true, "ie": true,
 	"etc": true, "vs": true, "cf": true,
+}
+
+// acronymStop: all-caps discourse markers, not referents.
+var acronymStop = map[string]bool{
+	"OK": true, "FYI": true, "TBD": true, "ASAP": true, "TODO": true, "WIP": true,
+	"PS": true, "NB": true, "AM": true, "PM": true, "EOD": true, "IMO": true,
+	"BTW": true, "LOL": true, "IIRC": true, "AFAIK": true, "TL": true, "DR": true,
+	"YES": true, "NO": true, "AND": true, "OR": true, "NOT": true, "THE": true,
 }
 
 // acronym is 2-8 letters, all capitals: JWT, REST, SQL. Not "I".

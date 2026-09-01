@@ -127,7 +127,8 @@ func asciiLower(s string) string {
 }
 
 func stripHarnessChrome(text string) string {
-	for _, tag := range []string{"system-reminder", "user_info", "agent-reminder", "claude-user-context"} {
+	for _, tag := range []string{"system-reminder", "user_info", "agent-reminder", "claude-user-context",
+		"command-name", "command-message", "command-args", "local-command-stdout", "local-command-caveat"} {
 		open, close := "<"+tag+">", "</"+tag+">"
 		for {
 			low := asciiLower(text)

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.24 — 2026-09-01
+
+- Parse skips Claude Code chrome that arrives as user text: skill bodies (`Base directory for this skill:`), slash-command tags (`<command-name>`, `<local-command-stdout>`), `isMeta` shell output, and `isSidechain` subagent prompts. `isCompactSummary` marks the compact and is not re-extracted. A real user constraint in the same turn still stores.
+- Continue needs a shared primary path (a root file counts; a derived basename like `main.go` does not). Strong overlap judges this ask's own symbols; inherited tape symbols rank but never force-pack. Two-hop infers files by full path. The one-content-token targeted rule needs an interrogative (`why not jose` warns, `add tests` does not); the symbol-Jaccard route needs two shared symbols.
+- Thin asks compile from the asking session's own tape (this month or last), not the newest tape on the project.
+- `remember` rows bypass every read-time gate; attached decision paths are trusted. Decisions ground on package frames (`replaced X with Y`, `keep using Y`, `Decision: Y`, `standardizing on` / `switched to` / `migrating to` / `settled on`). Process words (`step`, `plan mode`, `whatever`), `OK`/`FYI` acronyms, curly quotes, `Picked it over that`, and plain kebab words (`follow-up`) do not ground. Arrow chrome covers the arrow blocks only (`⭐` / `➕` are prose) and spares user-typed sentences and constraints.
+- `evictFailed` copies its input and judges diversity against packed faileds only. `get_record` and `remember` carry `session_id` over MCP so dwell lands on the calling session. Dead `warned` hydration retired.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.23 — 2026-09-01
 
 - Parse locates harness chrome tags with a byte-preserving ASCII fold. `İ` or `K` in a user turn no longer panics the watcher; a tick that panics is recovered and logged, never fatal to the daemon.

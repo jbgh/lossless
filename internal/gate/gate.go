@@ -659,7 +659,11 @@ var (
 func ArrowChrome(s string) bool {
 	for _, r := range s {
 		if (r >= 0x2190 && r <= 0x21FF) || // arrows
+			r == 0x2794 || (r >= 0x2798 && r <= 0x27AF) || (r >= 0x27B1 && r <= 0x27BE) || // dingbat arrows (not ➕➖➗➰➿)
 			(r >= 0x27F0 && r <= 0x27FF) || // long arrows
+			(r >= 0x2B00 && r <= 0x2B11) || // misc arrows (not ⬛⬜⭐⭕)
+			(r >= 0x2B30 && r <= 0x2B4F) ||
+			(r >= 0x2B60 && r <= 0x2BB8) ||
 			(r >= 0x2500 && r <= 0x257F) { // box drawing
 			return true
 		}

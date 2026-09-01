@@ -12,9 +12,8 @@ func TestCodeShaped(t *testing.T) {
 		"jwt",          // package alias
 		"sqlite3",      // digit
 		"Re-Check",     // hyphen with leading capital
-		"react-query",  // kebab package name
-		"date-fns",     // kebab package name
-		"x-api-key",    // kebab header name
+		"x-api-key",    // kebab with a short segment
+		"sqlite3-wal",  // kebab with a digit
 	}
 	for _, s := range yes {
 		if !CodeShaped(s) {
@@ -25,7 +24,12 @@ func TestCodeShaped(t *testing.T) {
 		"staging",      // plain word
 		"Redis",        // sentence-case proper noun, not code shape
 		"re-proposing", // hyphenated English
-		"HTTP",         // bare acronym: caller's call, not code shape
+		"follow-up",    // noun-particle English
+		"trade-off",
+		"read-only",
+		"react-query", // plain kebab: grounded by its verb (standardizing on), not by shape
+		"date-fns",
+		"HTTP", // bare acronym: caller's call, not code shape
 		"list",
 	}
 	for _, s := range no {

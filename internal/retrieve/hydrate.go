@@ -20,9 +20,6 @@ func (e Engine) hydrateActions(req Request, q query) query {
 	if q.Dwell == nil {
 		q.Dwell = map[string]bool{}
 	}
-	if q.Warned == nil {
-		q.Warned = map[string]bool{}
-	}
 	acts, err := e.Store.RecentActions(q.ProjectKey, q.SessionID, ActionTapeCap)
 	if err != nil || len(acts) == 0 {
 		return q
@@ -50,10 +47,6 @@ func (e Engine) hydrateActions(req Request, q query) query {
 		case store.ActionGet, store.ActionRemember:
 			if a.ClaimID != "" {
 				q.Dwell[a.ClaimID] = true
-			}
-		case store.ActionWarn:
-			if a.ClaimID != "" {
-				q.Warned[a.ClaimID] = true
 			}
 		}
 	}
@@ -88,7 +81,7 @@ func (e Engine) hydrateActions(req Request, q query) query {
 	}
 
 	if useTapeRecall {
-		if ids := dwellOrWarned(q); len(ids) > 0 {
+		if ids := dwellIDs(q); len(ids) > 0 {
 			if recs, err := e.Store.GetMany(ids); err == nil {
 				for _, rec := range recs {
 					extraToks = append(extraToks, claim.Tokens(rec.Text)...)
@@ -125,9 +118,31 @@ func continueTape(q query, lastToks, lastPaths []string) bool {
 		return true
 	}
 	if len(q.PathKeys) > 0 && len(lastPaths) > 0 {
-		return jaccard(q.PathKeys, claim.PathKeys(lastPaths)) > 0
+		// Primary paths only: a shared derived basename (cmd/main.go vs
+		// tools/main.go) is not the same work. A root-level file
+		// (Makefile) is its own primary path.
+		return jaccard(primaryPaths(q.PathKeys), primaryPaths(claim.PathKeys(lastPaths))) > 0
 	}
 	return false
+}
+
+// primaryPaths drops keys that are the basename of another key in the
+// same list.
+func primaryPaths(keys []string) []string {
+	derived := map[string]bool{}
+	for _, k := range keys {
+		if i := strings.LastIndex(k, "/"); i >= 0 {
+			derived[k[i+1:]] = true
+		}
+	}
+	var out []string
+	for _, k := range keys {
+		if !strings.Contains(k, "/") && derived[k] {
+			continue
+		}
+		out = append(out, k)
+	}
+	return out
 }
 
 func sameTokenSet(a, b []string) bool {
@@ -153,7 +168,7 @@ func sameTokenSet(a, b []string) bool {
 	return true
 }
 
-func dwellOrWarned(q query) []string {
+func dwellIDs(q query) []string {
 	var ids []string
 	for id := range q.Dwell {
 		ids = append(ids, id)
