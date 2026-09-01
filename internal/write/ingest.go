@@ -42,9 +42,8 @@ func checkIngestFile(path string) error {
 	if !fi.Mode().IsRegular() {
 		return fmt.Errorf("ingest path is not a regular file")
 	}
-	if fi.Size() > maxCatchUpBytes {
-		return fmt.Errorf("ingest file too large (%d bytes)", fi.Size())
-	}
+	// No file-size refusal: readCatchUpBytes caps each delta at
+	// maxCatchUpBytes, so a long session keeps ingesting in chunks.
 	return nil
 }
 
@@ -70,10 +69,6 @@ func openIngestFile(path string) (*os.File, os.FileInfo, error) {
 	if !fi.Mode().IsRegular() {
 		_ = f.Close()
 		return nil, nil, fmt.Errorf("ingest path is not a regular file")
-	}
-	if fi.Size() > maxCatchUpBytes {
-		_ = f.Close()
-		return nil, nil, fmt.Errorf("ingest file too large (%d bytes)", fi.Size())
 	}
 	return f, fi, nil
 }

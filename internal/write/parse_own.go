@@ -113,11 +113,24 @@ func stripEmbeddedOwnPayload(text string) string {
 	return strings.TrimSpace(text)
 }
 
+// asciiLower folds only A-Z so byte offsets match the original text.
+// strings.ToLower changes byte lengths for İ, K and friends, and an
+// index from the folded copy then slices the original out of bounds.
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 32
+		}
+	}
+	return string(b)
+}
+
 func stripHarnessChrome(text string) string {
 	for _, tag := range []string{"system-reminder", "user_info", "agent-reminder", "claude-user-context"} {
 		open, close := "<"+tag+">", "</"+tag+">"
 		for {
-			low := strings.ToLower(text)
+			low := asciiLower(text)
 			i := strings.Index(low, open)
 			if i < 0 {
 				break

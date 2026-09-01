@@ -110,6 +110,7 @@ func (s *Store) idsByPosting(table, col, project string, keys []string, per, tot
 SELECT p.record_id FROM %s p
 JOIN records r ON r.id = p.record_id
 WHERE p.project_key = ? AND p.%s = ? AND r.status = 'active'
+ORDER BY p.record_id DESC
 LIMIT ?`, table, col)
 	for _, k := range keys {
 		if k == "" || len(out) >= total {
@@ -234,6 +235,7 @@ func (s *Store) idsByPostingType(table, col, project, typ string, keys []string,
 SELECT p.record_id FROM %s p
 JOIN records r ON r.id = p.record_id
 WHERE p.project_key = ? AND p.%s = ? AND r.status = 'active' AND r.type = ?
+ORDER BY p.record_id DESC
 LIMIT ?`, table, col)
 	for _, k := range keys {
 		if k == "" || len(out) >= total {

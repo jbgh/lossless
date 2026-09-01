@@ -52,13 +52,13 @@ type AskExpect struct {
 }
 
 type Case struct {
-	ID       string         `json:"id"`
-	Project  string         `json:"project"`
-	Now      string         `json:"now,omitempty"`
+	ID       string          `json:"id"`
+	Project  string          `json:"project"`
+	Now      string          `json:"now,omitempty"`
 	Sessions []SessionIngest `json:"sessions"`
-	Seed     []SeedClaim    `json:"seed,omitempty"`
-	Write    WriteExpect    `json:"write"`
-	Asks     []AskExpect    `json:"asks"`
+	Seed     []SeedClaim     `json:"seed,omitempty"`
+	Write    WriteExpect     `json:"write"`
+	Asks     []AskExpect     `json:"asks"`
 }
 
 type AskScore struct {
@@ -71,14 +71,14 @@ type AskScore struct {
 }
 
 type CaseScore struct {
-	ID           string     `json:"id"`
-	WriteOK      bool       `json:"write_ok"`
-	WriteErrors  []string   `json:"write_errors,omitempty"`
-	Extracted    int        `json:"extracted"`
-	Asks         []AskScore `json:"asks"`
-	AskPass      int        `json:"ask_pass"`
-	AskTotal     int        `json:"ask_total"`
-	Recall       float64    `json:"recall"`
+	ID          string     `json:"id"`
+	WriteOK     bool       `json:"write_ok"`
+	WriteErrors []string   `json:"write_errors,omitempty"`
+	Extracted   int        `json:"extracted"`
+	Asks        []AskScore `json:"asks"`
+	AskPass     int        `json:"ask_pass"`
+	AskTotal    int        `json:"ask_total"`
+	Recall      float64    `json:"recall"`
 }
 
 type Report struct {

@@ -80,7 +80,7 @@ func TestSubmitCatchUpSpoolsWhenCatchUpFails(t *testing.T) {
 	t.Setenv("LOSSLESS_SIDECAR", "http://127.0.0.1:1")
 	t.Setenv("LOSSLESS_URL", "")
 	SubmitCatchUp(CatchUpRequest{
-		JSONL: filepath.Join(t.TempDir(), "missing.jsonl"),
+		JSONL:   filepath.Join(t.TempDir(), "missing.jsonl"),
 		Project: "acme/api", SessionID: "s", Harness: "grok",
 	})
 	files, err := ListSpool(home)

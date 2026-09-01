@@ -7,21 +7,46 @@ import (
 )
 
 var secrets = []*regexp.Regexp{
-	regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
-	regexp.MustCompile(`-----BEGIN [A-Z ]+PRIVATE KEY-----`),
-	regexp.MustCompile(`Bearer [A-Za-z0-9._\-]{20,}`),
-	regexp.MustCompile(`\bghp_[A-Za-z0-9]{20,}`),
+	regexp.MustCompile(`\b(?:AKIA|ASIA)[0-9A-Z]{16}`),
+	regexp.MustCompile(`-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----`),
+	regexp.MustCompile(`(?i)\bBearer [A-Za-z0-9._\-]{20,}`),
+	regexp.MustCompile(`(?i)\bAuthorization:\s*Basic\s+[A-Za-z0-9+/=]{16,}`),
+	regexp.MustCompile(`\bgh[opsu]_[A-Za-z0-9]{20,}`),
 	regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{20,}`),
+	regexp.MustCompile(`\bglpat-[A-Za-z0-9_\-]{20,}`),
 	regexp.MustCompile(`\bsk-[A-Za-z0-9]{20,}`),
 	regexp.MustCompile(`\bsk-ant-[A-Za-z0-9\-_]{20,}`),
 	regexp.MustCompile(`\bsk-proj-[A-Za-z0-9_-]{20,}`),
-	regexp.MustCompile(`\bsk_(?:live|test)_[A-Za-z0-9]{20,}`),
+	regexp.MustCompile(`\b[sr]k_(?:live|test)_[A-Za-z0-9]{20,}`),
 	regexp.MustCompile(`\bxai-[A-Za-z0-9_-]{20,}`),
 	regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{30,}`),
 	regexp.MustCompile(`\bxox[baprs]-[A-Za-z0-9-]{10,}`),
 	regexp.MustCompile(`\bnpm_[A-Za-z0-9]{20,}`),
+	regexp.MustCompile(`\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}`),
+	regexp.MustCompile(`https://hooks\.slack\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]+`),
+	regexp.MustCompile(`https://discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]+`),
 	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`),
-	regexp.MustCompile(`(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?)://[^:\s]+:[^@\s]+@`),
+	regexp.MustCompile(`(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|mssql|redis|rediss|amqp|amqps)://[^:\s/@]*:[^@\s]+@`),
+}
+
+// secretAssign is a name-keyed credential: password=…, AWS_SECRET_ACCESS_KEY=…,
+// api_key: hex. The value must look generated (credentialShaped);
+// "token: jsonwebtoken" and "password= in .env" are prose.
+var secretAssign = regexp.MustCompile(`(?i)\b[A-Za-z0-9_]*(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?key|auth[_-]?token|token)\s*[=:]\s*["']?([A-Za-z0-9+/=_\-\.]{8,})`)
+
+// credentialShaped: a digit or base64 symbol, or long enough that no
+// English word fits.
+func credentialShaped(v string) bool {
+	v = strings.TrimRight(v, ".")
+	if len(v) < 8 {
+		return false
+	}
+	for _, r := range v {
+		if (r >= '0' && r <= '9') || r == '+' || r == '/' || r == '=' {
+			return true
+		}
+	}
+	return len(v) >= 24
 }
 
 var sensitivePath = regexp.MustCompile(`(?:^|/)(?:\.env(?:\..+)?|\.envrc|.*\.pem|id_rsa|id_rsa\.pub|id_ed25519|id_ed25519\.pub|id_ecdsa|id_dsa|authorized_keys|credentials(?:\.json)?|aws-exports\.js)$`)
@@ -29,6 +54,11 @@ var sensitivePath = regexp.MustCompile(`(?:^|/)(?:\.env(?:\..+)?|\.envrc|.*\.pem
 func ContainsSecret(text string) bool {
 	for _, re := range secrets {
 		if re.MatchString(text) {
+			return true
+		}
+	}
+	for _, m := range secretAssign.FindAllStringSubmatch(text, -1) {
+		if credentialShaped(m[1]) {
 			return true
 		}
 	}

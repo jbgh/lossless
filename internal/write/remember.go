@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"lossless/internal/claim"
@@ -28,7 +29,8 @@ func Remember(st *store.Store, rec claim.Record) (CatchUpResult, error) {
 	rec.Paths = redact.FilterPaths(rec.Paths)
 	// Every other ingest door redacts. Reject before any write so the
 	// secret reaches neither the manual tape nor the claim store.
-	if redact.ShouldDropClaim(rec.Text, rec.Paths) {
+	probe := strings.Join(append([]string{rec.Text, rec.Why}, rec.Symbols...), "\n")
+	if redact.ShouldDropClaim(probe, rec.Paths) {
 		return out, fmt.Errorf("text looks like it contains a secret; redact it and retry")
 	}
 	if rec.Harness == "" {

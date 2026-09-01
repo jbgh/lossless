@@ -3,6 +3,7 @@ package write
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -203,7 +204,24 @@ func FlushPush(home string) (int, error) {
 			}
 			continue
 		}
-		if err := postAppend(job); err != nil {
+		res, err := postAppend(job)
+		if errors.Is(err, errPartialAccept) {
+			// Requeue the unaccepted remainder from home's offset so the
+			// next flush continues instead of resending the whole body.
+			if res.AcceptedThrough > job.PrevOff && res.AcceptedThrough < job.PrevOff+int64(len(job.Body)) {
+				rest := job
+				rest.PrevOff = res.AcceptedThrough
+				rest.Body = job.Body[res.AcceptedThrough-job.PrevOff:]
+				if _, werr := WritePush(home, rest); werr == nil {
+					_ = os.Remove(p)
+				}
+			}
+			if first == nil {
+				first = err
+			}
+			continue
+		}
+		if err != nil {
 			if first == nil {
 				first = err
 			}
@@ -243,9 +261,8 @@ func MaybeEnqueuePush(home string, req CatchUpRequest, body string, prev int64) 
 	return err == nil
 }
 
-func postAppend(job PushJob) error {
-	_, err := PostAppend(HomeURL(), env.Token(), job)
-	return err
+func postAppend(job PushJob) (AppendResult, error) {
+	return PostAppend(HomeURL(), env.Token(), job)
 }
 
 func PostAppend(base, token string, job PushJob) (AppendResult, error) {
@@ -274,7 +291,7 @@ func PostAppend(base, token string, job PushJob) (AppendResult, error) {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	client := outboundClient(10 * time.Second)
+	client := outboundClient(30 * time.Second)
 	res, err := client.Do(req)
 	if err != nil {
 		return out, err
@@ -293,5 +310,13 @@ func PostAppend(base, token string, job PushJob) (AppendResult, error) {
 	if res.StatusCode != http.StatusOK {
 		return out, fmt.Errorf("append %d: %s", res.StatusCode, b)
 	}
+	// Home's body cap trims to the last newline it accepted. A 200 that
+	// stops short of the body is a partial accept; treating it as done
+	// would leave the local cursor ahead of home forever.
+	if end := job.PrevOff + int64(len(job.Body)); out.AcceptedThrough < end {
+		return out, fmt.Errorf("%w: accepted %d of %d", errPartialAccept, out.AcceptedThrough, end)
+	}
 	return out, nil
 }
+
+var errPartialAccept = errors.New("home accepted a prefix of the body")

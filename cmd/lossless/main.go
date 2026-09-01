@@ -180,6 +180,10 @@ func runUpdate(args []string) int {
 			fmt.Printf("lossless %s is current (%s)\n", version.Version, dest)
 			return 0
 		}
+		if res.Ahead {
+			fmt.Printf("lossless %s is ahead of the latest release %s; nothing to install\n", version.Version, res.Tag)
+			return 0
+		}
 		why := "newer release"
 		if res.ChannelInstall {
 			why = "not on the release channel yet"
@@ -189,6 +193,10 @@ func runUpdate(args []string) int {
 	}
 	if res.AlreadyLatest {
 		fmt.Printf("lossless %s is current (%s)\n", res.Version, dest)
+		return 0
+	}
+	if res.Ahead {
+		fmt.Printf("lossless %s is ahead of the latest release %s; not downgrading (use --version to pin)\n", version.Version, res.Tag)
 		return 0
 	}
 	if !res.Replaced {

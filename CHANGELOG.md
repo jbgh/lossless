@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.23 — 2026-09-01
+
+- Parse locates harness chrome tags with a byte-preserving ASCII fold. `İ` or `K` in a user turn no longer panics the watcher; a tick that panics is recovered and logged, never fatal to the daemon.
+- Posting channels return newest first (`ORDER BY record_id DESC`). A busy file's 40 newest faileds are the job-1 candidates, not its 40 oldest.
+- Session files past 64MB ingest in 64MB deltas instead of being refused outright.
+- Redact: PKCS#8 and OpenSSH private keys, Slack and Discord webhooks, `redis://` / `amqp://` / `mssql://` credentials, `Authorization: Basic`, `gho_` / `ghs_` / `ghu_`, `glpat-`, `ASIA`, `rk_live`, SendGrid, lowercase `bearer`, and name-keyed `password=` / `AWS_SECRET_ACCESS_KEY=` / `api_key:` values that look generated. `token: jsonwebtoken` stays. `remember` rejects secrets in `why` and `symbols` too.
+- `update` never downgrades: a running build ahead of the latest release installs nothing unless `--version` pins a tag.
+- Home push honors `accepted_through` on 200: a partial accept requeues the remainder from home's offset instead of dropping the job and wedging the cursor.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.22 — 2026-08-31
 
 - Decisions need a referent to extract: a path, tick/bold span, code-shaped token (camelCase, kebab like `react-query`, version, acronym, `jwt` alias), a mid-sentence proper noun, or a use-X-not-Y / picked-X-over-Y / X-instead-of-Y shape. `I'll stick with keep.` and planning narration skip; `I'll stick with JWT next` and `We'll use postgres next` still store. A neighbor sentence's path grounds — and attaches, so the row stays retrievable. Bare digits, `e.g.`, and pronoun-only instead-of do not ground.

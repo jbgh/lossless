@@ -73,7 +73,7 @@ func TestConcurrentCursorSessionExcerpt(t *testing.T) {
 			}
 			if _, err := st.WriteClaim(claim.Record{
 				Type: "failed", Text: "Redis token bucket failed in src/middleware/auth.ts staging.",
-				Paths: []string{"src/middleware/auth.ts"},
+				Paths:      []string{"src/middleware/auth.ts"},
 				ProjectKey: "acme/api", Harness: "grok", SessionID: sid,
 			}); err != nil {
 				errc <- err
@@ -96,8 +96,8 @@ func TestWriteClaimConcurrentDifferentSessions(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			_, err := st.WriteClaim(claim.Record{
-				Type: "decision",
-				Text: "Session " + string(rune('A'+i)) + " decided to keep hooks fail-open.",
+				Type:       "decision",
+				Text:       "Session " + string(rune('A'+i)) + " decided to keep hooks fail-open.",
 				ProjectKey: "acme/api", Harness: "grok", SessionID: "sess-" + string(rune('A'+i)),
 			})
 			if err != nil {

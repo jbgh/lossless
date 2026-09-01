@@ -165,8 +165,8 @@ func TestStaleVerifyFixture(t *testing.T) {
 	}
 	if _, err := st.WriteClaim(claim.Record{
 		ID: "01JLIM", Type: "decision", ProjectKey: "acme/api",
-		Text: "Keep the in-process limiter in src/middleware/auth.ts",
-		Paths: []string{"src/middleware/auth.ts"},
+		Text:      "Keep the in-process limiter in src/middleware/auth.ts",
+		Paths:     []string{"src/middleware/auth.ts"},
 		PathMtime: map[string]int64{"src/middleware/auth.ts": 1},
 		CreatedAt: "2026-08-01T00:00:00Z", Harness: "grok", SessionID: "e", Source: "import", Status: "active",
 	}); err != nil {

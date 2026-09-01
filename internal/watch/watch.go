@@ -2,6 +2,7 @@ package watch
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -349,13 +350,32 @@ func Run(ctx context.Context, st *store.Store, opts Options) error {
 	}
 	t := time.NewTicker(opts.Interval)
 	defer t.Stop()
-	_, _ = Tick(st, opts)
+	_, _ = safeTick(st, opts)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-t.C:
-			_, _ = Tick(st, opts)
+			_, _ = safeTick(st, opts)
 		}
 	}
+}
+
+// testPanicTick, when set, runs inside the protected region. Tests use
+// it to prove a panicking tick cannot take the daemon down.
+var testPanicTick func()
+
+// safeTick turns a panic in one tick into an error. The watcher is the
+// daemon's only long-lived goroutine; one bad line must not kill it.
+func safeTick(st *store.Store, opts Options) (res Result, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("watch tick panic: %v", r)
+			fmt.Fprintln(os.Stderr, "lossless watch:", err)
+		}
+	}()
+	if testPanicTick != nil {
+		testPanicTick()
+	}
+	return Tick(st, opts)
 }

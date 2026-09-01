@@ -75,19 +75,19 @@ func TestMultiHarnessConcurrentReconcile(t *testing.T) {
 	}
 	cases := []askCase{
 		{
-			name: "claude sees grok failed+jose",
+			name:    "claude sees grok failed+jose",
 			project: "acme/api", sid: "sess-claude",
 			goal: "add rate limiting", path: "src/middleware/auth.ts",
 			want: []string{"Redis", "jose"},
 		},
 		{
-			name: "grok does not see shop stripe",
+			name:    "grok does not see shop stripe",
 			project: "acme/api", sid: "sess-grok",
 			goal: "pick a jwt library", path: "src/middleware/auth.ts",
 			want: []string{"jose"}, never: []string{"Stripe"},
 		},
 		{
-			name: "shop isolated from acme",
+			name:    "shop isolated from acme",
 			project: "other/shop", sid: "sess-pi",
 			goal: "fix invoice webhook", path: "src/billing/export.ts",
 			want: []string{"Stripe"}, never: []string{"jose", "Redis"},

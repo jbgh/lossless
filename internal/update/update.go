@@ -46,6 +46,7 @@ type Result struct {
 	UpdateAvailable bool
 	Replaced        bool
 	ChannelInstall  bool // dest was a symlink or missing; now a release binary
+	Ahead           bool // running build is newer than the channel; nothing installed
 }
 
 type Release struct {
@@ -174,6 +175,14 @@ func Apply(opts Options) (Result, error) {
 	out.ChannelInstall = off
 	if same && !off {
 		out.AlreadyLatest = true
+		out.UpdateAvailable = false
+		return out, nil
+	}
+	if !newer && !same && opts.Tag == "" {
+		// The running build is ahead of "latest" (a yanked release, or
+		// a local build). Never downgrade unless --version pins a tag —
+		// even off-channel, an older binary is still a downgrade.
+		out.Ahead = true
 		out.UpdateAvailable = false
 		return out, nil
 	}
