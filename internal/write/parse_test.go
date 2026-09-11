@@ -86,7 +86,7 @@ func TestParseJSONLCompactionFlag(t *testing.T) {
 }
 
 func TestParseJSONLClipsLongAndHugeSkip(t *testing.T) {
-	long := strings.Repeat("a", 2500)
+	long := strings.Repeat("a", 4500)
 	msgs, _ := ParseJSONL(`{"role":"user","content":"`+long+`"}`+"\n", 0)
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "…") {
 		t.Fatalf("clip: %+v", msgs)
@@ -229,7 +229,7 @@ func TestClip(t *testing.T) {
 	if clip("short") != "short" {
 		t.Fatal("short")
 	}
-	s := strings.Repeat("z", 2001)
+	s := strings.Repeat("z", 4001)
 	c := clip(s)
 	if len(c) >= len(s) || !strings.Contains(c, "…") {
 		t.Fatal(len(c))

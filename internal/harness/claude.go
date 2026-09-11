@@ -16,6 +16,9 @@ func ClaudeProjectSlug(cwd string) string {
 
 // LocateClaude prefers hook transcript_path. Never invent a path when that field is set.
 func LocateClaude(transcript, sessionID, cwd string) Locate {
+	if GrokEventStream(transcript) {
+		return LocateGrokFromEventStream(transcript, sessionID, cwd)
+	}
 	if transcript != "" {
 		sid := sessionID
 		if sid == "" {

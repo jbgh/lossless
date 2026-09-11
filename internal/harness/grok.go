@@ -3,12 +3,41 @@ package harness
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Locate struct {
 	JSONL     string
 	SessionID string
 	CWD       string
+	// Harness is set when a hook for one harness handed us another
+	// harness's file (Grok fires Claude-scope hooks with updates.jsonl).
+	Harness string
+}
+
+// GrokEventStream is Grok's updates.jsonl: a JSON-RPC event log beside the
+// tape, never a session file. Grok 1.0.13 passes it as transcript_path to
+// Claude-scope hooks.
+func GrokEventStream(path string) bool {
+	if path == "" {
+		return false
+	}
+	n := filepath.ToSlash(path)
+	return filepath.Base(n) == "updates.jsonl" || strings.Contains(n, "/.grok/sessions/")
+}
+
+// LocateGrokFromEventStream maps updates.jsonl to the sibling
+// chat_history.jsonl. cwd falls back to the decoded session directory.
+func LocateGrokFromEventStream(path, sessionID, cwd string) Locate {
+	dir := filepath.Dir(path)
+	sid := sessionID
+	if sid == "" {
+		sid = filepath.Base(dir)
+	}
+	if cwd == "" {
+		cwd = DecodeGrokSessionDir(filepath.Base(filepath.Dir(dir)))
+	}
+	return Locate{JSONL: filepath.Join(dir, "chat_history.jsonl"), SessionID: sid, CWD: cwd, Harness: "grok"}
 }
 
 // LocateGrok finds chat_history.jsonl. Never updates.jsonl.

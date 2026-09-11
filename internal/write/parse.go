@@ -188,6 +188,14 @@ func normalize(o map[string]any, offset int64, ownIDs map[string]bool) (Message,
 		}
 	} else {
 		role = typ
+		// Claude Code queues a user message (or a task-notification) as
+		// type=queue-operation. Only the enqueue carries text.
+		if typ == "queue-operation" {
+			if op, _ := o["operation"].(string); op != "enqueue" {
+				return Message{Skip: true, Offset: offset}, true
+			}
+			role = "user"
+		}
 		text = flattenSkippingOwn(o["content"], ownIDs)
 		if text == "" {
 			text = flatten(o["text"])
@@ -394,9 +402,78 @@ func flattenMapText(m map[string]any) string {
 	return ""
 }
 
+// clip bounds a long turn to a head and a tail. Both cuts land on a
+// sentence boundary: a mid-word tail ("al/bench_test.go 0.95 floor …")
+// became a live claim. Messages up to clipWhole stay intact so a failure
+// reported in the middle of a subagent result still reaches extract.
+const (
+	clipWhole = 4000
+	clipHead  = 1500
+	clipTail  = 1500
+)
+
 func clip(text string) string {
-	if len(text) <= 2000 {
+	if len(text) <= clipWhole {
 		return text
 	}
-	return text[:400] + "\n…\n" + text[len(text)-400:]
+	head := text[:sentenceEndBefore(text, clipHead)]
+	tail := text[sentenceStartAfter(text, len(text)-clipTail):]
+	return head + "\n…\n" + tail
+}
+
+func sentenceBoundary(c byte) bool {
+	return c == '.' || c == '!' || c == '?' || c == '\n'
+}
+
+// sentenceEndBefore is the byte index just past the last sentence
+// terminator at or before limit, else the last space, else limit.
+func sentenceEndBefore(text string, limit int) int {
+	if limit >= len(text) {
+		return len(text)
+	}
+	for i := limit; i > 0; i-- {
+		if sentenceBoundary(text[i-1]) && (i == len(text) || text[i] == ' ' || text[i] == '\n' || text[i] == '\t') {
+			return i
+		}
+	}
+	if i := strings.LastIndexByte(text[:limit], ' '); i > 0 {
+		return i
+	}
+	return runeStart(text, limit)
+}
+
+// runeStart backs i off to the start of the rune it falls inside.
+func runeStart(text string, i int) int {
+	for i > 0 && i < len(text) && text[i]&0xC0 == 0x80 {
+		i--
+	}
+	return i
+}
+
+// sentenceStartAfter is the index of the first sentence that begins at
+// or after from: just past a terminator plus whitespace, else after the
+// next space, else from.
+func sentenceStartAfter(text string, from int) int {
+	if from <= 0 {
+		return 0
+	}
+	for i := from; i < len(text)-1; i++ {
+		if sentenceBoundary(text[i]) && (text[i+1] == ' ' || text[i+1] == '\n' || text[i+1] == '\t') {
+			j := i + 1
+			for j < len(text) && (text[j] == ' ' || text[j] == '\n' || text[j] == '\t') {
+				j++
+			}
+			if j >= len(text) {
+				// That terminator ends the text (a trailing newline after
+				// the last sentence). Fall through to a word boundary so
+				// the tail keeps that sentence instead of nothing.
+				break
+			}
+			return j
+		}
+	}
+	if i := strings.IndexByte(text[from:], ' '); i >= 0 {
+		return from + i + 1
+	}
+	return runeStart(text, from)
 }

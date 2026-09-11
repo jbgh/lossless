@@ -360,15 +360,41 @@ func Format(w io.Writer, r Report) {
 	if len(d.Sessions) == 0 {
 		fmt.Fprintln(w, "  sessions  (none recorded)")
 	}
+	// Current sessions collapse into one count; only rows that need an
+	// operator (behind, past-eof, missing, no cursor) print.
+	okByHarness := map[string]int{}
+	okTotal := 0
+	var rows []string
 	for _, s := range d.Sessions {
-		cur := "no-cursor"
+		cur, status := "no-cursor", ""
 		for _, c := range r.Cursors {
 			if c.Path == s.JSONL {
 				cur = fmt.Sprintf("%s %s/%s", c.Status, byteSize(c.Cursor), byteSize(c.Size))
+				status = c.Status
 				break
 			}
 		}
-		fmt.Fprintf(w, "  session  %s  %s  %s  %s\n", s.Harness, s.SessionID, filepath.Base(s.JSONL), cur)
+		if status == "ok" {
+			okByHarness[s.Harness]++
+			okTotal++
+			continue
+		}
+		rows = append(rows, fmt.Sprintf("  session  %s  %s  %s  %s", s.Harness, s.SessionID, filepath.Base(s.JSONL), cur))
+	}
+	if okTotal > 0 {
+		names := make([]string, 0, len(okByHarness))
+		for h := range okByHarness {
+			names = append(names, h)
+		}
+		sort.Strings(names)
+		parts := make([]string, 0, len(names))
+		for _, h := range names {
+			parts = append(parts, fmt.Sprintf("%s %d", h, okByHarness[h]))
+		}
+		fmt.Fprintf(w, "  sessions  %d ok  (%s)\n", okTotal, strings.Join(parts, ", "))
+	}
+	for _, row := range rows {
+		fmt.Fprintln(w, row)
 	}
 	if len(d.Recent) > 0 {
 		fmt.Fprintf(w, "\nrecent claims  %d stored, %d ask-would-drop\n", len(d.Recent), d.RecentNoise)

@@ -68,7 +68,7 @@ Install order: **Grok → Claude → Codex → Pi → OpenCode**. That is popula
 
 ### Grok
 
-- Locate: `GROK_HOME` or `~/.grok` + URL-encoded cwd + `sessionId` + **`chat_history.jsonl`**. Do not ingest `updates.jsonl` (ACP UI stream, ~2.5× larger). Measured: this repo session was 1.4 MB history vs 3.5 MB updates; an 8-compact session was 17.6 MB history with **zero** compact summaries in the file. Compact shrinks the window, not the log.
+- Locate: `GROK_HOME` or `~/.grok` + URL-encoded cwd + `sessionId` + **`chat_history.jsonl`**. Do not ingest `updates.jsonl` (ACP UI stream, ~2.5× larger). Grok 1.0.13 also runs the Claude-scope hooks in `~/.claude/settings.json` and passes `updates.jsonl` as `transcript_path`; `hook-claude` maps that to the sibling `chat_history.jsonl` with harness `grok`, and catch-up refuses `updates.jsonl` from any caller (0.1.25). Measured: this repo session was 1.4 MB history vs 3.5 MB updates; an 8-compact session was 17.6 MB history with **zero** compact summaries in the file. Compact shrinks the window, not the log.
 - Fire: `Stop` (filter `reason == end_turn`), `PreCompact`, `SessionEnd`.
 - Normalize: `{role, content|text}` and Claude-shaped `message.role`.
 - Install: `~/.grok/hooks/lossless.json`.

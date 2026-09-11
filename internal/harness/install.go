@@ -75,37 +75,63 @@ func MergeClaudeSettings(existing []byte, exe string) ([]byte, error) {
 	return append(out, '\n'), nil
 }
 
+// losslessHookCommand reports a hook entry lossless installed, whatever
+// binary it currently names.
+func losslessHookCommand(cmd string) bool {
+	c := strings.TrimSpace(cmd)
+	return strings.HasSuffix(c, " hook-claude") || strings.HasSuffix(c, " hook-codex")
+}
+
+// ensureClaudeEvent installs one lossless hook on an event. A stale
+// lossless entry (dev-tree binary, old install path) is retargeted in
+// place, a duplicate is dropped, and foreign hooks are left alone.
 func ensureClaudeEvent(hooks map[string]any, event, command string, timeout int) error {
-	if containsCommand(hooks[event], command) {
-		return nil
-	}
 	entry := map[string]any{
 		"hooks": []any{
 			map[string]any{"type": "command", "command": command, "timeout": timeout},
 		},
 	}
-	switch cur := hooks[event].(type) {
-	case nil:
+	cur, isList := hooks[event].([]any)
+	if hooks[event] != nil && !isList {
 		hooks[event] = []any{entry}
-	case []any:
-		hooks[event] = append(cur, entry)
-	default:
-		hooks[event] = []any{entry}
+		return nil
 	}
+	var out []any
+	seen := false
+	for _, m := range cur {
+		mm, _ := m.(map[string]any)
+		hs, _ := mm["hooks"].([]any)
+		if mm == nil || len(hs) == 0 {
+			out = append(out, m)
+			continue
+		}
+		var kept []any
+		for _, h := range hs {
+			hm, _ := h.(map[string]any)
+			cmd, _ := hm["command"].(string)
+			if hm != nil && losslessHookCommand(cmd) {
+				if seen {
+					continue
+				}
+				hm["command"] = command
+				if _, ok := hm["timeout"]; !ok {
+					hm["timeout"] = timeout
+				}
+				seen = true
+			}
+			kept = append(kept, h)
+		}
+		if len(kept) == 0 {
+			continue
+		}
+		mm["hooks"] = kept
+		out = append(out, m)
+	}
+	if !seen {
+		out = append(out, entry)
+	}
+	hooks[event] = out
 	return nil
-}
-
-func containsCommand(v any, command string) bool {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return false
-	}
-	s := string(b)
-	if strings.Contains(s, "hook-claude") || strings.Contains(s, "hook-codex") || strings.Contains(s, command) {
-		return true
-	}
-	// JSON string escaping turns `"exe" hook-claude` into \"exe\" hook-claude
-	return strings.Contains(s, strings.ReplaceAll(command, `"`, `\"`))
 }
 
 func InstallHooks(home, exe string) ([]string, error) {

@@ -53,6 +53,10 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 			return out, fmt.Errorf("path_to_jsonl required")
 		}
 	}
+	if filepath.Base(req.JSONL) == "updates.jsonl" {
+		// Grok's JSON-RPC event log beside the tape. Never a session.
+		return out, fmt.Errorf("updates.jsonl is an event stream, not a session file")
+	}
 	project := req.Project
 	if project == "" && req.WorkspaceRoot != "" {
 		project = projectkey.FromWorkspace(req.WorkspaceRoot)

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -204,6 +205,11 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 		"pi":       filepath.Join(userHome, ".pi", "agent", "extensions", "lossless.ts"),
 		"opencode": opencodePluginPath(userHome),
 	}, "hook")
+	if hookOK {
+		if drift := hookTargetDrift(userHome, exe); drift != "" {
+			hookOK, hookDetail = false, drift
+		}
+	}
 	add("hooks", hookOK, hookDetail)
 
 	mcpOK, mcpDetail := checkFiles(map[string]string{
@@ -388,4 +394,56 @@ func spawnServe(exe, home string) error {
 		_ = log.Close()
 	}()
 	return nil
+}
+
+var (
+	jsonHookTargetRE = regexp.MustCompile(`\\"((?:[^"\\]|\\.)+)\\" hook-(?:grok|claude|codex)`)
+	piExeRE          = regexp.MustCompile(`const exe = "((?:[^"\\]|\\.)+)";`)
+)
+
+// hookTargetDrift names every installed lossless hook whose command runs
+// a different binary than exe. "hooks ok" while the hooks run a dev-tree
+// build was a false ok.
+func hookTargetDrift(userHome, exe string) string {
+	if exe == "" {
+		return ""
+	}
+	files := []struct {
+		name, path string
+		re         *regexp.Regexp
+	}{
+		{"grok", filepath.Join(userHome, ".grok", "hooks", "lossless.json"), jsonHookTargetRE},
+		{"claude", filepath.Join(userHome, ".claude", "settings.json"), jsonHookTargetRE},
+		{"codex", filepath.Join(userHome, ".codex", "hooks.json"), jsonHookTargetRE},
+		{"pi", filepath.Join(userHome, ".pi", "agent", "extensions", "lossless.ts"), piExeRE},
+	}
+	var drift []string
+	for _, f := range files {
+		b, err := os.ReadFile(f.path)
+		if err != nil {
+			continue
+		}
+		seen := map[string]bool{}
+		for _, m := range f.re.FindAllStringSubmatch(string(b), -1) {
+			target := strings.ReplaceAll(m[1], `\\`, `\`)
+			if seen[target] || sameExe(target, exe) {
+				continue
+			}
+			seen[target] = true
+			drift = append(drift, f.name+" → "+target)
+		}
+	}
+	if len(drift) == 0 {
+		return ""
+	}
+	return strings.Join(drift, "; ") + " (not this binary; lossless install-hooks)"
+}
+
+func sameExe(a, b string) bool {
+	if filepath.Clean(a) == filepath.Clean(b) {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }

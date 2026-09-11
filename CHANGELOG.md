@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.25 — 2026-09-11
+
+- `hook-claude` routes a Grok session back to the Grok adapter. Grok 1.0.13 runs the Claude-scope hooks and passes its `updates.jsonl` event stream as `transcript_path`; eight live sessions were stored as `claude` on that file. The locate maps it to the sibling `chat_history.jsonl` with harness `grok`; catch-up refuses `updates.jsonl` outright; `inspect --prune` drops the stored rows (session, cursor, and only that harness's claims).
+- The watcher replays the hook spool on every tick and sweeps `virtual-*.jsonl` staging files older than a day. 74 spooled catch-ups and 1,088 staging files had waited three weeks for a manual `ensure`.
+- `install-hooks` retargets a stale lossless hook command (dev-tree binary, old install path) instead of counting any `hook-claude` as installed; a duplicate lossless entry is dropped and foreign hooks stay. `doctor` reports hook target drift (`claude → /path/lossless (not this binary; lossless install-hooks)`) instead of `hooks ok`.
+- Parse clips a long turn on sentence boundaries: 4KB stays whole, longer turns keep a 1.5KB head and tail cut at a terminator. The 400/400 mid-word tail was the source of every leading chop (`al/bench_test.go 0.95 floor …`, `n LLM process; …`) and dropped the middle of every subagent report. Claude `queue-operation` enqueues parse as user turns; a `<task-notification>` keeps only its `<result>` body, so `Background command "…" failed with exit code 1` summaries are no longer faileds.
+- Gates: a sentence wrapped in one harness tag (`<summary>…</summary>`), test-runner status lines (XCTest `Executed N tests, with N failures`, `Test Suite '…' failed at`, go `--- FAIL:`, `npm ERR!`), and clip chops opening on a non-word (`e verbObjRE's`, `ve origin/main\``, `al/bench_test.go`, `or \`sharedCodeIdent\``) skip at extract and read time. `os/exec failed`, `ok so redis failed`, `env exists; do not print secrets` stay.
+- `serve` waits up to 15s for the port while the old daemon drains after `launchctl kickstart -k`, and stamps its log lines with a UTC time and version. `inspect` collapses caught-up sessions into one count per harness and prints only rows that need an operator.
+- `release-notes.sh` matches the version field exactly (`v0.1.2` no longer returns the 0.1.25 section). CI pins read-only permissions, a 15-minute timeout, `gofmt -l`, and `go vet`.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.24 — 2026-09-01
 
 - Parse skips Claude Code chrome that arrives as user text: skill bodies (`Base directory for this skill:`), slash-command tags (`<command-name>`, `<local-command-stdout>`), `isMeta` shell output, and `isSidechain` subagent prompts. `isCompactSummary` marks the compact and is not re-extracted. A real user constraint in the same turn still stores.

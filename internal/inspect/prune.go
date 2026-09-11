@@ -1,6 +1,8 @@
 package inspect
 
 import (
+	"path/filepath"
+
 	"lossless/internal/claim"
 	"lossless/internal/projectkey"
 	"lossless/internal/retrieve"
@@ -53,6 +55,9 @@ func Prune(st *store.Store, project string) (PruneResult, error) {
 				return out, err
 			}
 		}
+	}
+	if err := dropEventStreamSessions(st, key, sess, &out); err != nil {
+		return out, err
 	}
 	if err := dropFixtureClaims(st, key, &out); err != nil {
 		return out, err
@@ -149,6 +154,38 @@ func supersedeNoise(st *store.Store, project string, out *PruneResult) error {
 			return err
 		}
 		out.SupersededNoise++
+	}
+	return nil
+}
+
+// dropEventStreamSessions removes sessions stored on Grok's updates.jsonl
+// (Grok 1.0.13 fed it to Claude-scope hooks) with the claims that harness
+// extracted from it. The Grok chat_history session for the same id stays.
+func dropEventStreamSessions(st *store.Store, key string, sess []store.Session, out *PruneResult) error {
+	for _, s := range sess {
+		if key != "" && s.Project != key {
+			continue
+		}
+		if filepath.Base(s.JSONL) != "updates.jsonl" {
+			continue
+		}
+		recs, err := st.ListActive(s.Project)
+		if err != nil {
+			return err
+		}
+		for _, r := range recs {
+			if r.SessionID != s.SessionID || r.Harness != s.Harness {
+				continue
+			}
+			if err := st.DeleteRecord(r.ID); err != nil {
+				return err
+			}
+			out.DroppedRecords++
+		}
+		if err := st.DeleteSession(s.JSONL); err != nil {
+			return err
+		}
+		out.DroppedSessions++
 	}
 	return nil
 }

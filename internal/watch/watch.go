@@ -260,6 +260,13 @@ func markSQLiteCaught(st *store.Store, key string, updated int64) {
 }
 
 func Tick(st *store.Store, opts Options) (Result, error) {
+	// Hooks spool a catch-up when the daemon is down or slow. Only the
+	// `ensure` CLI replayed the spool before; the tick does it now.
+	if files, _ := write.ListSpool(st.Root); len(files) > 0 {
+		if res, err := write.Ensure(st, st.Root); err == nil && res.Replayed > 0 {
+			fmt.Fprintf(os.Stderr, "lossless watch: replayed %d spooled catch-ups\n", res.Replayed)
+		}
+	}
 	known, err := st.ListSessions()
 	if err != nil {
 		return Result{}, err
@@ -350,11 +357,16 @@ func Run(ctx context.Context, st *store.Store, opts Options) error {
 	}
 	t := time.NewTicker(opts.Interval)
 	defer t.Stop()
+	sweep := time.NewTicker(time.Hour)
+	defer sweep.Stop()
+	_ = write.SweepStaleVirtual(st.Root)
 	_, _ = safeTick(st, opts)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-sweep.C:
+			_ = write.SweepStaleVirtual(st.Root)
 		case <-t.C:
 			_, _ = safeTick(st, opts)
 		}

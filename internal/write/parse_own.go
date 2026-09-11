@@ -127,6 +127,7 @@ func asciiLower(s string) string {
 }
 
 func stripHarnessChrome(text string) string {
+	text = stripTaskNotifications(text)
 	for _, tag := range []string{"system-reminder", "user_info", "agent-reminder", "claude-user-context",
 		"command-name", "command-message", "command-args", "local-command-stdout", "local-command-caveat"} {
 		open, close := "<"+tag+">", "</"+tag+">"
@@ -185,4 +186,43 @@ func dropConflictHEAD(s string) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+// stripTaskNotifications reduces a Claude Code <task-notification> block
+// to its <result> bodies. The summary ("Background command … failed with
+// exit code 1"), note, ids, and status are harness chrome, not claims.
+func stripTaskNotifications(text string) string {
+	const open, close = "<task-notification>", "</task-notification>"
+	for {
+		low := asciiLower(text)
+		i := strings.Index(low, open)
+		if i < 0 {
+			return text
+		}
+		end := len(text)
+		next := len(text)
+		if j := strings.Index(low[i:], close); j >= 0 {
+			end = i + j
+			next = end + len(close)
+		}
+		block := text[i:end]
+		var keep strings.Builder
+		blow := asciiLower(block)
+		for {
+			a := strings.Index(blow, "<result>")
+			if a < 0 {
+				break
+			}
+			b := strings.Index(blow[a:], "</result>")
+			if b < 0 {
+				keep.WriteString(block[a+len("<result>"):])
+				break
+			}
+			keep.WriteString(block[a+len("<result>") : a+b])
+			keep.WriteByte('\n')
+			block = block[a+b+len("</result>"):]
+			blow = blow[a+b+len("</result>"):]
+		}
+		text = text[:i] + keep.String() + text[next:]
+	}
 }

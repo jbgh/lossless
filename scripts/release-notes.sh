@@ -11,7 +11,7 @@ VER=${VER#v}
 awk -v ver="$VER" '
   $0 ~ /^## / {
     if (seen) exit
-    if (index($0, ver)) { seen = 1; print; next }
+    if ($2 == ver) { seen = 1; print; next }
   }
   seen { print }
 ' "$ROOT/CHANGELOG.md"

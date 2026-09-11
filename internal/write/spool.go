@@ -80,9 +80,40 @@ func ListSpool(home string) ([]string, error) {
 	return out, nil
 }
 
+// staleVirtualAge is how long a virtual-*.jsonl staging file (a
+// messages-body catch-up written for one CatchUp call) may outlive its
+// POST before it is litter.
+const staleVirtualAge = 24 * time.Hour
+
+// SweepStaleVirtual removes staging files older than staleVirtualAge.
+// Returns how many were removed.
+func SweepStaleVirtual(home string) int {
+	ents, err := os.ReadDir(SpoolDir(home))
+	if err != nil {
+		return 0
+	}
+	n := 0
+	cutoff := time.Now().Add(-staleVirtualAge)
+	for _, e := range ents {
+		name := e.Name()
+		if e.IsDir() || !strings.HasPrefix(name, "virtual-") || !strings.HasSuffix(name, ".jsonl") {
+			continue
+		}
+		fi, err := e.Info()
+		if err != nil || fi.ModTime().After(cutoff) {
+			continue
+		}
+		if os.Remove(filepath.Join(SpoolDir(home), name)) == nil {
+			n++
+		}
+	}
+	return n
+}
+
 // Ensure replays spool files into the local store, then flushes any home-push queue.
 func Ensure(st *store.Store, home string) (EnsureResult, error) {
 	var out EnsureResult
+	_ = SweepStaleVirtual(home)
 	files, err := ListSpool(home)
 	if err != nil {
 		return out, err
@@ -101,6 +132,13 @@ func Ensure(st *store.Store, home string) (EnsureResult, error) {
 			continue
 		}
 		if job.JSONL == "" && job.SessionID == "" {
+			out.Skipped++
+			_ = os.Remove(p)
+			continue
+		}
+		if deadSpoolJob(job) {
+			// The watcher replays the spool every tick; a job that can
+			// never ingest must not be retried forever.
 			out.Skipped++
 			_ = os.Remove(p)
 			continue
@@ -144,4 +182,24 @@ func sanitizeName(s string) string {
 		return s[:40]
 	}
 	return s
+}
+
+// deadSpoolJob is a job that no replay can ingest: its file is gone,
+// it names Grok's updates.jsonl event stream, or it is older than a
+// week (the harness file has been rewritten or cleaned up by then).
+func deadSpoolJob(job SpoolJob) bool {
+	if job.JSONL != "" {
+		if filepath.Base(job.JSONL) == "updates.jsonl" {
+			return true
+		}
+		if _, err := os.Stat(job.JSONL); err != nil && os.IsNotExist(err) {
+			return true
+		}
+	}
+	if job.CreatedAt != "" {
+		if at, err := time.Parse(time.RFC3339Nano, job.CreatedAt); err == nil && time.Since(at) > 7*24*time.Hour {
+			return true
+		}
+	}
+	return false
 }

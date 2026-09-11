@@ -285,7 +285,7 @@ Harness-specific locate / event / parse lives in [harnesses.md](harnesses.md). S
 | Claude | `Stop` | `PreCompact` (+ `PostCompact`) | `SessionEnd` |
 | Codex | `Stop` | `PreCompact` (+ `PostCompact`) | `SessionEnd` |
 
-Budgets as in the trigger table. Fail-open. If the daemon is down, write a spool file `{harness_path, offset, meta}` and let `--ensure` replay. Spool is durable; losing the hook process must not lose the fact that work happened — the harness JSONL is still there until cleanup, so replay from cursor 0 against raw is safe (append is idempotent by offset).
+Budgets as in the trigger table. Fail-open. If the daemon is down, write a spool file `{harness_path, offset, meta}`; the watcher tick replays it once the daemon is up (`lossless ensure` still works by hand, 0.1.25). Spool is durable; losing the hook process must not lose the fact that work happened — the harness JSONL is still there until cleanup, so replay from cursor 0 against raw is safe (append is idempotent by offset).
 
 Do not retrieve from hooks. Do not inject context. Write only.
 

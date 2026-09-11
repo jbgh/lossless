@@ -276,26 +276,100 @@ func Truncated(s string) bool {
 	return false
 }
 
-// leadingWordChop is a mid-word cut at the start ("tially but restrict").
-// "env exists; do not print secrets" and "qa-fix-loop …" stay.
+// shortWords are one- and two-letter tokens that open real sentences
+// (words, and the short package / dir names agents type in lowercase).
+var shortWords = map[string]bool{
+	"a": true, "i": true, "an": true, "as": true, "at": true, "be": true, "by": true,
+	"do": true, "go": true, "he": true, "if": true, "in": true, "is": true, "it": true,
+	"me": true, "my": true, "no": true, "of": true, "ok": true, "on": true, "or": true,
+	"so": true, "to": true, "up": true, "us": true, "we": true, "hi": true, "oh": true,
+	"ah": true, "um": true, "eg": true, "ie": true, "vs": true, "tl": true, "re": true,
+	"os": true, "io": true, "ui": true, "ux": true, "db": true, "js": true, "ts": true,
+	"py": true, "rb": true, "cd": true, "ci": true, "qa": true, "pr": true, "id": true,
+	"ip": true, "vm": true, "fs": true, "ls": true, "rm": true, "cp": true, "mv": true,
+	"sh": true,
+}
+
+func lowerLetters(w string) bool {
+	if w == "" {
+		return false
+	}
+	for i := 0; i < len(w); i++ {
+		if w[i] < 'a' || w[i] > 'z' {
+			return false
+		}
+	}
+	return true
+}
+
+// leadingWordChop is a mid-word cut at the start of a clipped turn:
+// "tially but restrict", "e verbObjRE's", "n LLM process", "ve origin/main`",
+// "al/bench_test.go 0.95 floor", "or `sharedCodeIdent` (…". Real lowercase
+// openers stay: "env exists; do not print secrets", "qa-fix-loop …",
+// "os/exec failed", "ok so redis failed".
 func leadingWordChop(s string) bool {
 	fields := strings.Fields(strings.TrimSpace(s))
 	if len(fields) < 2 {
 		return false
 	}
-	w := strings.Trim(fields[0], "\"“”'`.,;:()[]")
-	if w == "" {
+	raw := strings.Trim(fields[0], "\"“”'`.,;:()[]")
+	if raw == "" || raw[0] < 'a' || raw[0] > 'z' {
 		return false
 	}
-	if w[0] < 'a' || w[0] > 'z' {
+	// A path whose first segment is not a word: "al/bench_test.go".
+	if i := strings.IndexByte(raw, '/'); i > 0 && i <= 2 {
+		seg := raw[:i]
+		return lowerLetters(seg) && !shortWords[seg]
+	}
+	if strings.ContainsAny(raw, "/._-#") || len(raw) > 8 {
 		return false
 	}
-	if strings.ContainsAny(w, "/._-#") || len(w) > 8 {
+	if shortWords[raw] {
+		// "or `sharedCodeIdent` (…" — a lowercase conjunction opening on a
+		// tick is the remainder of a cut sentence.
+		switch raw {
+		case "or", "and", "but", "nor":
+			return strings.HasPrefix(fields[1], "`")
+		}
 		return false
+	}
+	if len(raw) <= 2 && lowerLetters(raw) {
+		return true
 	}
 	switch Fold(strings.Trim(fields[1], "\"“”'`.,;:()[]")) {
 	case "but", "and", "or", "so", "then":
 		return true
+	}
+	return false
+}
+
+var (
+	tagWrappedRE = regexp.MustCompile(`^<([a-z][a-z0-9-]*)>[\s\S]*</([a-z][a-z0-9-]*)>$`)
+	runnerOutput = []*regexp.Regexp{
+		regexp.MustCompile(`^Executed \d+ tests?, with \d+ failures?`),
+		regexp.MustCompile(`^Test (Suite|Case) '.*' (failed|passed|started)`),
+		regexp.MustCompile(`^--- (FAIL|PASS|SKIP): `),
+		regexp.MustCompile(`^(FAIL|ok|PASS)\s+\S+\s+[\d.]+s$`),
+		regexp.MustCompile(`^npm (ERR!|WARN) `),
+	}
+)
+
+// TagWrapped is a whole sentence inside one harness tag
+// (<summary>Background command … failed with exit code 1</summary>).
+func TagWrapped(s string) bool {
+	m := tagWrappedRE.FindStringSubmatch(strings.TrimSpace(s))
+	return m != nil && m[1] == m[2]
+}
+
+// RunnerOutput is a test-runner or package-manager status line that
+// reached prose (XCTest, go test, npm). A sentence about a failed test
+// is not this shape.
+func RunnerOutput(s string) bool {
+	t := strings.TrimSpace(s)
+	for _, re := range runnerOutput {
+		if re.MatchString(t) {
+			return true
+		}
 	}
 	return false
 }
@@ -493,7 +567,7 @@ func SkipProse(s string) bool {
 	if JSONFragment(t) {
 		return true
 	}
-	if InstructionChrome(t) {
+	if InstructionChrome(t) || TagWrapped(t) || RunnerOutput(t) {
 		return true
 	}
 	t = strings.TrimLeft(t, "\"“”'`")

@@ -279,14 +279,38 @@ func Listen(opts Options, st *store.Store) error {
 		defer cancel()
 		go func() { _ = watch.Run(ctx, st, wopts) }()
 	}
-	ln, err := net.Listen("tcp", addr)
+	ln, err := listenWait(addr, bindWait)
 	if err != nil {
-		if alreadyServing(addr) {
-			return nil
-		}
 		return err
 	}
+	if ln == nil {
+		return nil
+	}
 	return http.Serve(ln, Handler(st, opts.Token))
+}
+
+// bindWait covers launchd's kickstart -k: the old daemon gets up to its
+// exit timeout to drain the port while the new one is already running.
+const bindWait = 15 * time.Second
+
+// listenWait binds addr, retrying while the port is held. A port held by
+// another lossless daemon (our /health JSON) returns (nil, nil): the
+// caller exits successfully and launchd does not respawn a duplicate.
+func listenWait(addr string, wait time.Duration) (net.Listener, error) {
+	deadline := time.Now().Add(wait)
+	for {
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			return ln, nil
+		}
+		if alreadyServing(addr) {
+			return nil, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, err
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
 
 func alreadyServing(addr string) bool {

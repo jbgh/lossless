@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"context"
 
@@ -422,9 +423,10 @@ func runServe(args []string) int {
 			}
 		}()
 	}
-	fmt.Fprintf(os.Stderr, "lossless serve %s (home %s) watch=%v embedder=%s\n", *listen, *home, *doWatch, orNone(st.EmbedderName()))
+	stamp := time.Now().UTC().Format(time.RFC3339)
+	fmt.Fprintf(os.Stderr, "%s lossless serve %s (home %s) watch=%v embedder=%s version=%s\n", stamp, *listen, *home, *doWatch, orNone(st.EmbedderName()), version.Version)
 	if err := serve.Listen(serve.Options{Addr: *listen, Token: *token, Watch: *doWatch}, st); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, time.Now().UTC().Format(time.RFC3339), "lossless serve:", err)
 		return 1
 	}
 	return 0
@@ -657,8 +659,13 @@ func runHookClaude() int {
 		return 0
 	}
 	source := hookSource(name, "compact")
+	h := "claude"
+	if loc.Harness != "" {
+		h = loc.Harness
+		ws = loc.CWD
+	}
 	write.SubmitCatchUp(write.CatchUpRequest{
-		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: "claude",
+		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: h,
 		SessionID: loc.SessionID, Source: source,
 	})
 	return 0
