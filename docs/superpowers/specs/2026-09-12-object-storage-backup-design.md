@@ -54,8 +54,10 @@ lossless restore --list
 `backup init` writes `<home>/backup.env` (0600) and generates
 `<home>/backup.key` (32 random bytes, hex, 0600). It refuses to overwrite an
 existing key. It prints one line telling the operator to copy `backup.key`
-somewhere that is not this machine. `--every` writes `LOSSLESS_BACKUP_EVERY`
-and `--keep` writes `LOSSLESS_BACKUP_KEEP` into `backup.env`.
+somewhere that is not this machine. `--every` defaults to `1h` and writes
+`LOSSLESS_BACKUP_EVERY`; `--every 0` writes `0`, which disables the
+schedule. `--keep` writes `LOSSLESS_BACKUP_KEEP`. Configuring a bucket means
+backups are scheduled unless you say otherwise.
 
 `backup` runs one incremental backup and prints a summary: files scanned,
 uploaded, deleted, bytes sent, generation id, elapsed. Non-zero exit on
@@ -72,13 +74,14 @@ listed at the end, never overwritten.
 `restore --list` prints kept generations: id, created, lossless version,
 file count, total bytes. Read-only.
 
-`serve --watch` runs backup on a ticker when `LOSSLESS_BACKUP_EVERY` parses
-as a duration. First run fires one interval after start, not at start.
+`serve --watch` runs backup on a due time derived from the last success when
+`LOSSLESS_BACKUP_EVERY` is a positive duration. See Scheduling.
 
 `doctor` prints one line: target, encrypted, generations kept, age of last
-successful backup. Warns when the age is more than twice the interval or
-there has never been one. Without `LOSSLESS_BACKUP_EVERY` it warns only when
-no backup has ever succeeded. Prints `backup: not configured` when
+successful backup, next due, and the last error if the last attempt failed.
+Warns when the age is more than twice the interval or there has never been
+one. With `LOSSLESS_BACKUP_EVERY=0` it warns only when no backup has ever
+succeeded. Prints `backup: not configured` when
 `backup.env` is absent.
 
 All three commands honour `--home` and `LOSSLESS_HOME` like every other
@@ -95,7 +98,7 @@ The launchd and systemd units do not change.
 | `LOSSLESS_BACKUP_ENDPOINT` | Optional. Custom endpoint (R2, B2, MinIO, GCS interop). Path-style addressing when set; virtual-host style for plain AWS. https required unless loopback. |
 | `LOSSLESS_BACKUP_REGION` | Default `us-east-1`. A host ending in `r2.cloudflarestorage.com` signs with `auto` regardless. |
 | `LOSSLESS_BACKUP_ACCESS_KEY` / `LOSSLESS_BACKUP_SECRET_KEY` | Credentials. Fallback: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`. |
-| `LOSSLESS_BACKUP_EVERY` | Optional duration. Enables the watcher ticker. |
+| `LOSSLESS_BACKUP_EVERY` | Interval. `init` writes `1h`. `0` disables the schedule. |
 | `LOSSLESS_BACKUP_KEEP` | Generations to keep. Default 5. Minimum 1. |
 
 No profile files, no instance metadata, no SSO. Those credential chains are
@@ -155,8 +158,8 @@ sibling, the same fallback `write.ReadRaw` uses.
 
 `backup-state.json` records per relative path: size, mtime (ns), sha256,
 object key. Matching size and mtime skips the read. It also records
-`last_ok`, the last generation id this machine wrote, and the kept
-manifests it last saw so a run does not re-fetch them.
+`last_ok`, `last_attempt`, `last_error`, the last generation id this machine
+wrote, and the kept manifests it last saw so a run does not re-fetch them.
 
 The remote manifest is the source of truth. A missing or stale cache means
 one full re-hash and an upload of only what differs from the manifest. The
@@ -310,15 +313,36 @@ inert. `store.Open` runs migrations as usual.
 
 ## Scheduling
 
-`watch.Run` already owns the catch-up ticker and an hourly sweep ticker. A
-backup ticker joins them when `LOSSLESS_BACKUP_EVERY` parses. The run goes in
-its own goroutine. A tick while the previous run holds the lock is skipped and
-logged. Errors go to `serve.log` with the time and version stamp. Catch-up and
-`ask` never wait on it.
+The schedule lives in the daemon. No cron, no launchd timer, nothing new for
+`setup` to write. The service units already run `serve --watch`.
 
-History window is `KEEP` changed runs, not `KEEP` ticks: idle ticks write
-nothing. With hourly ticks and active sessions that is roughly the last five
-working hours; with daily ticks, five working days. `--keep` is the knob.
+`watch.Run` already owns the catch-up ticker and an hourly sweep ticker. When
+`LOSSLESS_BACKUP_EVERY` is a positive duration, a one-minute backup ticker
+joins them and asks one question each minute: is a run due?
+
+```
+due = last_ok + EVERY            from backup-state.json
+if no last_ok: due = start + 2m   first ever run on this machine
+if due < start + 2m: due = start + 2m
+```
+
+The two-minute floor keeps a fresh boot or an `update` restart from uploading
+before the harnesses have settled. A daemon that restarts more often than the
+interval still backs up, because due comes from the persisted last success,
+not from process start. A laptop that sleeps past its due time backs up
+within a minute of waking.
+
+After a success, `due = now + EVERY`. After a failure, `due = now + min(15m,
+EVERY)` and `last_error` is stamped, so a transient outage costs minutes, not
+an interval. A run with no changes counts as a success.
+
+The run goes in its own goroutine. A tick while the previous run holds the
+lock is skipped and logged. Errors go to `serve.log` with the time and
+version stamp. Catch-up and `ask` never wait on it.
+
+History window is `KEEP` changed runs, not `KEEP` ticks: idle runs write
+nothing. With hourly runs and active sessions that is roughly the last five
+working hours; with daily runs, five working days. `--keep` is the knob.
 
 ## Errors
 
@@ -334,6 +358,7 @@ working hours; with daily ticks, five working days. `--keep` is the knob.
 | `--at` names an unknown or dropping generation | Exit 1 listing the kept ones. |
 | Disk full on restore | Tmp write fails. Nothing half-renamed. Exit 1. |
 | Lock held | "backup already running". Exit 1. |
+| Scheduled run fails | Logged, `last_error` stamped, retried in `min(15m, EVERY)`. `doctor` shows the error until a success. |
 
 ## Packages
 
@@ -387,7 +412,10 @@ rule per key that answers 429 like R2.
   run succeeds.
 - **Snapshot.** A write left in the WAL is present in the `VACUUM INTO` copy.
 - **Watcher.** A slow backup does not block the tick; the next tick skips.
-- **Doctor.** Not configured, fresh, stale.
+  A stale `last_ok` runs two minutes after start; a fresh one waits for its
+  due time; a failed run is retried after the short delay; `EVERY=0` never
+  runs.
+- **Doctor.** Not configured, fresh, stale, last attempt failed.
 - **Live.** One test against a real R2 bucket, skipped unless
   `LOSSLESS_BACKUP_LIVE_TEST` names it. Run by hand before shipping.
 
