@@ -46,7 +46,7 @@ onto a fresh machine.
 
 ```
 lossless backup init s3://<bucket>/<prefix> [--endpoint URL] [--region R] [--every 1h] [--keep 5]
-lossless backup [--dry-run] [--verbose]
+lossless backup [--dry-run] [--verbose] [--take-over]
 lossless restore [--force] [--at <generation>]
 lossless restore --list
 ```
@@ -63,6 +63,8 @@ backups are scheduled unless you say otherwise.
 uploaded, deleted, bytes sent, generation id, elapsed. Non-zero exit on
 failure. `--dry-run` stops after planning and prints the plan. A run that
 finds nothing changed writes nothing to the bucket and prints `no change`.
+`--take-over` adopts the install that last wrote the pointer. See Writer
+guard.
 
 `restore` pulls a generation and every file it names into the store. Default
 is the latest. `--at` names a generation from `--list`. It refuses if
@@ -139,13 +141,17 @@ home is ever read. That is the exclude rule.
 | Path | How it is read | Changes |
 |------|----------------|---------|
 | `raw/**/*.jsonl.zst` | Direct. Immutable once sealed. | Uploads once. |
-| `raw/**/*.jsonl` | Copy to `backup-tmp/` under `flock(LOCK_SH)`, then release. | Re-uploads as it grows until sealed. |
+| `raw/**/*.jsonl` | Copy to `backup-tmp/` under a shared flock on the part and on its `.lock` sidecar, then release both. | Re-uploads as it grows until sealed. |
 | `export/**/*.md` | Direct. Writer is tmp-and-rename, so reads are atomic. | On new or superseded claim. Prune deletes. |
 | `index/claims.sqlite` | `VACUUM INTO '<backup-tmp>/claims.sqlite'` on a read connection. | Every run it changed. |
 | `index/excerpts-*.sqlite` | Same. Zero-byte files skipped. | Current month changes; past months are static. |
 
 Skipped: `*.lock`, `*.tmp`, `*-wal`, `*-shm`, zero-byte sqlite, symlinks.
 `raw/manual/` is inside `raw/` and is included.
+
+Catch-up serialises on the `.lock` sidecar and append on the part itself, so
+backup holds both shared for the copy. Either writer holds its exclusive
+lock for one append and fsync, so the wait is microseconds.
 
 Snapshots upload under the original relative path (`index/claims.sqlite`) so
 restore places them as-is. `VACUUM INTO` yields a consistent single file while
@@ -158,8 +164,9 @@ sibling, the same fallback `write.ReadRaw` uses.
 
 `backup-state.json` records per relative path: size, mtime (ns), sha256,
 object key. Matching size and mtime skips the read. It also records
-`last_ok`, `last_attempt`, `last_error`, the last generation id this machine
-wrote, and the kept manifests it last saw so a run does not re-fetch them.
+`last_ok`, `last_attempt`, `last_error`, `adopted` (install ids this one may
+succeed as writer), the last generation id this machine wrote, and the kept
+manifests it last saw so a run does not re-fetch them.
 
 The remote manifest is the source of truth. A missing or stale cache means
 one full re-hash and an upload of only what differs from the manifest. The
@@ -209,6 +216,31 @@ pointer hold the same document. Every manifest is encrypted with relpath
 `manifest` as AAD. The pointer is overwritten in place; S3 PUT is atomic per
 key.
 
+`client` is `write.ClientID(home)`: `LOSSLESS_CLIENT`, else the persisted
+`<home>/client_id`. That file is outside the three roots, so a restored
+machine keeps its own id.
+
+### Writer guard
+
+One install writes a prefix at a time. The pointer carries the writer's
+`client`. A backup run compares it with this install's id and the `adopted`
+list in the state cache:
+
+- Pointer absent (first run), or `client` is this install or one it adopted:
+  proceed.
+- Otherwise refuse before uploading anything: `bucket last written by
+  <client> at <created_at>; run lossless backup --take-over if that machine
+  is retired`. Exit 1. `doctor` shows the same line until resolved.
+
+`restore` adds the restored pointer's `client` to `adopted`, so restore then
+backup on a new machine just works. The old machine, if it comes back, sees
+the new install in the pointer and refuses. `backup --take-over` adds the
+current pointer's `client` to `adopted` and proceeds; it is the only way an
+install adopts a writer it did not restore from.
+
+This is a guard against accident, not against an adversary: anyone with the
+key and bucket write access can set any `client`.
+
 ## Encryption
 
 `backup.key`: 32 random bytes, hex. HKDF-SHA256 (Go 1.24 `crypto/hkdf`)
@@ -219,19 +251,36 @@ Object format:
 
 ```
 magic   "LSBK" + uint8 version (1)
-prefix  8 random bytes
+salt    16 random bytes
+key     object_key = HKDF-SHA256(ikm = content_key, salt, info = relpath)
 chunks  for i in 0..n-1:
-          nonce = prefix || uint32be(i)
-          ct    = AES-256-GCM(content_key, nonce, plaintext_chunk_i, aad)
-          aad   = relpath || 0x00 || uint32be(i) || last_flag
+          nonce = 8 zero bytes || uint32be(i)
+          ct    = AES-256-GCM(object_key, nonce, plaintext_chunk_i, aad)
+          aad   = uint32be(i) || last_flag
 ```
 
+- A fresh key per object means the counter nonce never repeats under one
+  key, whatever the object count. The relpath is bound through the key
+  derivation, so an object swapped to another path fails to decrypt.
 - Plaintext chunk size 1 MiB. The last chunk may be shorter, including zero
   bytes for an empty file (one chunk, `last_flag` = 1).
 - `last_flag` is 1 on the final chunk. A truncated object fails because the
   final chunk read has `last_flag` = 0. A reordered object fails the counter.
-  A swapped object fails the relpath. A flipped byte fails the tag.
-- Ciphertext length = 13 + n × 16 + plaintext length.
+  A flipped byte fails the tag.
+- Ciphertext length = 21 + n × 16 + plaintext length.
+
+### Threat model
+
+Encryption protects the content and the file names against anyone who can
+read the bucket: the provider, a leaked read token, a misconfigured public
+prefix. It also detects any modification of an object.
+
+It does not protect against someone with write access to the bucket. They
+can delete objects or copy an older `m/<generation>` over the pointer to
+roll back; `restore` prints the generation id and created time so a rollback
+is visible, not silent. The key lives on this machine at 0600, so anyone
+who can read the home can read the store anyway. Key rotation is not in v1;
+rotating means a new prefix and a fresh first run.
 
 Upload path: encrypt to `backup-tmp/<name>.<sha256>` while hashing the
 ciphertext in the same pass, then PUT that file with
@@ -255,15 +304,17 @@ overlap. A run that cannot take the lock exits with "backup already running".
 1. Load `backup.env` and `backup.key`. Fail fast on missing or malformed
    config before any network call.
 2. GET pointer. 404 → empty manifest (first run). Decrypt. Wrong key →
-   "backup.key does not match this bucket".
+   "backup.key does not match this bucket". Apply the writer guard; with
+   `--take-over`, adopt the pointer's `client` first.
 3. Sweep `backup-tmp/`. Walk the three roots. Build the desired set
    `relpath → (sha256, size)` using the cache. Copy live parts and take
    sqlite snapshots into `backup-tmp/` here.
 4. Plan.
    - upload = paths whose `(relpath, sha256)` the pointer manifest does not
      hold.
-   - If upload is empty and no path was removed, stop: stamp `last_ok`,
-     print `no change`, write nothing to the bucket.
+   - If upload is empty and no path was removed: finish any pending
+     `dropping` (step 7), stamp `last_ok`, print `no change`. No new
+     generation, no pointer write.
    - drop = generations in `dropping`, plus the oldest kept generations
      beyond `KEEP − 1` once this run is added.
 5. Encrypt and upload planned objects, 4 in flight. Retry 3× with backoff
@@ -271,8 +322,9 @@ overlap. A run that cannot take the lock exits with "backup already running".
    404-on-PUT; fail with the status and the S3 error code.
 6. PUT `m/<generation>`, then PUT the pointer with `generations` = kept list
    and `dropping` = drop. Commit point is the pointer.
-7. For each generation in drop: fetch its manifest (cache or `m/`), delete
-   every object it references that no kept generation references, then
+7. For each generation in drop: fetch its manifest (cache, else `m/`), and
+   the kept manifests the same way. Delete every object the dropped one
+   references that no kept generation references, then
    delete `m/<generation>`. 4 in flight. Failures are logged, not fatal:
    the pointer still lists it under `dropping`, and the next run's step 4
    picks it up. A `m/<generation>` that is already 404 is treated as done.
@@ -291,21 +343,26 @@ next run; a later `--prune` with LIST can sweep those.
 
 Takes the same lock.
 
-1. Refuse if the sidecar `/health` answers. Refuse on non-empty `raw/` or
-   `export/` without `--force`.
+1. Refuse if the sidecar `/health` answers. If `LOSSLESS_SIDECAR` is off the
+   check is skipped and a warning says to stop `serve` first. Refuse on
+   non-empty `raw/` or `export/` without `--force`.
 2. Load config and key. GET pointer. Decrypt. With `--at`, GET
    `m/<generation>` instead; refuse a generation that is in `dropping`.
 3. For each file, 4 in flight: skip if the local file exists at the manifest
    hash (resume). Under `--force`, overwrite index snapshots; for raw and
    export, skip a local file at a different hash and list it. Otherwise GET,
-   decrypt to `.restore-tmp`, verify sha256, rename.
+   decrypt to `.restore-tmp`, verify sha256, rename. Directories are
+   created 0700 and files written 0600, as the store does.
 4. Write `backup-state.json` from the manifest so the next backup on this
-   machine does not re-hash.
+   machine does not re-hash, and add the pointer's `client` to `adopted`. It
+   does not set `last_ok`: the first scheduled run after a restore is a
+   no-change run that stamps it.
 5. Print summary: generation, restored, skipped, left alone, bytes.
 
 `--list` does steps 2 (pointer only) and prints the `generations` list with
 each manifest's created time, lossless version, file count, and total size.
-It fetches each kept manifest for the counts; they are small.
+It fetches each kept manifest for the counts; they are small. Entries under
+`dropping` are omitted.
 
 The restored `claims.sqlite` carries the action tape and cursors. Cursor rows
 name session files from the old machine; those sessions are dead, so they are
@@ -358,6 +415,8 @@ working hours; with daily runs, five working days. `--keep` is the knob.
 | `--at` names an unknown or dropping generation | Exit 1 listing the kept ones. |
 | Disk full on restore | Tmp write fails. Nothing half-renamed. Exit 1. |
 | Lock held | "backup already running". Exit 1. |
+| Sidecar off on restore | Health check skipped, warning printed, restore proceeds. |
+| Pointer written by another install | Exit 1 naming the install and time. Nothing uploaded. `--take-over` adopts it. |
 | Scheduled run fails | Logged, `last_error` stamped, retried in `min(15m, EVERY)`. `doctor` shows the error until a success. |
 
 ## Packages
@@ -406,6 +465,9 @@ rule per key that answers 429 like R2.
 - **Restore guards.** Refuses non-empty without `--force`. With `--force`,
   leaves a differing local file and lists it. `--at` an unknown generation
   exits 1.
+- **Writer guard.** A second store with its own client id refuses against
+  a pointer the first wrote; after `restore` into it, backup proceeds; the
+  first store then refuses; `--take-over` on the first proceeds.
 - **Commit point.** Fake fails the pointer PUT; the previous generation
   still restores; the next run re-PUTs the orphan objects.
 - **429.** Fake enforces one write per second on the pointer key; a retried
@@ -437,7 +499,8 @@ rule per key that answers 429 like R2.
 
 ## Out of scope
 
-- Multi-machine sync or merge. One writer per bucket prefix.
+- Multi-machine sync or merge. The writer guard enforces one writer per
+  prefix.
 - `--prune` with LIST for orphans left by a crash. Generations already
   bound normal growth.
 - Plaintext (`--no-encrypt`) layout.
