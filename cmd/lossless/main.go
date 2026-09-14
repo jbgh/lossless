@@ -12,6 +12,7 @@ import (
 
 	"context"
 
+	"lossless/internal/backup"
 	"lossless/internal/bench"
 	"lossless/internal/claim"
 	"lossless/internal/env"
@@ -78,6 +79,10 @@ func main() {
 		os.Exit(runToken(args))
 	case "ensure":
 		os.Exit(runEnsure(args))
+	case "backup":
+		os.Exit(runBackup(args))
+	case "restore":
+		os.Exit(runRestore(args))
 	case "hook-pi":
 		os.Exit(runHookPi())
 	case "hook-opencode":
@@ -117,6 +122,9 @@ func usage() {
   lossless install-hooks      # Grok + Claude + Codex + Pi + OpenCode
   lossless install-mcp        # MCP for every supported harness (or point any MCP client at /mcp)
   lossless ensure             # replay spool after sidecar was down
+  lossless backup init s3://B/P [--endpoint URL] [--every 1h] [--keep 5]   # opt-in encrypted copy to a bucket you own
+  lossless backup [--dry-run] [--take-over]   # one incremental run; serve --watch runs it on the schedule
+  lossless restore [--force] [--at GEN] [--list]   # pull a generation back into an empty store
   lossless embed-backfill     # embed active claims if an on-box model is configured
   lossless hook-pi            # stdin: Pi extension JSON; fail-open
   lossless hook-opencode      # stdin: OpenCode plugin JSON; fail-open
@@ -127,6 +135,7 @@ Env: LOSSLESS_HOME (default ~/.lossless)
      LOSSLESS_EMBED_CMD (optional local embedder: stdin JSON texts, stdout JSON vectors)
      LOSSLESS_EMBED_MODEL (optional model dir; in-process MiniLM not required)
      GITHUB_TOKEN / GH_TOKEN (optional; only lossless update, for a private release repo)
+     LOSSLESS_BACKUP_* live in ~/.lossless/backup.env (written by backup init); backup.key is the encryption key
 Default install is local (127.0.0.1, no token, nothing leaves the machine).
 update is the only command that calls GitHub. doctor does not phone home.
 MCP is a façade over the same JSON as /v1/ask.
@@ -544,6 +553,8 @@ func runDoctor(args []string) int {
 		exe = ""
 	}
 	rep := harness.Doctor(os.Getenv("HOME"), *home, exe, *url, env.Token())
+	bok, bdetail := backup.DoctorCheck(*home, time.Now())
+	rep.Checks = append(rep.Checks, harness.Check{Name: "backup", OK: bok, Detail: bdetail})
 	fmt.Print(rep.Format())
 	if !rep.Ok() {
 		return 1
