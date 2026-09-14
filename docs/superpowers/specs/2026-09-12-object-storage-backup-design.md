@@ -336,10 +336,9 @@ overlap. A run that cannot take the lock exits with "backup already running".
    delete `m/<generation>`. Deletes run sequentially; a dropped generation
    owns a handful of unique objects. Failures are logged, not fatal:
    the pointer still lists it under `dropping`, and the next run's step 4
-   picks it up. A `m/<generation>` that is already 404 is treated as done.
-   A finished drop may stay listed under dropping until the next pointer
-   write; the next run treats its missing m/<generation> as done. The
-   pointer is written exactly once per run.
+   picks it up. A `m/<generation>` that is already 404 is treated as done,
+   which is why a finished drop can stay listed under `dropping` until the
+   next pointer write. The pointer is written exactly once per run.
 8. Write cache with `last_ok`, this generation id, and the kept manifests.
    Sweep `backup-tmp/`. Print summary.
 
@@ -385,9 +384,9 @@ inert. `store.Open` runs migrations as usual.
 The schedule lives in the daemon. No cron, no launchd timer, nothing new for
 `setup` to write. The service units already run `serve --watch`.
 
-`watch.Run` already owns the catch-up ticker and an hourly sweep ticker. When
-`LOSSLESS_BACKUP_EVERY` is a positive duration, a one-minute backup ticker
-joins them and asks one question each minute: is a run due?
+When `LOSSLESS_BACKUP_EVERY` is a positive duration, the scheduler goroutine
+started in `serve.Listen` wakes once a minute and asks one question: is a
+run due?
 
 ```
 due = last_ok + EVERY            from backup-state.json
