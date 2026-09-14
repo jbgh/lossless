@@ -108,7 +108,13 @@ func Restore(ctx context.Context, home string, o RestoreOptions) (RestoreSummary
 	m := pointer
 	if o.At != "" && o.At != pointer.Generation {
 		if containsString(pointer.Dropping, o.At) || !containsString(pointer.Generations, o.At) {
-			return sum, fmt.Errorf("generation %s is not kept; kept: %s", o.At, strings.Join(pointer.Generations, ", "))
+			var kept []string
+			for _, g := range pointer.Generations {
+				if !containsString(pointer.Dropping, g) {
+					kept = append(kept, g)
+				}
+			}
+			return sum, fmt.Errorf("generation %s is not kept; kept: %s", o.At, strings.Join(kept, ", "))
 		}
 		if m, err = rm.getManifest(ctx, manifestKey(o.At)); err != nil {
 			return sum, err

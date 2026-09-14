@@ -164,6 +164,37 @@ func TestRestoreAtAndList(t *testing.T) {
 	}
 }
 
+// TestRestoreAtUnknownGenerationExcludesDropping: a generation still listed
+// under Generations but also under Dropping is not really kept, so the --at
+// error's "kept:" list must not name it either (the same rule List applies).
+func TestRestoreAtUnknownGenerationExcludesDropping(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	home := setupBackup(t, srv, 5)
+
+	keys, err := LoadKey(home)
+	must(t, err)
+	c, err := s3.New(srv.Config("bkt", "pre"))
+	must(t, err)
+	r := &remote{c: c, keys: keys}
+
+	m := &Manifest{
+		Version:     manifestVersion,
+		Generation:  "g2",
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+		Client:      "x",
+		Generations: []string{"g2", "g1"},
+		Dropping:    []string{"g1"},
+		Files:       map[string]FileEntry{},
+	}
+	must(t, r.putManifest(context.Background(), pointerKey, m))
+
+	_, err = Restore(context.Background(), freshTarget(t, home), RestoreOptions{Health: noDaemon, At: "nope"})
+	if err == nil || !strings.Contains(err.Error(), "g2") || strings.Contains(err.Error(), "g1") {
+		t.Fatalf("want the kept list to mention g2 but not the dropping g1, got %v", err)
+	}
+}
+
 // TestRestoreRejectsBadManifestPath is the regression test for finding 3:
 // restore must reject a manifest entry whose rel escapes home, rather than
 // trusting filepath.Join(home, rel) to stay inside it. The malicious entry

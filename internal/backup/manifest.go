@@ -66,9 +66,24 @@ type remote struct {
 	keys *crypt.Keys
 }
 
+// hintForbidden appends a hint about the likely missing permission to a 403
+// on the pointer GET: on AWS this almost always means the credentials lack
+// s3:ListBucket on the bucket (an object GET falls back to a bucket-level
+// check when the key itself isn't otherwise permitted).
+func hintForbidden(err error) error {
+	var se *s3.StatusError
+	if errors.As(err, &se) && se.Status == 403 {
+		return fmt.Errorf("%w (a 403 on the first GET usually means the credentials lack s3:ListBucket on the bucket; see docs/deploy.md)", err)
+	}
+	return err
+}
+
 func (r *remote) getManifest(ctx context.Context, key string) (*Manifest, error) {
 	body, _, err := r.c.Get(ctx, key)
 	if err != nil {
+		if key == pointerKey {
+			return nil, hintForbidden(err)
+		}
 		return nil, err
 	}
 	defer body.Close()

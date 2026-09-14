@@ -7,6 +7,27 @@ import (
 	"time"
 )
 
+func TestFormatDuration(t *testing.T) {
+	cases := []struct {
+		d    time.Duration
+		want string
+	}{
+		{0, "0s"},
+		{-time.Minute, "0s"},
+		{45 * time.Second, "45s"},
+		{startFloor, "2m"},
+		{12 * time.Minute, "12m"},
+		{48 * time.Minute, "48m"},
+		{time.Hour, "1h"},
+		{90 * time.Minute, "1h30m"},
+	}
+	for _, c := range cases {
+		if got := FormatDuration(c.d); got != c.want {
+			t.Errorf("FormatDuration(%v) = %q, want %q", c.d, got, c.want)
+		}
+	}
+}
+
 func TestDoctorCheck(t *testing.T) {
 	now := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
 	clearBackupEnv(t)

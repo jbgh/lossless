@@ -116,10 +116,6 @@ func run(ctx context.Context, home string, cfg *Config, rm *remote, state *State
 	if errors.Is(err, s3.ErrNotFound) {
 		pointer = emptyManifest()
 	} else if err != nil {
-		var se *s3.StatusError
-		if errors.As(err, &se) && se.Status == 403 {
-			return fmt.Errorf("%w (a 403 on the first GET usually means the credentials lack s3:ListBucket on the bucket; see docs/deploy.md)", err)
-		}
 		return err
 	}
 	if o.TakeOver {

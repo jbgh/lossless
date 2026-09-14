@@ -14,6 +14,18 @@ import (
 	"lossless/internal/backup"
 )
 
+// exitFor prints "lossless <prefix>: <err>" to stderr and returns the exit
+// code for it: 2 for a ConfigError (backup.env missing or malformed, caught
+// before any network call), else 1.
+func exitFor(prefix string, err error) int {
+	fmt.Fprintln(os.Stderr, "lossless "+prefix+":", err)
+	var ce *backup.ConfigError
+	if errors.As(err, &ce) {
+		return 2
+	}
+	return 1
+}
+
 func runBackup(args []string) int {
 	if len(args) > 0 && args[0] == "init" {
 		return runBackupInit(args[1:])
@@ -28,12 +40,7 @@ func runBackup(args []string) int {
 	}
 	sum, err := backup.Run(context.Background(), *home, backup.RunOptions{DryRun: *dry, Verbose: *verbose, TakeOver: *takeOver, Out: os.Stdout})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "lossless backup:", err)
-		var ce *backup.ConfigError
-		if errors.As(err, &ce) {
-			return 2
-		}
-		return 1
+		return exitFor("backup", err)
 	}
 	switch {
 	case sum.DryRun:
@@ -92,7 +99,7 @@ func runBackupInit(args []string) int {
 		fmt.Println("Add LOSSLESS_BACKUP_ACCESS_KEY and LOSSLESS_BACKUP_SECRET_KEY to backup.env before the first run.")
 	}
 	if *every > 0 {
-		fmt.Printf("Schedule: every %s while lossless serve runs (picked up within a minute). Run `lossless backup` now for the first copy.\n", *every)
+		fmt.Printf("Schedule: every %s while lossless serve runs (picked up within a minute). Run `lossless backup` now for the first copy.\n", backup.FormatDuration(*every))
 	} else {
 		fmt.Println("Schedule: off. Run `lossless backup` yourself.")
 	}
@@ -127,12 +134,7 @@ func runRestore(args []string) int {
 	}
 	sum, err := backup.Restore(ctx, *home, backup.RestoreOptions{Force: *force, At: *at, Out: os.Stderr})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "lossless restore:", err)
-		var ce *backup.ConfigError
-		if errors.As(err, &ce) {
-			return 2
-		}
-		return 1
+		return exitFor("restore", err)
 	}
 	fmt.Printf("restore: generation %s: restored %d (%d bytes), skipped %d, left alone %d\n", sum.Generation, sum.Restored, sum.Bytes, sum.Skipped, sum.LeftAlone)
 	for _, rel := range sum.Left {

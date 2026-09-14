@@ -350,6 +350,10 @@ manifest. The next run re-PUTs it under the same key, which makes it
 referenced again. The only leak is a version that changed again before the
 next run; a later `--prune` with LIST can sweep those.
 
+A crash between the `m/<generation>` PUT and the pointer PUT likewise leaves
+an orphan manifest under `m/`; it is unreferenced, harmless, and also a job
+for a later `--prune`.
+
 ## Restore run
 
 Takes the same lock.

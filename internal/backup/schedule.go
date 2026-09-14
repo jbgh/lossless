@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"lossless/internal/version"
 )
 
 const (
@@ -29,26 +31,25 @@ type Scheduler struct {
 }
 
 func NewScheduler(home string) *Scheduler {
-	return &Scheduler{
-		Home: home,
-		Logf: func(format string, args ...any) {
-			fmt.Fprintf(os.Stderr, time.Now().UTC().Format(time.RFC3339)+" lossless backup: "+format+"\n", args...)
-		},
-		Now: time.Now,
-		Run: func(ctx context.Context, home string) error {
-			sum, err := Run(ctx, home, RunOptions{Out: io.Discard})
-			if err != nil {
-				return err
-			}
-			if sum.NoChange {
-				fmt.Fprintf(os.Stderr, "%s lossless backup: no change (%d files, %s)\n", time.Now().UTC().Format(time.RFC3339), sum.Scanned, sum.Elapsed.Round(time.Millisecond))
-			} else {
-				fmt.Fprintf(os.Stderr, "%s lossless backup: generation %s uploaded %d (%d bytes) deleted %d dropped %v (%s)\n",
-					time.Now().UTC().Format(time.RFC3339), sum.Generation, sum.Uploaded, sum.Bytes, sum.Deleted, sum.Dropped, sum.Elapsed.Round(time.Millisecond))
-			}
-			return nil
-		},
+	s := &Scheduler{Home: home, Now: time.Now}
+	s.Logf = func(format string, args ...any) {
+		stamp := time.Now().UTC().Format(time.RFC3339)
+		fmt.Fprintf(os.Stderr, stamp+" lossless backup ("+version.Version+"): "+format+"\n", args...)
 	}
+	s.Run = func(ctx context.Context, home string) error {
+		sum, err := Run(ctx, home, RunOptions{Out: io.Discard})
+		if err != nil {
+			return err
+		}
+		if sum.NoChange {
+			s.Logf("no change (%d files, %s)", sum.Scanned, sum.Elapsed.Round(time.Millisecond))
+		} else {
+			s.Logf("generation %s uploaded %d (%d bytes) deleted %d dropped %v (%s)",
+				sum.Generation, sum.Uploaded, sum.Bytes, sum.Deleted, sum.Dropped, sum.Elapsed.Round(time.Millisecond))
+		}
+		return nil
+	}
+	return s
 }
 
 func nextDue(start, lastOK time.Time, hasLast bool, every time.Duration) time.Time {
