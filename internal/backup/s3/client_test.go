@@ -129,3 +129,58 @@ func TestNewRejectsHTTPEndpointOffLoopback(t *testing.T) {
 		t.Fatal("must refuse")
 	}
 }
+
+func TestRateLimitSameSleepsAndRetries(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	srv.RateLimit = true
+	c, err := s3.New(srv.Config("bkt", "pre"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SetSleep(time.Sleep) // real sleep, not no-op
+	ctx := context.Background()
+	body := []byte("rate limit test")
+
+	// First Put succeeds immediately
+	if err := c.Put(ctx, "k", bytes.NewReader(body), int64(len(body)), sha(body)); err != nil {
+		t.Fatal(err)
+	}
+	putCount := srv.Count("PUT")
+	if putCount != 1 {
+		t.Fatalf("first put: want 1 PUT, got %d", putCount)
+	}
+
+	// Second Put to same key should get 429 and retry after backoff
+	if err := c.Put(ctx, "k", bytes.NewReader(body), int64(len(body)), sha(body)); err != nil {
+		t.Fatal(err)
+	}
+	putCount = srv.Count("PUT")
+	if putCount != 3 {
+		t.Fatalf("second put: want 3 total PUTs (1 + 429 + retry), got %d", putCount)
+	}
+}
+
+func TestRateLimitDifferentKeysNoThrottle(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	srv.RateLimit = true
+	c := newClient(t, srv) // no-op sleep
+	ctx := context.Background()
+	body := []byte("no throttle")
+
+	// Put to key1
+	if err := c.Put(ctx, "k1", bytes.NewReader(body), int64(len(body)), sha(body)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Put to key2 immediately after should not be throttled
+	if err := c.Put(ctx, "k2", bytes.NewReader(body), int64(len(body)), sha(body)); err != nil {
+		t.Fatal(err)
+	}
+
+	putCount := srv.Count("PUT")
+	if putCount != 2 {
+		t.Fatalf("different keys: want 2 PUTs, got %d", putCount)
+	}
+}
