@@ -57,10 +57,23 @@ func runBackupInit(args []string) int {
 	region := fs.String("region", "", "signing region (default us-east-1; an R2 endpoint signs auto by itself)")
 	every := fs.Duration("every", time.Hour, "schedule interval inside serve --watch; 0 disables")
 	keep := fs.Int("keep", 5, "generations to keep in the bucket")
-	if err := fs.Parse(args); err != nil {
-		return 2
+	var target string
+	rest := args
+	for {
+		if err := fs.Parse(rest); err != nil {
+			return 2
+		}
+		if fs.NArg() == 0 {
+			break
+		}
+		if target == "" {
+			target = fs.Arg(0)
+		} else {
+			fmt.Fprintln(os.Stderr, "lossless backup init: unexpected argument", fs.Arg(0))
+			return 2
+		}
+		rest = fs.Args()[1:]
 	}
-	target := fs.Arg(0)
 	if target == "" {
 		fmt.Fprintln(os.Stderr, "usage: lossless backup init s3://<bucket>/<prefix> [--endpoint URL] [--region R] [--every 1h] [--keep 5]")
 		return 2

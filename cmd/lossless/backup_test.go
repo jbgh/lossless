@@ -4,6 +4,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"lossless/internal/backup/s3/s3test"
@@ -38,6 +39,27 @@ func TestBackupInitRunRestoreList(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	// The URL may come before its flags, not just after (round 1 review fix).
+	urlFirst := t.TempDir()
+	if runBackup([]string{"init", "--home", urlFirst, "s3://bkt/pre2", "--endpoint", srv.URL(), "--keep", "3"}) != 0 {
+		t.Fatal("init with the URL before its flags")
+	}
+	envBytes, err := os.ReadFile(filepath.Join(urlFirst, "backup.env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := string(envBytes)
+	if !strings.Contains(env, `LOSSLESS_BACKUP_ENDPOINT="`+srv.URL()+`"`) {
+		t.Fatalf("backup.env missing --endpoint given after the URL: %s", env)
+	}
+	if !strings.Contains(env, `LOSSLESS_BACKUP_KEEP="3"`) {
+		t.Fatalf("backup.env missing --keep given after the URL: %s", env)
+	}
+	if runBackup([]string{"init", "--home", t.TempDir(), "s3://bkt/pre2", "s3://bkt/other"}) != 2 {
+		t.Fatal("two positional arguments must exit 2")
+	}
+
 	if runBackup([]string{"init", "--home", home, "s3://bkt/pre"}) != 1 {
 		t.Fatal("second init must refuse to replace the key")
 	}
