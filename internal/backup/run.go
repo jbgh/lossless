@@ -179,16 +179,7 @@ func run(ctx context.Context, home string, cfg *Config, rm *remote, state *State
 		state.Manifests[gen] = current
 		state.LastGeneration = gen
 		sum.Generation = gen
-		if remaining := dropGenerations(ctx, rm, state, p.Kept, current, p.Drop, o.Out, sum); len(remaining) != len(p.Drop) {
-			// The drop finished (fully or partly) within this run, so the
-			// pointer's optimistic Dropping list is now stale. Correct it
-			// now rather than leaving a completed drop looking pending
-			// until the next run notices it is a no-op.
-			current.Dropping = append(append([]string{}, pending...), remaining...)
-			if err := rm.putManifest(ctx, pointerKey, current); err != nil {
-				fmt.Fprintf(o.Out, "backup: could not clear finished drop from pointer: %v\n", err)
-			}
-		}
+		dropGenerations(ctx, rm, state, p.Kept, current, p.Drop, o.Out, sum)
 	}
 
 	state.Files = make(map[string]FileState, len(items))

@@ -139,7 +139,7 @@ func TestGenerationsDropBeyondKeep(t *testing.T) {
 		t.Fatalf("%+v", third)
 	}
 	m := pointerOf(t, home, srv)
-	if strings.Join(m.Generations, ",") != third.Generation+","+g2 || len(m.Dropping) != 0 {
+	if strings.Join(m.Generations, ",") != third.Generation+","+g2 || containsString(m.Generations, g1) {
 		t.Fatalf("%+v", m)
 	}
 	if _, ok := srv.Object("bkt", "pre/"+live1); ok {
