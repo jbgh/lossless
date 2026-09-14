@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.26 — unreleased
+
+- `backup init`, `backup`, and `restore`: opt-in encrypted copy of `raw/`, `export/`, and `VACUUM INTO` index snapshots to an S3-compatible bucket (AWS, Cloudflare R2, B2, MinIO). Per-file objects under HMAC names, chunked AES-256-GCM with a per-object key, manifest written last, the last five generations kept and objects deleted only when no kept generation references them. `restore --list` and `restore --at` pick a generation. A writer guard refuses a bucket last written by another install; `restore` adopts it, `--take-over` overrides.
+- `serve --watch` runs backup on a due time from the last success (two minutes after start if overdue, retry in fifteen minutes on failure); `backup init` schedules hourly by default. `doctor` prints the backup line.
+- Hand-rolled SigV4 client with signed payloads and region `auto` on R2 hosts; no new modules.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.25 — 2026-09-11
 
 - `hook-claude` routes a Grok session back to the Grok adapter. Grok 1.0.13 runs the Claude-scope hooks and passes its `updates.jsonl` event stream as `transcript_path`; eight live sessions were stored as `claude` on that file. The locate maps it to the sibling `chat_history.jsonl` with harness `grok`; catch-up refuses `updates.jsonl` outright; `inspect --prune` drops the stored rows (session, cursor, and only that harness's claims).

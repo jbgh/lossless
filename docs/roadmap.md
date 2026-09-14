@@ -161,8 +161,9 @@ Specified, not user-facing product:
 - offline `scrub` of raw
 - `embed-backfill` already exists as a CLI; useful only after an embedder is attached
 - Historical directory import (single-file `catch-up --source import` already exists)
+- `backup` / `restore` to an S3-compatible bucket (0.1.26): encrypted per-file mirror, five kept generations, hourly by default inside `serve --watch`
 
-Remote home stays manual: TLS + token + local sidecar. No cloud image, no org ACL, no S3.
+Remote home stays manual: TLS + token + local sidecar. No cloud image, no org ACL, no S3 as the store. `backup` copies the store to a bucket you own (encrypted, kept generations, restore); `ask` still reads local files.
 
 ## Not on the roadmap
 

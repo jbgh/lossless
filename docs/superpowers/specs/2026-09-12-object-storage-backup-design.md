@@ -57,7 +57,10 @@ existing key. It prints one line telling the operator to copy `backup.key`
 somewhere that is not this machine. `--every` defaults to `1h` and writes
 `LOSSLESS_BACKUP_EVERY`; `--every 0` writes `0`, which disables the
 schedule. `--keep` writes `LOSSLESS_BACKUP_KEEP`. Configuring a bucket means
-backups are scheduled unless you say otherwise.
+backups are scheduled unless you say otherwise. Credentials present in the
+environment at init time (`LOSSLESS_BACKUP_*` or `AWS_*`) are written into
+`backup.env`; otherwise commented placeholders are written and the command
+says so.
 
 `backup` runs one incremental backup and prints a summary: files scanned,
 uploaded, deleted, bytes sent, generation id, elapsed. Non-zero exit on
@@ -82,8 +85,9 @@ file count, total bytes. Read-only.
 `doctor` prints one line: target, encrypted, generations kept, age of last
 successful backup, next due, and the last error if the last attempt failed.
 Warns when the age is more than twice the interval or there has never been
-one. With `LOSSLESS_BACKUP_EVERY=0` it warns only when no backup has ever
-succeeded. Prints `backup: not configured` when
+one. With `LOSSLESS_BACKUP_EVERY=0` the staleness warning is off; it still
+fails when no backup has ever succeeded or when the last attempt failed.
+Prints `backup: not configured` when
 `backup.env` is absent.
 
 All three commands honour `--home` and `LOSSLESS_HOME` like every other
@@ -155,7 +159,11 @@ lock for one append and fsync, so the wait is microseconds.
 
 Snapshots upload under the original relative path (`index/claims.sqlite`) so
 restore places them as-is. `VACUUM INTO` yields a consistent single file while
-the WAL stays live and forces no checkpoint on the running daemon.
+the WAL stays live and forces no checkpoint on the running daemon. The
+snapshot is then converted once to the store's WAL format (open with the
+store's connection string, then close) before it is hashed, so a restored
+index file is byte-identical across the daemon's later opens and its hash
+keeps matching the manifest.
 
 If a live part seals between walk and open, the reader takes the `.zst`
 sibling, the same fallback `write.ReadRaw` uses.
@@ -325,9 +333,13 @@ overlap. A run that cannot take the lock exits with "backup already running".
 7. For each generation in drop: fetch its manifest (cache, else `m/`), and
    the kept manifests the same way. Delete every object the dropped one
    references that no kept generation references, then
-   delete `m/<generation>`. 4 in flight. Failures are logged, not fatal:
+   delete `m/<generation>`. Deletes run sequentially; a dropped generation
+   owns a handful of unique objects. Failures are logged, not fatal:
    the pointer still lists it under `dropping`, and the next run's step 4
    picks it up. A `m/<generation>` that is already 404 is treated as done.
+   A finished drop may stay listed under dropping until the next pointer
+   write; the next run treats its missing m/<generation> as done. The
+   pointer is written exactly once per run.
 8. Write cache with `last_ok`, this generation id, and the kept manifests.
    Sweep `backup-tmp/`. Print summary.
 
@@ -387,15 +399,22 @@ The two-minute floor keeps a fresh boot or an `update` restart from uploading
 before the harnesses have settled. A daemon that restarts more often than the
 interval still backs up, because due comes from the persisted last success,
 not from process start. A laptop that sleeps past its due time backs up
-within a minute of waking.
+within a minute of waking. `start` is captured once when the scheduler loop
+begins; a `backup init` on an already-running daemon is picked up within a
+minute and, with no `last_ok`, runs at the next tick since the floor has
+passed.
 
 After a success, `due = now + EVERY`. After a failure, `due = now + min(15m,
 EVERY)` and `last_error` is stamped, so a transient outage costs minutes, not
 an interval. A run with no changes counts as a success.
 
-The run goes in its own goroutine. A tick while the previous run holds the
-lock is skipped and logged. Errors go to `serve.log` with the time and
-version stamp. Catch-up and `ask` never wait on it.
+The scheduler is its own goroutine started next to the watcher in
+`serve.Listen`; the run executes synchronously inside it, so a tick can never
+overlap a run. A manual backup during a scheduled run gets "backup already
+running"; a scheduled tick during a manual run sees the same and re-checks a
+minute later. `backup.env` is re-read every tick, so a later `backup init` or
+an edited interval takes effect within a minute. Errors go to `serve.log`
+with the time and version stamp. Catch-up and `ask` never wait on it.
 
 History window is `KEEP` changed runs, not `KEEP` ticks: idle runs write
 nothing. With hourly runs and active sessions that is roughly the last five
@@ -407,6 +426,7 @@ working hours; with daily runs, five working days. `--keep` is the knob.
 |------|-----------|
 | No `backup.env` | `backup` and `restore` exit 2 with "run lossless backup init". `serve` does nothing. `doctor` says not configured. |
 | Missing or malformed key | Exit 2 before any network call. |
+| Missing or malformed backup.env value | A quoted value that does not unquote fails LoadConfig naming the key. Exit 2. |
 | Bad URL, http endpoint off loopback | Exit 2. Same rule as remote home. |
 | 400 / 403 from the bucket | Exit 1 with status and S3 error code. No retry. |
 | Network, 429, 5xx | 3 retries per object, then exit 1. Pointer not written. Previous generation restorable. |
@@ -427,13 +447,16 @@ internal/backup/crypt/   HKDF keys; HMAC namer; chunked AES-GCM writer and reade
 internal/backup/         config (load, init); state cache; lock; walk + snapshot; plan; generations; Run; Restore; List
 cmd/lossless/backup.go   runBackup (init | run), runRestore (run | --list); help text
 cmd/lossless/main.go     switch entries; doctor line
-internal/watch/watch.go  backup ticker
+internal/serve/serve.go   start the scheduler goroutine next to the watcher
 ```
 
 `internal/backup` imports `store` (a new `store.Snapshot(src, dst)` helper opens a
 read connection with the existing pragmas and runs `VACUUM INTO`) and
-`write` (for `CheckRemoteURL` and `ReadRaw` fallback). `watch` imports
+`write` (for `CheckRemoteURL` and `ReadRaw` fallback). `serve` imports
 `backup`. No cycle: `write` and `store` do not import `backup`.
+
+Failures before the first network call (missing env or key, bad URL or
+endpoint) are returned as `ConfigError`; the CLI exits 2 on it.
 
 No existing behaviour changes when `backup.env` is absent.
 

@@ -37,6 +37,7 @@ ask({ question, project, paths, goal })
 - **ask.** At most five records plus warnings. The agent writes the next reply. lossless does not.
 - **Across models and harnesses.** One store per project. Grok, Claude, Codex, Pi, and OpenCode share it.
 - **Local by default.** `127.0.0.1`, no token, nothing uploaded. `doctor` does not phone home.
+- **Backup is yours.** Optional `lossless backup` copies the store to an S3-compatible bucket you own, encrypted with a key you hold. `ask` still reads local files. See [docs/deploy.md](docs/deploy.md).
 
 # Compaction is lossy
 

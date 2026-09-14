@@ -164,6 +164,98 @@ Local `raw/` layout is the same on every OS. The home never needs the original h
 
 ---
 
+## Back up to object storage (optional)
+
+lossless keeps running on local files. This copies the store to an
+S3-compatible bucket you own, encrypted with a key you hold, on a schedule.
+It is not a home: `ask` never reads the bucket, and nothing here changes the
+loopback default. Default install still uploads nothing.
+
+```bash
+export LOSSLESS_BACKUP_ACCESS_KEY=…   # or AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+export LOSSLESS_BACKUP_SECRET_KEY=…
+lossless backup init s3://my-bucket/lossless --endpoint https://<account>.r2.cloudflarestorage.com
+lossless backup            # first copy now; serve --watch repeats it hourly
+lossless doctor            # "backup   ok   s3://… encrypted keep=5 last ok 3m ago, due in 57m"
+```
+
+`backup init` writes `~/.lossless/backup.env` and `~/.lossless/backup.key`
+(both `0600`). **Copy `backup.key` somewhere that is not this machine.**
+Restore is impossible without it. Credentials present in the environment at
+init time are written into `backup.env`; otherwise add them there.
+
+### What is copied
+
+| Path | How |
+|------|-----|
+| `raw/**/*.jsonl.zst` | Sealed tape parts. Uploaded once, never re-read. |
+| `raw/**/*.jsonl` | Live parts. Copied under a shared lock, re-uploaded as they grow. |
+| `export/**/*.md` | Claims. |
+| `index/*.sqlite` | `VACUUM INTO` snapshots. Restore needs no rebuild. |
+
+Nothing else in the home is read. `spool/`, `active/`, `serve.log`,
+`service.env`, and the backup files themselves stay on this machine.
+
+Every object is chunked AES-256-GCM under a per-object key derived from
+`backup.key`. Object names are an HMAC of the path. The bucket shows no
+project names, session ids, or paths. Someone with bucket read access learns
+nothing; someone with write access can delete or roll back, and a rollback
+shows in `restore --list`.
+
+### Generations
+
+Each run that changed anything writes a full manifest and moves the
+pointer. The last five generations are kept (`--keep`), and an object is
+deleted only when no kept generation references it. A run with no changes
+writes nothing. Bucket versioning is not assumed; Cloudflare R2 does not
+implement it.
+
+```bash
+lossless restore --list
+lossless restore --at 20260914T151500Z-a1f3
+```
+
+### Schedule
+
+`serve --watch` runs a backup when one is due: last success plus the
+interval, or two minutes after the daemon starts if that is already past.
+A daemon that restarts daily with a daily interval still backs up. A failed
+run retries in fifteen minutes. `--every 0` at init turns the schedule off;
+`lossless backup` is always available by hand. `doctor` warns when the last
+success is older than twice the interval, or when the last attempt failed.
+
+### Restore
+
+On a new machine: install lossless, run `lossless setup`, copy `backup.env`
+and `backup.key` into `~/.lossless`, stop the daemon, then:
+
+```bash
+lossless restore           # latest generation into an empty store
+lossless setup             # or just start serve again
+```
+
+`restore` refuses a running daemon and a non-empty store. `--force` unions
+into a non-empty store: index snapshots are replaced, raw and export files
+that differ locally are left alone and listed. The restored machine becomes
+the bucket's writer; if the old machine comes back it refuses to back up
+until you run `lossless backup --take-over` there on purpose.
+
+### Cloudflare R2
+
+- Endpoint `https://<account>.r2.cloudflarestorage.com`, or
+  `https://<account>.<jurisdiction>.r2.cloudflarestorage.com` for a bucket
+  created in a jurisdiction.
+- Create an R2 API token with **Object Read & Write** scoped to the bucket.
+  Cloudflare shows the S3 Access Key ID and Secret Access Key once, on the
+  token page. Those are the two credentials above.
+- Region is `auto`; the client sets it for any R2 endpoint.
+- R2 has no bucket versioning. Generations are the history.
+
+Any other S3-compatible store works the same way with its endpoint. AWS
+needs no `--endpoint`.
+
+---
+
 ## Security (the parts we own)
 
 - Public listen requires a bearer. Loopback does not.
@@ -193,5 +285,5 @@ This is your process on your machine. It is not us hosting your transcripts.
 - Provisioning a cloud, a VPS image, or a TLS certificate
 - An automatic `migrate` that rewrites your machine and ships the store
 - Per-user ACL, invite links, orgs, billing
-- S3 as the raw store
+- S3 as the store `ask` reads from. A bucket is a copy (`lossless backup`), never a home.
 - Hooks that POST straight to a remote home (they stay local and fail-open)
