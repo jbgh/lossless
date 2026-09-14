@@ -17,7 +17,6 @@ import (
 
 	"lossless/internal/backup/s3"
 	"lossless/internal/env"
-	"lossless/internal/store"
 )
 
 var (
@@ -25,10 +24,6 @@ var (
 	ErrStoreNotEmpty    = errors.New("store already has raw or export files; use --force to union")
 	ErrNothingToRestore = errors.New("nothing to restore: the bucket has no manifest")
 )
-
-// claimsRel is the one restored file lossless ever opens as a live
-// database (internal/store.Open, in WAL mode).
-const claimsRel = "index/claims.sqlite"
 
 type RestoreOptions struct {
 	Force  bool
@@ -127,12 +122,6 @@ func Restore(ctx context.Context, home string, o RestoreOptions) (RestoreSummary
 	}
 	sort.Strings(rels)
 
-	// cache is the local backup-state as it stood before this restore. It
-	// lets restoreOne skip a byte-identical re-download on a repeat restore
-	// even for index/claims.sqlite, whose on-disk bytes legitimately move
-	// once lossless opens it live (see the settle step below) even though
-	// nothing in it actually changed.
-	cache := LoadState(home)
 	state := &State{Files: map[string]FileState{}, Manifests: map[string]*Manifest{}}
 	var (
 		mu       sync.Mutex
@@ -151,7 +140,7 @@ func Restore(ctx context.Context, home string, o RestoreOptions) (RestoreSummary
 		go func(rel string, e FileEntry) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			outcome, n, err := restoreOne(ctx, rm, home, rel, e, cache)
+			outcome, n, err := restoreOne(ctx, rm, home, rel, e)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -181,11 +170,6 @@ func Restore(ctx context.Context, home string, o RestoreOptions) (RestoreSummary
 	if firstErr != nil {
 		return sum, firstErr
 	}
-	if _, ok := m.Files[claimsRel]; ok {
-		if err := settleClaims(home, state); err != nil {
-			return sum, err
-		}
-	}
 	sort.Strings(sum.Left)
 	state.Adopt(pointer.Client)
 	state.Manifests[m.Generation] = m
@@ -197,17 +181,9 @@ func Restore(ctx context.Context, home string, o RestoreOptions) (RestoreSummary
 
 // restoreOne returns "restored", "skipped" (already at this hash), or
 // "left" (a differing raw/export file that is never overwritten).
-func restoreOne(ctx context.Context, rm *remote, home, rel string, e FileEntry, cache *State) (string, int64, error) {
+func restoreOne(ctx context.Context, rm *remote, home, rel string, e FileEntry) (string, int64, error) {
 	target := filepath.Join(home, filepath.FromSlash(rel))
 	if st, err := os.Stat(target); err == nil && st.Mode().IsRegular() {
-		// Trust a cache entry that already matches this file's hash and
-		// stat: a repeat restore of index/claims.sqlite would otherwise
-		// always re-download it, since settleClaims (below) leaves its
-		// on-disk bytes past the object's own hash the moment lossless
-		// opens it live.
-		if c, ok := cache.Files[rel]; ok && c.SHA256 == e.SHA256 && c.StatSize == st.Size() && c.Mtime == st.ModTime().UnixNano() {
-			return "skipped", 0, nil
-		}
 		if sha, _, err := hashFile(target); err == nil && sha == e.SHA256 {
 			return "skipped", 0, nil
 		}
@@ -250,37 +226,6 @@ func restoreOne(ctx context.Context, rm *remote, home, rel string, e FileEntry, 
 		return "", 0, err
 	}
 	return "restored", e.Size, nil
-}
-
-// settleClaims opens and closes the just-restored claims.sqlite once via
-// the real store package. Every backed-up generation of it is a VACUUM
-// INTO snapshot, always written in legacy (rollback) journal format;
-// internal/store.Open always requests WAL. The first time anything opens
-// a restored snapshot live, SQLite converts it to WAL in place, changing
-// a few header bytes with no row-level change. Doing that conversion here
-// means the daemon's own first open finds nothing left to do, and the
-// state entry recorded right after (trusted, not re-hashed, by both
-// restoreOne above and walk's cache on the next backup run) stays valid.
-func settleClaims(home string, state *State) error {
-	st, err := store.Open(home)
-	if err != nil {
-		return err
-	}
-	if err := st.Close(); err != nil {
-		return err
-	}
-	fi, err := os.Stat(filepath.Join(home, filepath.FromSlash(claimsRel)))
-	if err != nil {
-		return err
-	}
-	fe, ok := state.Files[claimsRel]
-	if !ok {
-		return nil
-	}
-	fe.StatSize = fi.Size()
-	fe.Mtime = fi.ModTime().UnixNano()
-	state.Files[claimsRel] = fe
-	return nil
 }
 
 type GenerationInfo struct {
