@@ -2,6 +2,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -9,7 +10,9 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	"lossless/internal/backup/s3"
 	"lossless/internal/backup/s3/s3test"
 	"lossless/internal/store"
 )
@@ -158,6 +161,54 @@ func TestRestoreAtAndList(t *testing.T) {
 	}
 	if _, err := Restore(context.Background(), freshTarget(t, src), RestoreOptions{Health: noDaemon, At: "nope"}); err == nil || !strings.Contains(err.Error(), g2) {
 		t.Fatalf("unknown generation must list the kept ones: %v", err)
+	}
+}
+
+// TestRestoreRejectsBadManifestPath is the regression test for finding 3:
+// restore must reject a manifest entry whose rel escapes home, rather than
+// trusting filepath.Join(home, rel) to stay inside it. The malicious entry
+// points at a real, validly encrypted object (bound to the bad rel as AAD,
+// with a matching plaintext hash) so that, absent the guard, Get, Decrypt,
+// and Rename would all succeed and actually write outside home.
+func TestRestoreRejectsBadManifestPath(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	home := setupBackup(t, srv, 5)
+
+	keys, err := LoadKey(home)
+	must(t, err)
+	c, err := s3.New(srv.Config("bkt", "pre"))
+	must(t, err)
+	r := &remote{c: c, keys: keys}
+
+	badRel := "raw/../../.ssh/authorized_keys"
+	plaintext := []byte("evil\n")
+	var ct bytes.Buffer
+	plainSHA, cipherSHA, n, err := r.keys.Encrypt(&ct, bytes.NewReader(plaintext), badRel)
+	must(t, err)
+	objKey := objectKey(r.keys.Name(badRel), plainSHA)
+	must(t, r.c.Put(context.Background(), objKey, bytes.NewReader(ct.Bytes()), n, cipherSHA))
+
+	gen := NewGeneration(time.Now())
+	m := &Manifest{
+		Version:     manifestVersion,
+		Generation:  gen,
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+		Client:      "x",
+		Generations: []string{gen},
+		Files: map[string]FileEntry{
+			badRel: {SHA256: plainSHA, Size: int64(len(plaintext)), Object: objKey},
+		},
+	}
+	must(t, r.putManifest(context.Background(), pointerKey, m))
+
+	dst := freshTarget(t, home)
+	if _, err := Restore(context.Background(), dst, RestoreOptions{Health: noDaemon}); err == nil || !strings.Contains(err.Error(), badRel) {
+		t.Fatalf("want an error naming the bad rel, got %v", err)
+	}
+	escaped := filepath.Join(dst, filepath.FromSlash(badRel))
+	if _, err := os.Stat(escaped); !os.IsNotExist(err) {
+		t.Fatal("must not write outside home")
 	}
 }
 

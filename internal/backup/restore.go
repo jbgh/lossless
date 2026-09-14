@@ -58,7 +58,7 @@ func hasRegularFile(dir string) bool {
 		if err != nil {
 			return nil
 		}
-		if d.Type().IsRegular() {
+		if d.Type().IsRegular() && !skipName(d.Name()) && !strings.HasSuffix(d.Name(), ".restore-tmp") {
 			found = true
 			return fs.SkipAll
 		}
@@ -182,6 +182,9 @@ func Restore(ctx context.Context, home string, o RestoreOptions) (RestoreSummary
 // restoreOne returns "restored", "skipped" (already at this hash), or
 // "left" (a differing raw/export file that is never overwritten).
 func restoreOne(ctx context.Context, rm *remote, home, rel string, e FileEntry) (string, int64, error) {
+	if !validRel(rel) {
+		return "", 0, fmt.Errorf("invalid manifest path %q", rel)
+	}
 	target := filepath.Join(home, filepath.FromSlash(rel))
 	if st, err := os.Stat(target); err == nil && st.Mode().IsRegular() {
 		if sha, _, err := hashFile(target); err == nil && sha == e.SHA256 {

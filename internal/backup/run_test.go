@@ -260,6 +260,20 @@ func TestRunRefusesWhenLocked(t *testing.T) {
 	}
 }
 
+// TestPointerForbiddenGetsListBucketHint covers finding 4: a 403 on the
+// first pointer GET (AWS without s3:ListBucket) must not be treated as
+// not-found, and the error must hint at the missing permission.
+func TestPointerForbiddenGetsListBucketHint(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	home := setupBackup(t, srv, 5)
+	srv.FailNext("bkt", "pre/manifest", "403", 1)
+	_, err := Run(context.Background(), home, RunOptions{})
+	if err == nil || !strings.Contains(err.Error(), "s3:ListBucket") {
+		t.Fatalf("want a 403 hint mentioning s3:ListBucket, got %v", err)
+	}
+}
+
 // TestCacheHitRequiresPointerMatchForLiveAndSqlite is the Critical
 // regression test (finding 1): a stat-cache hit for a live part or sqlite
 // file must not skip the copy/snapshot step unless the bucket pointer

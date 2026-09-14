@@ -4,6 +4,7 @@ package backup
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -149,6 +150,28 @@ func TestSchedulerEveryZeroNeverRuns(t *testing.T) {
 	}
 }
 
+// TestSchedulerLogsConfigErrorOnceUntilItChanges is the regression test for
+// finding 2: a persistent LoadConfig error (e.g. "backup credentials
+// missing" after `backup init` without credentials in the environment)
+// must be logged once, not on every tick.
+func TestSchedulerLogsConfigErrorOnceUntilItChanges(t *testing.T) {
+	start := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	clearBackupEnv(t)
+	home := t.TempDir()
+	// No credentials in the environment: backup.env gets commented
+	// placeholders, so LoadConfig fails the same way on every tick.
+	must(t, Init(home, InitOptions{URL: "s3://bkt/pre", Every: time.Hour}))
+	h := newHarness(t, home, start)
+	var lines []string
+	h.s.Logf = func(format string, args ...any) { lines = append(lines, fmt.Sprintf(format, args...)) }
+	h.tickAt(time.Minute)
+	h.tickAt(time.Minute)
+	h.tickAt(time.Minute)
+	if len(lines) != 1 {
+		t.Fatalf("want exactly one log line for a persistent config error, got %v", lines)
+	}
+}
+
 func TestSchedulerPicksUpLaterInit(t *testing.T) {
 	start := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
 	clearBackupEnv(t)
@@ -161,7 +184,7 @@ func TestSchedulerPicksUpLaterInit(t *testing.T) {
 	t.Setenv("LOSSLESS_BACKUP_ACCESS_KEY", "a")
 	t.Setenv("LOSSLESS_BACKUP_SECRET_KEY", "s")
 	must(t, Init(home, InitOptions{URL: "s3://b", Every: time.Hour}))
-	h.tickAt(time.Minute) // configured now; floor starts here
+	h.tickAt(time.Minute) // configured now; the floor was already measured from start, long past by now
 	h.tickAt(3 * time.Minute)
 	if len(h.runAt) != 1 {
 		t.Fatalf("a daemon that was up before init must start backing up: %v", h.runAt)

@@ -24,7 +24,8 @@ type Scheduler struct {
 	Now  func() time.Time
 	Run  func(ctx context.Context, home string) error
 
-	tickDone chan struct{} // tests: closed-loop stepping
+	tickDone      chan struct{} // tests: closed-loop stepping
+	lastConfigErr string        // last logged LoadConfig error, so it is not repeated every tick
 }
 
 func NewScheduler(home string) *Scheduler {
@@ -104,10 +105,21 @@ func (s *Scheduler) Loop(ctx context.Context, ticks <-chan time.Time) {
 
 func (s *Scheduler) step(start time.Time, due *time.Time, configured *bool) {
 	cfg, err := LoadConfig(s.Home)
-	if err != nil || cfg.Every <= 0 {
-		if err != nil && !errors.Is(err, ErrNotConfigured) {
+	if err != nil {
+		if errors.Is(err, ErrNotConfigured) {
+			s.lastConfigErr = ""
+		} else if err.Error() != s.lastConfigErr {
 			s.Logf("config: %v", err)
+			s.lastConfigErr = err.Error()
 		}
+		*configured = false
+		return
+	}
+	if s.lastConfigErr != "" {
+		s.Logf("config ok")
+		s.lastConfigErr = ""
+	}
+	if cfg.Every <= 0 {
 		*configured = false
 		return
 	}
