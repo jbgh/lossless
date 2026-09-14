@@ -295,8 +295,8 @@ ciphertext in the same pass, then PUT that file with
 `x-amz-content-sha256` set to the ciphertext hash and a known
 `Content-Length`. Signed payloads work on every S3-compatible backend; R2's
 docs do not promise unsigned ones. A retry re-reads the temp file and does
-not re-encrypt. Peak temp disk is four in-flight objects, so at most a few
-hundred MB.
+not re-encrypt. Peak temp disk is every live part copy and sqlite snapshot
+for the run plus four encrypted files in flight.
 
 Restore decrypts streaming to `<target>.restore-tmp`, verifies the plaintext
 sha256 against the manifest, then renames.

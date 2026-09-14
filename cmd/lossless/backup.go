@@ -39,7 +39,11 @@ func runBackup(args []string) int {
 	case sum.DryRun:
 		fmt.Printf("dry run: scanned %d files\n", sum.Scanned)
 	case sum.NoChange:
-		fmt.Printf("backup: no change (scanned %d files) in %s\n", sum.Scanned, sum.Elapsed.Round(time.Millisecond))
+		fmt.Printf("backup: no change (scanned %d files)", sum.Scanned)
+		if len(sum.Dropped) > 0 {
+			fmt.Printf(", dropped %s", strings.Join(sum.Dropped, " "))
+		}
+		fmt.Printf(" in %s\n", sum.Elapsed.Round(time.Millisecond))
 	default:
 		fmt.Printf("backup: generation %s: scanned %d, uploaded %d (%d bytes), deleted %d", sum.Generation, sum.Scanned, sum.Uploaded, sum.Bytes, sum.Deleted)
 		if len(sum.Dropped) > 0 {

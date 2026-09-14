@@ -165,6 +165,12 @@ func Init(home string, o InitOptions) error {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return err
 	}
+	// Generate the key before writing anything, so a key-generation failure
+	// leaves nothing behind.
+	keyHex, err := crypt.NewKeyHex()
+	if err != nil {
+		return err
+	}
 	keep := o.Keep
 	if keep <= 0 {
 		keep = defaultKeep
@@ -200,10 +206,6 @@ func Init(home string, o InitOptions) error {
 		b.WriteString("# LOSSLESS_BACKUP_SECRET_KEY=\"\"\n")
 	}
 	if err := writeFile0600(envPath(home), []byte(b.String())); err != nil {
-		return err
-	}
-	keyHex, err := crypt.NewKeyHex()
-	if err != nil {
 		return err
 	}
 	return writeFile0600(keyPath(home), []byte(keyHex+"\n"))

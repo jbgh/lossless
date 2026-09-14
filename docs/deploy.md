@@ -198,9 +198,9 @@ Nothing else in the home is read. `spool/`, `active/`, `serve.log`,
 
 Every object is chunked AES-256-GCM under a per-object key derived from
 `backup.key`. Object names are an HMAC of the path. The bucket shows no
-project names, session ids, or paths. Someone with bucket read access learns
-nothing; someone with write access can delete or roll back, and a rollback
-shows in `restore --list`.
+project names, session ids, or paths. Someone with bucket read access sees no
+paths, names, or content; someone with write access can delete or roll back,
+and a rollback shows in `restore --list`.
 
 ### Generations
 
@@ -251,8 +251,46 @@ until you run `lossless backup --take-over` there on purpose.
 - Region is `auto`; the client sets it for any R2 endpoint.
 - R2 has no bucket versioning. Generations are the history.
 
+### Amazon S3
+
+- lossless never issues `ListBucket`, but AWS still requires the
+  `s3:ListBucket` permission on the bucket to answer `GET`/`HEAD` of a
+  missing key with `404`. Without it, the first run's pointer fetch comes
+  back `403 AccessDenied` instead, which lossless will not treat as
+  not-found (that would bypass the writer guard on a mis-scoped token) —
+  fix the policy instead. Minimum IAM policy:
+
+  ```json
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": "s3:ListBucket",
+        "Resource": "arn:aws:s3:::my-bucket",
+        "Condition": { "StringLike": { "s3:prefix": "lossless/*" } }
+      },
+      {
+        "Effect": "Allow",
+        "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+        "Resource": "arn:aws:s3:::my-bucket/lossless/*"
+      }
+    ]
+  }
+  ```
+
+  The `s3:prefix` condition is optional; drop it (and widen the first
+  statement's `Resource`) to scope `ListBucket` to the whole bucket instead
+  of one prefix.
+- A bucket outside `us-east-1` needs `--region`: the virtual-host URL
+  embeds the region, and redirects are disabled.
+- A bucket name containing dots needs `--endpoint
+  https://s3.<region>.amazonaws.com` for path-style addressing; a
+  virtual-host URL for a dotted bucket name breaks TLS certificate
+  matching.
+
 Any other S3-compatible store works the same way with its endpoint. AWS
-needs no `--endpoint`.
+needs no `--endpoint` (unless the bucket name has dots; see above).
 
 ---
 

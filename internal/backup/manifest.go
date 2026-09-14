@@ -83,6 +83,9 @@ func (r *remote) getManifest(ctx context.Context, key string) (*Manifest, error)
 	if err := json.Unmarshal(plain.Bytes(), &m); err != nil {
 		return nil, fmt.Errorf("manifest %s: %w", key, err)
 	}
+	if m.Version != manifestVersion {
+		return nil, fmt.Errorf("manifest %s: unsupported version %d", key, m.Version)
+	}
 	if m.Files == nil {
 		m.Files = map[string]FileEntry{}
 	}
