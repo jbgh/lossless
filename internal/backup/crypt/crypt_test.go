@@ -91,6 +91,14 @@ func mustCorrupt(t *testing.T, k *Keys, ct []byte, relpath, what string) {
 	}
 }
 
+type errReader struct {
+	err error
+}
+
+func (e *errReader) Read(p []byte) (int, error) {
+	return 0, e.err
+}
+
 func TestTamperingIsDetected(t *testing.T) {
 	k := testKeys(t)
 	_, ct := encryptTwoChunks(t, k)
@@ -118,4 +126,21 @@ func TestTamperingIsDetected(t *testing.T) {
 	bad := append([]byte{}, ct...)
 	bad[0] = 'X'
 	mustCorrupt(t, k, bad, "p/two", "bad magic")
+}
+
+func TestIOErrorsPropagate(t *testing.T) {
+	k := testKeys(t)
+	testErr := errors.New("boom")
+
+	// Encrypt should propagate the error, not mask it.
+	_, _, _, err := k.Encrypt(io.Discard, &errReader{err: testErr}, "p/a")
+	if !errors.Is(err, testErr) {
+		t.Fatalf("Encrypt: want %v, got %v", testErr, err)
+	}
+
+	// Decrypt should propagate the error, not mask it as ErrCorrupt.
+	_, err = k.Decrypt(io.Discard, &errReader{err: testErr}, "p/a")
+	if !errors.Is(err, testErr) {
+		t.Fatalf("Decrypt: want %v, got %v", testErr, err)
+	}
 }

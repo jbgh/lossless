@@ -130,7 +130,10 @@ func (k *Keys) Decrypt(dst io.Writer, src io.Reader, relpath string) (plainSHA s
 	br := bufio.NewReaderSize(src, ChunkSize+tagSize)
 	header := make([]byte, headerSize)
 	if _, err = io.ReadFull(br, header); err != nil {
-		return "", ErrCorrupt
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return "", ErrCorrupt
+		}
+		return "", err
 	}
 	if !bytes.Equal(header[:4], magic) || header[4] != formatVer {
 		return "", ErrCorrupt
