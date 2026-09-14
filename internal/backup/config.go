@@ -42,7 +42,11 @@ func lockPath(home string) string  { return filepath.Join(home, "backup.lock") }
 func tmpDir(home string) string    { return filepath.Join(home, "backup-tmp") }
 
 // readEnvFile parses KEY=value lines. Values may be Go-quoted, the same
-// shape service.env uses. Blank lines and # comments are skipped.
+// shape service.env uses. Blank lines and # comments are skipped. A value
+// that starts with a quote but fails to unquote (an unterminated quote, a
+// trailing inline comment, ...) is an error naming the key: this file
+// holds credentials, so a malformed edit must fail loudly rather than
+// silently take the raw, wrong string as the secret.
 func readEnvFile(path string) (map[string]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -60,13 +64,16 @@ func readEnvFile(path string) (map[string]string, error) {
 		if !ok {
 			continue
 		}
+		k = strings.TrimSpace(k)
 		v = strings.TrimSpace(v)
 		if strings.HasPrefix(v, `"`) {
-			if u, err := strconv.Unquote(v); err == nil {
-				v = u
+			u, err := strconv.Unquote(v)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %s: malformed quoted value: %w", path, k, err)
 			}
+			v = u
 		}
-		out[strings.TrimSpace(k)] = v
+		out[k] = v
 	}
 	return out, sc.Err()
 }

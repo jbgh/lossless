@@ -33,10 +33,6 @@ func TestSnapshotSeesUncheckpointedWrites(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM records`).Scan(&n); err != nil || n != 2 {
 		t.Fatalf("records in snapshot: %d %v", n, err)
 	}
-	var mode string
-	if err := db.QueryRow(`PRAGMA journal_mode`).Scan(&mode); err != nil {
-		t.Fatal(err)
-	}
 	// The live store keeps working after the snapshot.
 	active, err := st.ListActive("acme/api")
 	if err != nil || len(active) != 2 {

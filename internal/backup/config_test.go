@@ -105,3 +105,18 @@ func TestInitDefaultsAndDisabledSchedule(t *testing.T) {
 		t.Fatal("bad URL must be refused")
 	}
 }
+
+func TestLoadConfigMalformedQuotedValueErrors(t *testing.T) {
+	clearBackupEnv(t)
+	home := t.TempDir()
+	content := "LOSSLESS_BACKUP_URL=\"s3://bkt\"\nLOSSLESS_BACKUP_SECRET_KEY=\"unterminated\n"
+	if err := os.WriteFile(filepath.Join(home, "backup.env"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LOSSLESS_BACKUP_ACCESS_KEY", "AK")
+	t.Setenv("LOSSLESS_BACKUP_SECRET_KEY", "SK")
+	_, err := LoadConfig(home)
+	if err == nil || !strings.Contains(err.Error(), "LOSSLESS_BACKUP_SECRET_KEY") {
+		t.Fatalf("want error mentioning LOSSLESS_BACKUP_SECRET_KEY, got %v", err)
+	}
+}
