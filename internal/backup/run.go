@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -131,7 +132,7 @@ func run(ctx context.Context, home string, cfg *Config, rm *remote, state *State
 	}
 	defer os.RemoveAll(tmp)
 
-	items, err := walk(home, tmp, rm.keys, state)
+	items, err := walk(home, tmp, rm.keys, state, pointer)
 	if err != nil {
 		return err
 	}
@@ -219,10 +220,8 @@ func printPlan(out io.Writer, p plan, gen string, pending []string) {
 	}
 }
 
-// uploadAll encrypts and uploads up to four items at a time. If a file's
-// content no longer matches its cached hash (changed without a new mtime),
-// the item is re-keyed from the real plaintext hash so the manifest and the
-// object name agree.
+// uploadAll encrypts and uploads up to four items at a time. See uploadOne
+// for what happens when the bytes read do not match it.SHA256.
 func uploadAll(ctx context.Context, rm *remote, tmp string, all []Item, todo []Item, o RunOptions, sum *Summary) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -299,6 +298,16 @@ func uploadOne(ctx context.Context, rm *remote, tmp string, it Item) (Item, int6
 		return it, 0, err
 	}
 	if plainSHA != it.SHA256 {
+		// A Temp item is a copy or snapshot made for this run alone; its
+		// bytes cannot legitimately change between the hash and the
+		// upload, so a mismatch means the walk's cache guard was bypassed
+		// (or the temp file was tampered with) and must not be uploaded
+		// under a re-keyed name. export/*.md is written tmp-and-rename, so
+		// an in-place read can legitimately race a supersede between hash
+		// and upload; re-key it so the manifest and object name agree.
+		if it.Temp || !strings.HasSuffix(it.Rel, ".md") {
+			return it, 0, fmt.Errorf("%s: read as sha256 %s but hashed %s at upload time; refusing to upload", it.Rel, it.SHA256, plainSHA)
+		}
 		it.SHA256 = plainSHA
 		it.Size = cr.n
 		it.Object = objectKey(rm.keys.Name(it.Rel), plainSHA)

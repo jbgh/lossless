@@ -4,6 +4,7 @@ package backup
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"lossless/internal/backup/s3"
 	"lossless/internal/backup/s3/s3test"
+	"lossless/internal/store"
 )
 
 // setupBackup seeds a store, points backup.env at the fake bucket, and
@@ -39,11 +41,17 @@ func runOK(t *testing.T, home string, o RunOptions) Summary {
 }
 
 func pointerOf(t *testing.T, home string, srv *s3test.Server) *Manifest {
+	return pointerAtPrefix(t, home, "pre", srv)
+}
+
+// pointerAtPrefix reads the pointer manifest at an arbitrary prefix in the
+// same fake bucket, using the given home's backup.key.
+func pointerAtPrefix(t *testing.T, home, prefix string, srv *s3test.Server) *Manifest {
 	t.Helper()
 	keys, err := LoadKey(home)
 	must(t, err)
 	r := &remote{keys: keys}
-	c, err := s3.New(srv.Config("bkt", "pre"))
+	c, err := s3.New(srv.Config("bkt", prefix))
 	must(t, err)
 	r.c = c
 	m, err := r.getManifest(context.Background(), pointerKey)
@@ -249,6 +257,57 @@ func TestRunRefusesWhenLocked(t *testing.T) {
 	defer release()
 	if _, err := Run(context.Background(), home, RunOptions{}); !errors.Is(err, ErrLocked) {
 		t.Fatalf("want ErrLocked, got %v", err)
+	}
+}
+
+// TestCacheHitRequiresPointerMatchForLiveAndSqlite is the Critical
+// regression test (finding 1): a stat-cache hit for a live part or sqlite
+// file must not skip the copy/snapshot step unless the bucket pointer
+// already holds that hash. Run 2 targets a fresh prefix in the same bucket
+// (pointer empty) while the on-disk cache from run 1 is untouched, so a
+// cache hit is guaranteed but nothing has actually been uploaded there yet.
+// Without the fix, the raw on-disk claims.sqlite main file is uploaded
+// (its rows are still only in the WAL), and restoring it yields zero
+// claims.
+func TestCacheHitRequiresPointerMatchForLiveAndSqlite(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	home := setupBackup(t, srv, 5)
+	runOK(t, home, RunOptions{}) // run 1: prefix "pre"; local cache now holds every file's hash
+
+	// Same bucket, same backup.key, a new prefix the pointer has never seen.
+	env := fmt.Sprintf("LOSSLESS_BACKUP_URL=s3://bkt/pre2\nLOSSLESS_BACKUP_ENDPOINT=%s\n", srv.URL())
+	must(t, os.WriteFile(filepath.Join(home, "backup.env"), []byte(env), 0o600))
+
+	runOK(t, home, RunOptions{}) // run 2: cache hits everywhere, but the pointer for pre2 is empty
+
+	pointer := pointerAtPrefix(t, home, "pre2", srv)
+	entry, ok := pointer.Files["index/claims.sqlite"]
+	if !ok {
+		t.Fatal("index/claims.sqlite missing from the new prefix's pointer")
+	}
+
+	snap := filepath.Join(t.TempDir(), "claims.sqlite")
+	must(t, store.Snapshot(filepath.Join(home, "index", "claims.sqlite"), snap))
+	wantSHA, _, err := hashFile(snap)
+	must(t, err)
+	if entry.SHA256 != wantSHA {
+		t.Fatalf("uploaded index/claims.sqlite sha = %s, want a WAL-consistent snapshot hash %s", entry.SHA256, wantSHA)
+	}
+	rawSHA, _, err := hashFile(filepath.Join(home, "index", "claims.sqlite"))
+	must(t, err)
+	if entry.SHA256 == rawSHA {
+		t.Fatal("uploaded index/claims.sqlite sha matches the on-disk main file, not a snapshot: WAL rows would be lost")
+	}
+
+	dst := freshTarget(t, home)
+	sum, err := Restore(context.Background(), dst, RestoreOptions{Health: noDaemon})
+	must(t, err)
+	if sum.Generation != pointer.Generation {
+		t.Fatalf("restore generation = %s, want %s", sum.Generation, pointer.Generation)
+	}
+	if strings.Join(claimTexts(t, dst), "|") != strings.Join(claimTexts(t, home), "|") {
+		t.Fatal("claims differ after restore: WAL rows were not in the uploaded snapshot")
 	}
 }
 

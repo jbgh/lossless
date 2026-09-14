@@ -30,6 +30,31 @@ type Item struct {
 
 var roots = []string{"raw", "export", "index"}
 
+// validRel reports whether rel is a safe path to restore: relative, with no
+// empty or ".." segment, and under one of the three roots the walk emits.
+// restore uses this to reject a manifest that names a path outside home.
+func validRel(rel string) bool {
+	if rel == "" || filepath.IsAbs(rel) || strings.ContainsRune(rel, '\\') {
+		return false
+	}
+	inRoot := false
+	for _, r := range roots {
+		if rel == r || strings.HasPrefix(rel, r+"/") {
+			inRoot = true
+			break
+		}
+	}
+	if !inRoot {
+		return false
+	}
+	for _, seg := range strings.Split(rel, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return false
+		}
+	}
+	return true
+}
+
 func skipName(name string) bool {
 	for _, suf := range []string{".lock", ".tmp", "-wal", "-shm"} {
 		if strings.HasSuffix(name, suf) {
@@ -41,9 +66,11 @@ func skipName(name string) bool {
 
 // walk lists everything under raw/, export/, and index/ that belongs in a
 // backup. Live parts and sqlite files are copied to tmp first; sealed parts
-// and claim files are read in place. cache short-circuits hashing when
-// size and mtime match.
-func walk(home, tmp string, keys *crypt.Keys, cache *State) ([]Item, error) {
+// and claim files are read in place. cache short-circuits hashing when size
+// and mtime match, but for live and sqlite files only when pointer already
+// holds that hash: otherwise anything about to be uploaded must be a fresh
+// locked copy or snapshot, never the live original (see uploadOne).
+func walk(home, tmp string, keys *crypt.Keys, cache *State, pointer *Manifest) ([]Item, error) {
 	if err := os.MkdirAll(tmp, 0o700); err != nil {
 		return nil, err
 	}
@@ -70,12 +97,12 @@ func walk(home, tmp string, keys *crypt.Keys, cache *State) ([]Item, error) {
 			case root == "raw" && strings.HasSuffix(rel, ".jsonl.zst"):
 				it, err = directItem(home, rel, keys, cache)
 			case root == "raw" && strings.HasSuffix(rel, ".jsonl"):
-				it, err = liveItem(home, tmp, rel, keys, cache)
+				it, err = liveItem(home, tmp, rel, keys, cache, pointer)
 			case root == "export" && strings.HasSuffix(rel, ".md"):
 				it, err = directItem(home, rel, keys, cache)
 			case root == "index" && (d.Name() == "claims.sqlite" ||
 				(strings.HasPrefix(d.Name(), "excerpts-") && strings.HasSuffix(d.Name(), ".sqlite"))):
-				it, err = sqliteItem(home, tmp, rel, keys, cache)
+				it, err = sqliteItem(home, tmp, rel, keys, cache, pointer)
 			default:
 				return nil
 			}
@@ -136,7 +163,7 @@ func directItem(home, rel string, keys *crypt.Keys, cache *State) (Item, error) 
 // liveItem copies a live part to tmp under shared flocks on the part and
 // its .lock sidecar, then hashes the copy. If the part was sealed between
 // the walk and the open, the .zst sibling is used in place instead.
-func liveItem(home, tmp, rel string, keys *crypt.Keys, cache *State) (Item, error) {
+func liveItem(home, tmp, rel string, keys *crypt.Keys, cache *State, pointer *Manifest) (Item, error) {
 	path := filepath.Join(home, filepath.FromSlash(rel))
 	st, err := os.Stat(path)
 	if os.IsNotExist(err) {
@@ -149,9 +176,12 @@ func liveItem(home, tmp, rel string, keys *crypt.Keys, cache *State) (Item, erro
 		return Item{}, err
 	}
 	it := Item{Rel: rel, Size: st.Size(), StatSize: st.Size(), Mtime: st.ModTime().UnixNano()}
-	if c, ok := cache.Files[rel]; ok && c.StatSize == it.StatSize && c.Mtime == it.Mtime && c.SHA256 != "" {
-		// Unchanged since the last run; the object is already in the bucket
-		// (or will be re-planned from the pointer), so no copy is needed.
+	if c, ok := cache.Files[rel]; ok && c.StatSize == it.StatSize && c.Mtime == it.Mtime && c.SHA256 != "" && pointer.Files[rel].SHA256 == c.SHA256 {
+		// Unchanged since the last run and already the hash the bucket
+		// pointer holds for this path: no copy is needed. If the pointer
+		// lacks it (wiped, rolled back, a new prefix, --take-over from
+		// another writer), fall through and copy like a cache miss so
+		// nothing is ever uploaded straight from the live original.
 		it.SHA256 = c.SHA256
 		it.Src = path
 		return finish(it, keys), nil
@@ -210,7 +240,7 @@ func copyLive(src, dst string) error {
 
 // sqliteItem snapshots a database with VACUUM INTO. The cache key combines
 // the main file and its -wal so an uncheckpointed write still re-snapshots.
-func sqliteItem(home, tmp, rel string, keys *crypt.Keys, cache *State) (Item, error) {
+func sqliteItem(home, tmp, rel string, keys *crypt.Keys, cache *State, pointer *Manifest) (Item, error) {
 	path := filepath.Join(home, filepath.FromSlash(rel))
 	st, err := os.Stat(path)
 	if err != nil {
@@ -227,7 +257,10 @@ func sqliteItem(home, tmp, rel string, keys *crypt.Keys, cache *State) (Item, er
 		}
 	}
 	it := Item{Rel: rel, Mtime: mtime, StatSize: size}
-	if c, ok := cache.Files[rel]; ok && c.Mtime == mtime && c.StatSize == size && c.SHA256 != "" {
+	if c, ok := cache.Files[rel]; ok && c.Mtime == mtime && c.StatSize == size && c.SHA256 != "" && pointer.Files[rel].SHA256 == c.SHA256 {
+		// Same guard as liveItem: only skip the VACUUM INTO snapshot when
+		// the bucket already holds this exact hash. Reading the raw main
+		// file instead would miss rows still sitting in the WAL.
 		it.SHA256, it.Size, it.Src = c.SHA256, c.Size, path
 		return finish(it, keys), nil
 	}

@@ -85,7 +85,7 @@ func rels(items []Item) []string {
 func TestWalkSelectsExactlyTheStore(t *testing.T) {
 	home, _ := seedHome(t)
 	tmp := filepath.Join(home, "backup-tmp")
-	items, err := walk(home, tmp, testKeys(t), LoadState(home))
+	items, err := walk(home, tmp, testKeys(t), LoadState(home), emptyManifest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,20 +131,23 @@ func TestWalkReusesCachedHashWhenStatUnchanged(t *testing.T) {
 	tmp := filepath.Join(home, "backup-tmp")
 	k := testKeys(t)
 	cache := LoadState(home)
-	items, err := walk(home, tmp, k, cache)
+	items, err := walk(home, tmp, k, cache, emptyManifest())
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, it := range items {
 		cache.Files[it.Rel] = FileState{Size: it.Size, StatSize: it.StatSize, Mtime: it.Mtime, SHA256: it.SHA256, Object: it.Object}
 	}
+	// A pointer that already holds every item's hash, as it would after a
+	// real run uploaded them: only then may the cache shortcut fire.
+	pointer := &Manifest{Files: filesFrom(items)}
 	sealed := filepath.Join(home, "raw", "acme__api", "2026-09", "sealed.jsonl.zst")
 	st, _ := os.Stat(sealed)
 	b, _ := os.ReadFile(sealed)
 	b[len(b)-1] ^= 0xff // same size, different bytes
 	must(t, os.WriteFile(sealed, b, 0o600))
 	must(t, os.Chtimes(sealed, st.ModTime(), st.ModTime()))
-	again, err := walk(home, tmp, k, cache)
+	again, err := walk(home, tmp, k, cache, pointer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +157,7 @@ func TestWalkReusesCachedHashWhenStatUnchanged(t *testing.T) {
 		}
 	}
 	must(t, os.Chtimes(sealed, time.Now(), time.Now()))
-	third, _ := walk(home, tmp, k, cache)
+	third, _ := walk(home, tmp, k, cache, pointer)
 	for _, it := range third {
 		if it.Rel == "raw/acme__api/2026-09/sealed.jsonl.zst" && it.SHA256 == cache.Files[it.Rel].SHA256 {
 			t.Fatal("a new mtime must re-hash")
@@ -172,7 +175,7 @@ func TestLiveItemFallsBackToSealedSibling(t *testing.T) {
 	if _, err := write.SealRaw(live); err != nil {
 		t.Fatal(err)
 	}
-	it, err := liveItem(home, tmp, "raw/acme__api/2026-09/live.jsonl", k, LoadState(home))
+	it, err := liveItem(home, tmp, "raw/acme__api/2026-09/live.jsonl", k, LoadState(home), emptyManifest())
 	if err != nil || it.Rel != "raw/acme__api/2026-09/live.jsonl.zst" || it.Temp {
 		t.Fatalf("%+v %v", it, err)
 	}
