@@ -16,6 +16,7 @@ import (
 
 	"context"
 
+	"lossless/internal/backup"
 	"lossless/internal/claim"
 	"lossless/internal/mcpserver"
 	"lossless/internal/retrieve"
@@ -278,6 +279,11 @@ func Listen(opts Options, st *store.Store) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go func() { _ = watch.Run(ctx, st, wopts) }()
+		go func() {
+			t := time.NewTicker(time.Minute)
+			defer t.Stop()
+			backup.NewScheduler(st.Root).Loop(ctx, t.C)
+		}()
 	}
 	ln, err := listenWait(addr, bindWait)
 	if err != nil {
