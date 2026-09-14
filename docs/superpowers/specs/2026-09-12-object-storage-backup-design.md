@@ -244,7 +244,10 @@ list in the state cache:
 backup on a new machine just works. The old machine, if it comes back, sees
 the new install in the pointer and refuses. `backup --take-over` adds the
 current pointer's `client` to `adopted` and proceeds; it is the only way an
-install adopts a writer it did not restore from.
+install adopts a writer it did not restore from. An adoption is consumed by
+this install's first successful pointer write: after that, whoever wrote
+last owns the prefix and any other install must take over explicitly, every
+time. A no-change run writes no pointer and keeps the adoption.
 
 This is a guard against accident, not against an adversary: anyone with the
 key and bucket write access can set any `client`.

@@ -238,7 +238,9 @@ lossless setup             # or just start serve again
 into a non-empty store: index snapshots are replaced, raw and export files
 that differ locally are left alone and listed. The restored machine becomes
 the bucket's writer; if the old machine comes back it refuses to back up
-until you run `lossless backup --take-over` there on purpose.
+until you run `lossless backup --take-over` there on purpose. Taking over
+hands the bucket to that machine; the other one refuses again until it takes
+over in turn.
 
 ### Cloudflare R2
 

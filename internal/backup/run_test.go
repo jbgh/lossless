@@ -233,6 +233,56 @@ func TestWriterGuardAndTakeOver(t *testing.T) {
 	if _, err := Run(context.Background(), homeA, RunOptions{}); !errors.As(err, &ow) {
 		t.Fatalf("A must now refuse, got %v", err)
 	}
+
+	// The adoption B used above is consumed by that successful write: A can
+	// take back over, but once A has written, B is just another install and
+	// must take over explicitly again rather than riding A's old adoption.
+	runOK(t, homeA, RunOptions{TakeOver: true})
+	if _, err := Run(context.Background(), homeB, RunOptions{}); !errors.As(err, &ow) {
+		t.Fatalf("B must refuse once A has taken back over, got %v", err)
+	}
+	runOK(t, homeB, RunOptions{TakeOver: true})
+	if _, err := Run(context.Background(), homeA, RunOptions{}); !errors.As(err, &ow) {
+		t.Fatalf("A must refuse again, got %v", err)
+	}
+}
+
+// TestRestoreAdoptionIsConsumedByFirstWrite: a restore adopts the writer it
+// restored from, so the newly restored machine can back up right away. But
+// that adoption must not linger forever: a no-change run keeps it (the
+// restored machine may still need it for its first real write), while the
+// first run that actually writes the pointer consumes it. After that, the
+// old writer must --take-over explicitly, like any other install.
+func TestRestoreAdoptionIsConsumedByFirstWrite(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	homeA := setupBackup(t, srv, 5)
+	runOK(t, homeA, RunOptions{})
+
+	homeB := freshTarget(t, homeA)
+	if _, err := Restore(context.Background(), homeB, RestoreOptions{Health: noDaemon}); err != nil {
+		t.Fatal(err)
+	}
+
+	noChange := runOK(t, homeB, RunOptions{})
+	if !noChange.NoChange {
+		t.Fatalf("restored store must be in sync: %+v", noChange)
+	}
+	if adopted := LoadState(homeB).Adopted; len(adopted) != 1 {
+		t.Fatalf("a no-change run must not consume the adoption: %v", adopted)
+	}
+
+	touchLive(t, homeB, `{"role":"assistant","content":"more"}`)
+	runOK(t, homeB, RunOptions{})
+	if adopted := LoadState(homeB).Adopted; len(adopted) != 0 {
+		t.Fatalf("the first real write must consume the adoption: %v", adopted)
+	}
+
+	runOK(t, homeA, RunOptions{TakeOver: true})
+	var ow *OtherWriterError
+	if _, err := Run(context.Background(), homeB, RunOptions{}); !errors.As(err, &ow) {
+		t.Fatalf("B must refuse once A has taken back over, got %v", err)
+	}
 }
 
 func TestDryRunWritesNothing(t *testing.T) {

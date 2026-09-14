@@ -177,6 +177,12 @@ func run(ctx context.Context, home string, cfg *Config, rm *remote, state *State
 		if err := rm.putManifest(ctx, pointerKey, current); err != nil {
 			return err
 		}
+		// Commit point reached: this install now owns the prefix outright.
+		// An adoption (from --take-over or a restore) is consumed by the
+		// first successful pointer write, so it cannot be used again after
+		// another install takes over in turn. A no-change run never reaches
+		// here, so a pending adoption survives until the first real write.
+		state.Adopted = nil
 		state.Manifests[gen] = current
 		state.LastGeneration = gen
 		sum.Generation = gen
