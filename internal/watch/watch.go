@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"lossless/internal/harness"
@@ -197,15 +198,78 @@ func Discover(opts Options, known []store.Session) []Target {
 	return out
 }
 
-func idleSeal(st *store.Store, t Target, opts Options) bool {
+// resolveProject turns a workspace into a project key by running git.
+// Tests replace it to count calls.
+var resolveProject = projectkey.FromWorkspace
+
+// projectTTL is how long a workspace's resolved project is reused. An
+// origin changes about never; the catch-up path resolves for itself.
+const projectTTL = 10 * time.Minute
+
+var projectCache = struct {
+	sync.Mutex
+	m map[string]projectEntry
+}{m: map[string]projectEntry{}}
+
+type projectEntry struct {
+	key string
+	at  time.Time
+}
+
+func resetProjectCache() {
+	projectCache.Lock()
+	projectCache.m = map[string]projectEntry{}
+	projectCache.Unlock()
+}
+
+func cachedProject(workspace string) string {
+	projectCache.Lock()
+	defer projectCache.Unlock()
+	if e, ok := projectCache.m[workspace]; ok && time.Since(e.at) < projectTTL {
+		return e.key
+	}
+	key := resolveProject(workspace)
+	projectCache.m[workspace] = projectEntry{key: key, at: time.Now()}
+	return key
+}
+
+// projectsBySession indexes the stored project of every known session by
+// harness and session id. Discover lists database-tracked sessions
+// (OpenCode, Codex desktop) with a workspace and no project.
+func projectsBySession(known []store.Session) map[string]string {
+	out := make(map[string]string, len(known))
+	for _, s := range known {
+		if s.Project != "" && s.SessionID != "" {
+			out[s.Harness+":"+s.SessionID] = s.Project
+		}
+	}
+	return out
+}
+
+// sealProject is the project whose raw/ holds this target's live part:
+// the target's own, else the one stored when the session was first
+// ingested, else the workspace resolved through the TTL cache. idleSeal
+// runs for every idle target on every tick; resolving each through git
+// was a thousand processes a tick on a store with 1,087 OpenCode sessions.
+func sealProject(t Target, known map[string]string) string {
+	if t.Project != "" {
+		return t.Project
+	}
+	if p := known[t.Harness+":"+t.SessionID]; p != "" {
+		return p
+	}
+	if t.Workspace != "" {
+		return cachedProject(t.Workspace)
+	}
+	return ""
+}
+
+func idleSeal(st *store.Store, t Target, opts Options, known map[string]string) bool {
 	idle := opts.IdleSeal
 	if idle <= 0 {
 		idle = 24 * time.Hour
 	}
-	project := t.Project
-	if project == "" && t.Workspace != "" {
-		project = projectkey.FromWorkspace(t.Workspace)
-	}
+	project := sealProject(t, known)
 	if project == "" || t.SessionID == "" {
 		return false
 	}
@@ -303,6 +367,7 @@ func Tick(st *store.Store, opts Options) (Result, error) {
 		return Result{}, err
 	}
 	targets := Discover(opts, known)
+	projects := projectsBySession(known)
 	var res Result
 	res.Seen = len(targets)
 	sqliteCatchUps := 0
@@ -326,7 +391,7 @@ func Tick(st *store.Store, opts Options) (Result, error) {
 		}
 		if sqliteKey != "" {
 			if !needsSQLiteCatchUp(st, sqliteKey, t.UpdatedAt) {
-				if sealed := idleSeal(st, t, opts); sealed {
+				if sealed := idleSeal(st, t, opts, projects); sealed {
 					res.Sealed++
 				}
 				continue
@@ -335,7 +400,7 @@ func Tick(st *store.Store, opts Options) (Result, error) {
 				continue
 			}
 		} else if !needsCatchUp(st, t.JSONL) {
-			if sealed := idleSeal(st, t, opts); sealed {
+			if sealed := idleSeal(st, t, opts, projects); sealed {
 				res.Sealed++
 			}
 			continue

@@ -189,7 +189,7 @@ lossless inspect            # tape vs claims vs last packs vs local debug; --ask
 lossless ask --project KEY [--question "..."] [--goal "..."] [--path FILE]
 lossless remember --type decision --text "..."
 lossless catch-up --jsonl FILE --workspace DIR --harness grok
-lossless serve              # REST + /mcp; watches session files
+lossless serve              # REST + /mcp; watches session files (--watch=false to only serve)
 lossless mcp                # stdio MCP (talks to the daemon)
 lossless bench --root testdata/bench
 ```

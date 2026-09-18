@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"lossless/internal/claim"
 	"lossless/internal/debuglog"
@@ -650,6 +651,9 @@ func clip(s string, n int) string {
 	s = strings.ReplaceAll(s, "\n", " ")
 	if len(s) <= n {
 		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n-- // a half-cut em dash made grep treat the whole report as binary
 	}
 	return s[:n] + "…"
 }

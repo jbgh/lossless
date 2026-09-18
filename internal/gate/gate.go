@@ -41,7 +41,7 @@ func Planning(s string) bool {
 	if containsAny(s, planning) {
 		return true
 	}
-	return planningVerb(s, []string{"merge", "clear", "measure", "search", "map", "open", "call", "shrink", "point"})
+	return planningVerb(s, []string{"merge", "clear", "measure", "search", "map", "open", "call", "shrink", "point", "dispatch", "re-dispatch", "wait"})
 }
 
 // planningVerb is I'll / I will + verb not as a prefix of a longer word
@@ -711,7 +711,7 @@ var (
 	}
 	failedObject = []string{
 		"failed items", "re-queues failed", "pre-failed skip",
-		"failure reason", "retryable failure",
+		"failure reason", "failure-reason", "retryable failure",
 		"real failure", "the failure at", "fix the failure",
 	}
 	metaFailed = []string{
@@ -733,6 +733,8 @@ var (
 		"still stores and pack",
 		"lock the recap row",
 		"recap-as-failed",
+		// talk about ask's own warning text
+		"prior attempt failed", "prior attempt at this goal",
 	}
 	processState = []string{
 		"in this session", "the next stop", "next test that matters",

@@ -513,6 +513,10 @@ func TestMainDispatch(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "lossless update") {
 		t.Fatalf("help update %d %s", code, out)
 	}
+	// serve watches by default; the usage line must say how to turn it off.
+	if !strings.Contains(out, "--watch=false") {
+		t.Fatalf("help must show --watch=false: %s", out)
+	}
 	home := t.TempDir()
 	_, code = run("ask --home " + home + " --project acme/api --question jose")
 	if code != 0 {

@@ -12,6 +12,9 @@ import (
 var (
 	hardFailedRE = regexp.MustCompile(`(?i)\b(we rejected|was rejected|didn't work|did not work|doesn't work|doesn't compile|won't compile|failed|failure|didn't compile|does not work|doesn't pass|does not pass|don't pass|do not pass|won't pass|will not pass|threw|dead end)\b`)
 	softFailedRE = regexp.MustCompile(`(?i)\b(revert|abort)\b`)
+	// "the one-string revert", "the Android Korean-string revert": a planned
+	// change named as a noun, not something that failed and was backed out.
+	nounRevertRE = regexp.MustCompile(`(?i)\b(?:the|a|an|this|that|one)\s+(?:\S+\s+){0,2}revert\b`)
 	exceptionTo  = regexp.MustCompile(`(?i)exception to`)
 	constraintRE = regexp.MustCompile(`(?i)\b(always|never|don't|do not|must|we use|we don't)\b`)
 	hedgeRE      = regexp.MustCompile(`(?i)\b(i don't think|i do not think|not sure|maybe|probably|might|should we|could we|can we|do we)\b`)
@@ -30,7 +33,7 @@ func classify(sentence string, msg Message) string {
 	folded := gate.Fold(sentence)
 	probe := stripFailedNoise(stripPaths(folded))
 	hard := hardFailedRE.MatchString(probe)
-	soft := softFailedRE.MatchString(probe)
+	soft := softFailedRE.MatchString(probe) && !nounRevertRE.MatchString(probe)
 	if hard && !gate.MetaFailedTalk(sentence) {
 		return "failed"
 	}

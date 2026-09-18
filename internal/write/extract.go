@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"lossless/internal/claim"
 	"lossless/internal/gate"
@@ -174,15 +175,19 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			drafts = append(drafts, makeRec(typ, text, paths, msg, opts))
 		}
 	}
-	dedup := map[string]claim.Record{}
+	// Dedupe by claim hash in transcript order. Ranging over a map here
+	// handed capExtract a random order, so a batch past the cap kept a
+	// different subset on every run of the same tape.
+	index := map[string]int{}
+	out := make([]claim.Record, 0, len(drafts))
 	for _, r := range drafts {
-		prev, ok := dedup[r.ClaimHash]
-		if !ok || priority[r.Type] > priority[prev.Type] {
-			dedup[r.ClaimHash] = r
+		if i, ok := index[r.ClaimHash]; ok {
+			if priority[r.Type] > priority[out[i].Type] {
+				out[i] = r
+			}
+			continue
 		}
-	}
-	out := make([]claim.Record, 0, len(dedup))
-	for _, r := range dedup {
+		index[r.ClaimHash] = len(out)
 		out = append(out, r)
 	}
 	if tr != nil {
@@ -224,6 +229,9 @@ func clipSent(s string, n int) string {
 	s = strings.TrimSpace(strings.ReplaceAll(s, "\n", " "))
 	if len(s) <= n {
 		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n-- // never cut a rune: the sample is printed and grepped
 	}
 	return s[:n] + "…"
 }

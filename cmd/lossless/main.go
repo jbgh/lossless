@@ -107,7 +107,7 @@ func usage() {
   lossless catch-up --jsonl FILE [--project KEY] [--workspace DIR] [--harness grok] [--session ID] [--home DIR]
   lossless remember --type decision --text "..." [--project KEY] [--workspace DIR] [--home DIR]
   lossless ask --project KEY [--question "..."] [--goal "..."] [--path FILE] [--session ID] [--workspace DIR]
-  lossless serve [--listen 127.0.0.1:7432] [--token TOKEN] [--watch]
+  lossless serve [--listen 127.0.0.1:7432] [--token TOKEN] [--watch=false]   # watches harness session files unless --watch=false
   lossless mcp                # stdio MCP client of the daemon (ask, remember, get_record)
   lossless watch              # poll harness session files
   lossless hook-grok          # stdin: Grok hook JSON; fail-open
@@ -410,7 +410,7 @@ func runServe(args []string) int {
 	home := homeFlag(fs)
 	listen := fs.String("listen", serve.DefaultAddr, "bind address")
 	token := fs.String("token", env.Token(), "bearer token (required if not loopback)")
-	doWatch := fs.Bool("watch", true, "poll harness session files while serving")
+	doWatch := fs.Bool("watch", true, "poll harness session files while serving; pass --watch=false for a throwaway --home, or it ingests the real harness sessions into it")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}

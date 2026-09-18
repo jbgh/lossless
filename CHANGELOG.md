@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.28 — unreleased
+
+- Watcher: a tick no longer runs `git` for every idle session. `Discover` lists each OpenCode (and Codex desktop) session from the harness database with a workspace and no project, and `idleSeal` resolved every one through `git remote get-url` on every tick: on a store with 1,087 OpenCode sessions a one-second tick took 38 to 56 seconds and spawned about a thousand `git` processes, nonstop, since 0.1.0. A session the store knows reuses its stored project; a new workspace resolves once per ten minutes. The same tick now takes about 50ms.
+- Extract is deterministic past the cap. Drafts were deduped through a map and ranged over, so a batch with more than twelve drafts kept a random subset: the same transcript gave five different results in five runs. Ties keep transcript order.
+- `inspect` and extract-trace clips never cut a rune. An em dash at byte 88 produced invalid UTF-8 and made `grep` treat the whole report as binary.
+- Gates: `I'll dispatch …` / `I'll re-dispatch …` / `I'll wait …` are planning; `failure-reason` is an object, not a failure; a sentence quoting ask's own `prior attempt failed` warning is meta talk; `the one-string revert` names a planned change, while `we had to revert …` still stores.
+- `serve` usage and docs say that it watches harness session files unless `--watch=false`. A throwaway `serve --home /tmp/x` otherwise ingests every live session on the machine into `/tmp/x`.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.27 — 2026-09-18
 
 - 0.1.26 was tagged but never released: its release run failed on a version literal pinned in `TestMainDispatch` (the test now compares against `version.Version`). This release carries the object-storage backup below.
