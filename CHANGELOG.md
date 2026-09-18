@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.27 — 2026-09-18
+
+- 0.1.26 was tagged but never released: its release run failed on a version literal pinned in `TestMainDispatch` (the test now compares against `version.Version`). This release carries the object-storage backup below.
+- `ask` warnings: the word route to a strong overlap scales with the goal. Two shared content tokens still warn on a goal of up to sixteen; past that the bar rises by one per eight. Function words (`after`, `only`, `every`, three-letter words like `are`) and the project's own name do not count. Replaying September's 34 live asks, word-route warnings fell from 45 to 19 of 130 (`review`/`look`, `wave`/`count`, `lossless`/`mcp` gone; `account cancel stripe`, the backup design rows kept). Path, identifier, symbol, and vector routes are unchanged.
+- Parse: a Claude Code subagent hand-back (`<agent-message>`, "[Subagent hand-back] …") and a turn that is only a `<task-notification>` extract as assistant text, without the harness frame. One memora session held 166 hand-backs whose self-reports (`Never ran approve-ci.sh, never merged, never added labels.`) stored as user constraints. A user who types next to a notification is still the user.
+- Sentence split: a terminator inside a code span does not end the sentence, nor does the dot that opens a dotfile or relative path; a newline closes an unbalanced tick. ``Never touched `.woodpecker/**`.`` had stored as `Never touched .`. `Truncated` no longer drops every sentence that ends in a code span; the unbalanced-tick and object-less ` .` shapes still skip.
+- Gates: a success report (`1,794 passed / 0 failed / 11 skipped`, `with no failures`) is not a failed, at extract and at read time; a sentence ending in a colon is a lead-in; `Looking into …` / `Diagnosing …` / `Investigating …` narration skips; a turn-scoped wait (`nothing independent to request this turn`, `arrives by notification`) is not state.
+- `inspect`: a session whose source file is no longer on disk (Claude cleanup, a cleared `~/.grok/sessions`, swept staging) collapses into `N source gone, tape kept`, the cursor column reads `1 behind 4 ok 125 gone`, and a path-hash project with no live source folds into the `path-*` line. The live overview went from 181 lines to 29.
+- Watcher: the spool-replay line logs only when a replay moved tape or failed, once per distinct failure, stamped with UTC time and version like `serve`. 103 of 193 `serve.log` lines were no-op replays: a turn hook gives the daemon 400ms, spools past that, and the daemon has finished by the time the tick replays the job.
+- Pack of five and 4.0 / 2.5 unchanged.
+
 ## 0.1.26 — 2026-09-17
 
 - `backup init`, `backup`, and `restore`: opt-in encrypted copy of `raw/`, `export/`, and `VACUUM INTO` index snapshots to an S3-compatible bucket (AWS, Cloudflare R2, B2, MinIO). Per-file objects under HMAC names, chunked AES-256-GCM with a per-object key, manifest written last, the last five generations kept and objects deleted only when no kept generation references them. `restore --list` and `restore --at` pick a generation. A writer guard refuses a bucket last written by another install; `restore` adopts it, `--take-over` overrides.
