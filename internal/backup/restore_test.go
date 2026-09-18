@@ -5,6 +5,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -249,5 +252,28 @@ func TestRestoreNothingToRestore(t *testing.T) {
 	src := setupBackup(t, srv, 5)
 	if _, err := Restore(context.Background(), freshTarget(t, src), RestoreOptions{Health: noDaemon}); !errors.Is(err, ErrNothingToRestore) {
 		t.Fatalf("want ErrNothingToRestore, got %v", err)
+	}
+}
+
+// Only lossless's own /health JSON means a daemon holds the store (the same
+// rule serve.alreadyServing and harness.ProbeHealth apply); a plain 200 or a
+// redirect from some other local service must not block a restore.
+func TestProbeHealthRequiresLosslessJSON(t *testing.T) {
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "ok") }))
+	defer plain.Close()
+	if probeHealth(plain.URL) {
+		t.Fatal("a plain 200 is not a lossless daemon")
+	}
+	ours := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `{"ok":true,"records":3}`) }))
+	defer ours.Close()
+	if !probeHealth(ours.URL) {
+		t.Fatal("our /health JSON must count")
+	}
+	redir := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, ours.URL+"/health", http.StatusFound)
+	}))
+	defer redir.Close()
+	if probeHealth(redir.URL) {
+		t.Fatal("a redirect is never ours")
 	}
 }

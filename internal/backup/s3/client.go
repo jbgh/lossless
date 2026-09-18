@@ -19,13 +19,18 @@ type StatusError struct {
 	Key    string
 	Status int
 	Code   string
+	Hint   string // what the operator can change; printed after the status
 }
 
 func (e *StatusError) Error() string {
+	s := fmt.Sprintf("s3 %s %s: %d", e.Op, e.Key, e.Status)
 	if e.Code != "" {
-		return fmt.Sprintf("s3 %s %s: %d %s", e.Op, e.Key, e.Status, e.Code)
+		s += " " + e.Code
 	}
-	return fmt.Sprintf("s3 %s %s: %d", e.Op, e.Key, e.Status)
+	if e.Hint != "" {
+		s += " (" + e.Hint + ")"
+	}
+	return s
 }
 
 type Client struct {
@@ -156,6 +161,14 @@ func (c *Client) do(ctx context.Context, op, key string, build func() (*http.Req
 		}
 		res, err := c.http.Do(req)
 		if err != nil {
+			if res != nil && res.StatusCode >= 300 && res.StatusCode < 400 {
+				// CheckRedirect refused to follow: the bucket is served from
+				// another endpoint (AWS answers a wrong region with 301
+				// PermanentRedirect). A retry cannot change that. The body
+				// is already closed by http.Client.
+				return nil, &StatusError{Op: op, Key: key, Status: res.StatusCode, Code: "Redirect",
+					Hint: "the bucket lives at another endpoint or region; set LOSSLESS_BACKUP_REGION (backup init --region) or LOSSLESS_BACKUP_ENDPOINT"}
+			}
 			last = fmt.Errorf("s3 %s %s: %w", op, key, err)
 			continue
 		}

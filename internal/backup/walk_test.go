@@ -2,6 +2,9 @@
 package backup
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -178,5 +181,27 @@ func TestLiveItemFallsBackToSealedSibling(t *testing.T) {
 	it, err := liveItem(home, tmp, "raw/acme__api/2026-09/live.jsonl", k, LoadState(home), emptyManifest())
 	if err != nil || it.Rel != "raw/acme__api/2026-09/live.jsonl.zst" || it.Temp {
 		t.Fatalf("%+v %v", it, err)
+	}
+}
+
+// A live part sealed between the directory read and the stat is emitted
+// under its .zst name by the fallback, and then again when the walk reaches
+// the .zst entry itself; two Items with one Rel would encrypt into the
+// same temp path at once.
+func TestDedupeItemsKeepsFirst(t *testing.T) {
+	items := dedupeItems([]Item{{Rel: "raw/a.jsonl.zst", Src: "1"}, {Rel: "raw/b.jsonl.zst"}, {Rel: "raw/a.jsonl.zst", Src: "2"}})
+	if len(items) != 2 || items[0].Src != "1" || items[1].Rel != "raw/b.jsonl.zst" {
+		t.Fatalf("%+v", items)
+	}
+}
+
+// A pruned claim file or a removed project can disappear between the
+// directory read and the stat; that is a skip, not a failed backup.
+func TestSkipVanishedOnlyForgivesNotExist(t *testing.T) {
+	if err := skipVanished(fmt.Errorf("x: %w", fs.ErrNotExist)); err != nil {
+		t.Fatal(err)
+	}
+	if err := skipVanished(errors.New("boom")); err == nil {
+		t.Fatal("other errors must still fail the walk")
 	}
 }

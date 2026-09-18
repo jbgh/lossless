@@ -42,7 +42,24 @@ func LoadState(home string) *State {
 	if loaded.Manifests == nil {
 		loaded.Manifests = map[string]*Manifest{}
 	}
+	for rel, f := range loaded.Files {
+		if !validSHA256(f.SHA256) {
+			delete(loaded.Files, rel) // a cache miss, not a slice panic in uploadOne
+		}
+	}
 	return &loaded
+}
+
+func validSHA256(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *State) Save(home string) error {

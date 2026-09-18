@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -147,7 +148,7 @@ func TestGenerationsDropBeyondKeep(t *testing.T) {
 		t.Fatalf("%+v", third)
 	}
 	m := pointerOf(t, home, srv)
-	if strings.Join(m.Generations, ",") != third.Generation+","+g2 || containsString(m.Generations, g1) {
+	if strings.Join(m.Generations, ",") != third.Generation+","+g2 || slices.Contains(m.Generations, g1) {
 		t.Fatalf("%+v", m)
 	}
 	if _, ok := srv.Object("bkt", "pre/"+live1); ok {
@@ -186,7 +187,7 @@ func TestDroppingFinishesOnNextRun(t *testing.T) {
 	}
 	touchLive(t, home, "3")
 	runOK(t, home, RunOptions{})
-	if m := pointerOf(t, home, srv); containsString(m.Dropping, g1) {
+	if m := pointerOf(t, home, srv); slices.Contains(m.Dropping, g1) {
 		t.Fatalf("a finished drop must not be re-listed: %v", m.Dropping)
 	}
 }
@@ -397,4 +398,90 @@ func TestPointerRateLimitIsRetried(t *testing.T) {
 	runOK(t, home, RunOptions{})
 	touchLive(t, home, "2")
 	runOK(t, home, RunOptions{})
+}
+
+// A drop left pending by an earlier run must not take objects the pointer
+// still references. Before the fix the pending phase protected only the
+// generations kept after this run, so with keep=1 every object shared by
+// the pending generation and the current one was deleted before the new
+// pointer was written, and nothing re-uploaded them.
+func TestPendingDropKeepsObjectsThePointerStillReferences(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	home := setupBackup(t, srv, 1)
+	g1 := runOK(t, home, RunOptions{}).Generation
+	live1 := pointerOf(t, home, srv).Files["raw/acme__api/2026-09/live.jsonl"].Object
+	srv.FailNext("bkt", "pre/"+live1, "500", 4) // g1's drop is left pending
+	touchLive(t, home, "2")
+	runOK(t, home, RunOptions{})
+	if m := pointerOf(t, home, srv); strings.Join(m.Dropping, ",") != g1 {
+		t.Fatalf("precondition: g1 pending, got %v", m.Dropping)
+	}
+	touchLive(t, home, "3")
+	runOK(t, home, RunOptions{}) // finishes g1's drop first, then pushes g2 out
+	m := pointerOf(t, home, srv)
+	for rel, e := range m.Files {
+		if _, ok := srv.Object("bkt", "pre/"+e.Object); !ok {
+			t.Fatalf("%s: the pointer references %s but the bucket no longer has it", rel, e.Object)
+		}
+	}
+	if _, ok := srv.Object("bkt", "pre/"+live1); ok {
+		t.Fatal("g1's own live object must go once its drop finishes")
+	}
+	if slices.Contains(m.Dropping, g1) {
+		t.Fatalf("finished drop re-listed: %v", m.Dropping)
+	}
+}
+
+func TestConfigErrorStampsLastError(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	home := setupBackup(t, srv, 5)
+	must(t, os.Remove(filepath.Join(home, "backup.key")))
+	_, err := Run(context.Background(), home, RunOptions{})
+	var ce *ConfigError
+	if !errors.As(err, &ce) {
+		t.Fatalf("want ConfigError, got %v", err)
+	}
+	st := LoadState(home)
+	if !strings.Contains(st.LastError, "backup.key") || st.LastAttempt == "" {
+		t.Fatalf("state %+v", st)
+	}
+	if ok, detail := DoctorCheck(home, time.Now()); ok || !strings.Contains(detail, "last attempt failed") || !strings.Contains(detail, "backup.key") {
+		t.Fatalf("doctor %v %q", ok, detail)
+	}
+}
+
+func TestEmptyStoreIsNotABackup(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	clearBackupEnv(t)
+	t.Setenv("LOSSLESS_BACKUP_ACCESS_KEY", "test")
+	t.Setenv("LOSSLESS_BACKUP_SECRET_KEY", "secret")
+	home := t.TempDir()
+	must(t, Init(home, InitOptions{URL: "s3://bkt/pre", Endpoint: srv.URL(), Every: time.Hour}))
+	_, err := Run(context.Background(), home, RunOptions{})
+	if !errors.Is(err, ErrEmptyStore) {
+		t.Fatalf("want ErrEmptyStore, got %v", err)
+	}
+	if st := LoadState(home); st.LastOK != "" {
+		t.Fatalf("an empty store must not count as a successful backup: %+v", st)
+	}
+	if ok, _ := DoctorCheck(home, time.Now()); ok {
+		t.Fatal("doctor must not report ok")
+	}
+}
+
+// export/*.md and sealed parts are read in place; a supersede or a project
+// removal can delete one between the walk and the upload.
+func TestUploadOneSkipsVanishedDirectItem(t *testing.T) {
+	it := Item{Rel: "export/acme__api/gone.md", Src: filepath.Join(t.TempDir(), "gone.md"), SHA256: strings.Repeat("0", 64)}
+	got, _, err := uploadOne(context.Background(), nil, t.TempDir(), it)
+	if err != nil || !got.Gone {
+		t.Fatalf("vanished export file must be skipped: gone=%v err=%v", got.Gone, err)
+	}
+	it.Temp = true
+	if _, _, err := uploadOne(context.Background(), nil, t.TempDir(), it); err == nil {
+		t.Fatal("a vanished temp copy is a bug, not a skip")
+	}
 }

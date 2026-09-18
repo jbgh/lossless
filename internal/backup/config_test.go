@@ -120,3 +120,17 @@ func TestLoadConfigMalformedQuotedValueErrors(t *testing.T) {
 		t.Fatalf("want error mentioning LOSSLESS_BACKUP_SECRET_KEY, got %v", err)
 	}
 }
+
+func TestSessionTokenOnlyWithAWSKeys(t *testing.T) {
+	clearBackupEnv(t)
+	home := t.TempDir()
+	t.Setenv("LOSSLESS_BACKUP_ACCESS_KEY", "AK")
+	t.Setenv("LOSSLESS_BACKUP_SECRET_KEY", "SK")
+	t.Setenv("AWS_SESSION_TOKEN", "T")
+	must(t, Init(home, InitOptions{URL: "s3://b"}))
+	cfg, err := LoadConfig(home)
+	must(t, err)
+	if cfg.S3.SessionToken != "" {
+		t.Fatal("a session token belongs to the AWS_* pair, not to LOSSLESS_BACKUP_* keys")
+	}
+}

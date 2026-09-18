@@ -2,11 +2,12 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
+	"strings"
 	"time"
 
 	"lossless/internal/version"
@@ -28,6 +29,8 @@ type Scheduler struct {
 
 	tickDone      chan struct{} // tests: closed-loop stepping
 	lastConfigErr string        // last logged LoadConfig error, so it is not repeated every tick
+	lastEvery     time.Duration // interval the due time was computed from
+	lastOK        string        // last_ok the due time was computed from
 }
 
 func NewScheduler(home string) *Scheduler {
@@ -37,7 +40,7 @@ func NewScheduler(home string) *Scheduler {
 		fmt.Fprintf(os.Stderr, stamp+" lossless backup ("+version.Version+"): "+format+"\n", args...)
 	}
 	s.Run = func(ctx context.Context, home string) error {
-		sum, err := Run(ctx, home, RunOptions{Out: io.Discard})
+		sum, err := Run(ctx, home, RunOptions{Out: &logWriter{logf: s.Logf}})
 		if err != nil {
 			return err
 		}
@@ -63,11 +66,40 @@ func nextDue(start, lastOK time.Time, hasLast bool, every time.Duration) time.Ti
 	return floor
 }
 
-func minDuration(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
+// logWriter routes Run's diagnostics (the "backup: …" lines dropGenerations
+// prints for a drop that could not finish) into the daemon log. Other
+// output, like the "no change" line the CLI shows, is dropped: the
+// scheduler logs its own summary.
+type logWriter struct {
+	logf func(format string, args ...any)
+	buf  []byte
+}
+
+func (w *logWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			return len(p), nil
+		}
+		line := string(w.buf[:i])
+		w.buf = w.buf[i+1:]
+		if rest, ok := strings.CutPrefix(line, "backup: "); ok {
+			w.logf("%s", rest)
+		}
 	}
-	return b
+}
+
+// safeRun turns a panic inside one backup into an error, the way
+// watch.safeTick does for a tick: the scheduler shares the daemon with the
+// HTTP surface, and one bad cache entry must not take ask and catch-up down.
+func (s *Scheduler) safeRun(home string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("backup panic: %v", r)
+		}
+	}()
+	return s.Run(context.Background(), home)
 }
 
 // Loop reads backup.env on every tick, so a later `backup init` or an
@@ -125,15 +157,20 @@ func (s *Scheduler) step(start time.Time, due *time.Time, configured *bool) {
 		return
 	}
 	now := s.Now()
-	if !*configured {
-		last, has := LoadState(s.Home).LastOKTime()
+	// The due time follows backup.env and backup-state.json: an edited
+	// interval or a manual `lossless backup` success moves it. A failure
+	// retry changes neither, so the due time chosen below stands.
+	st := LoadState(s.Home)
+	if !*configured || cfg.Every != s.lastEvery || st.LastOK != s.lastOK {
+		last, has := st.LastOKTime()
 		*due = nextDue(start, last, has, cfg.Every)
 		*configured = true
+		s.lastEvery, s.lastOK = cfg.Every, st.LastOK
 	}
 	if now.Before(*due) {
 		return
 	}
-	err = s.Run(context.Background(), s.Home)
+	err = s.safeRun(s.Home)
 	now = s.Now()
 	switch {
 	case err == nil:
@@ -141,8 +178,11 @@ func (s *Scheduler) step(start time.Time, due *time.Time, configured *bool) {
 	case errors.Is(err, ErrLocked):
 		s.Logf("manual run in progress; retrying next minute")
 		*due = now.Add(time.Minute)
+	case errors.Is(err, ErrEmptyStore):
+		s.Logf("nothing to back up yet")
+		*due = now.Add(cfg.Every)
 	default:
 		s.Logf("%v", err)
-		*due = now.Add(minDuration(failRetry, cfg.Every))
+		*due = now.Add(min(failRetry, cfg.Every))
 	}
 }

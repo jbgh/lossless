@@ -4,6 +4,7 @@ package backup
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -26,6 +27,7 @@ type Item struct {
 	SHA256   string
 	Object   string // o/<name>/<sha256>
 	Temp     bool   // Src is under backup-tmp
+	Gone     bool   // vanished between the walk and the upload; not in this generation
 }
 
 var roots = []string{"raw", "export", "index"}
@@ -106,7 +108,7 @@ func walk(home, tmp string, keys *crypt.Keys, cache *State, pointer *Manifest) (
 			default:
 				return nil
 			}
-			if err != nil {
+			if err := skipVanished(err); err != nil {
 				return fmt.Errorf("%s: %w", rel, err)
 			}
 			if it.Rel != "" {
@@ -118,7 +120,34 @@ func walk(home, tmp string, keys *crypt.Keys, cache *State, pointer *Manifest) (
 			return nil, err
 		}
 	}
-	return items, nil
+	return dedupeItems(items), nil
+}
+
+// skipVanished forgives a file that disappeared between the directory read
+// and its stat or hash: a superseded claim's export file, a removed
+// project's raw. The next run will not list it either.
+func skipVanished(err error) error {
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+// dedupeItems keeps the first Item per Rel. A live part sealed between the
+// directory read and the stat is emitted under its .zst name by liveItem's
+// fallback, and again when the walk reaches the .zst entry itself; two
+// Items with one Rel would encrypt into the same temp path at once.
+func dedupeItems(items []Item) []Item {
+	seen := make(map[string]bool, len(items))
+	out := items[:0]
+	for _, it := range items {
+		if seen[it.Rel] {
+			continue
+		}
+		seen[it.Rel] = true
+		out = append(out, it)
+	}
+	return out
 }
 
 func hashFile(path string) (string, int64, error) {
@@ -205,9 +234,9 @@ func liveItem(home, tmp, rel string, keys *crypt.Keys, cache *State, pointer *Ma
 }
 
 // copyLive holds LOCK_SH on <part>.lock (catch-up's lock) and on the part
-// itself (append's lock) only for the local copy. Both writers hold their
-// exclusive lock for one append and fsync, so this waits microseconds and
-// never makes a hook wait on the network.
+// itself (the lock append and remember take) only for the local copy. Each
+// writer holds its exclusive lock for one append and fsync, so this waits
+// microseconds and never makes a hook wait on the network.
 func copyLive(src, dst string) error {
 	lockFile, err := os.OpenFile(src+".lock", os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
@@ -273,6 +302,5 @@ func sqliteItem(home, tmp, rel string, keys *crypt.Keys, cache *State, pointer *
 		return Item{}, err
 	}
 	it.Src, it.SHA256, it.Size, it.Temp = dst, sha, n, true
-	it.Mtime = mtime
 	return finish(it, keys), nil
 }

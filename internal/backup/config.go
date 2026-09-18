@@ -102,13 +102,12 @@ func LoadConfig(home string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	ak := get("LOSSLESS_BACKUP_ACCESS_KEY")
-	if ak == "" {
-		ak = os.Getenv("AWS_ACCESS_KEY_ID")
-	}
-	sk := get("LOSSLESS_BACKUP_SECRET_KEY")
-	if sk == "" {
-		sk = os.Getenv("AWS_SECRET_ACCESS_KEY")
+	// Credentials come as one set: LOSSLESS_BACKUP_* (static keys, no
+	// session token) or the AWS_* triple with its token. Mixing them would
+	// sign backup.env's keys with a foreign SSO token.
+	ak, sk, token := get("LOSSLESS_BACKUP_ACCESS_KEY"), get("LOSSLESS_BACKUP_SECRET_KEY"), ""
+	if ak == "" && sk == "" {
+		ak, sk, token = os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"), os.Getenv("AWS_SESSION_TOKEN")
 	}
 	if ak == "" || sk == "" {
 		return nil, fmt.Errorf("backup credentials missing: set LOSSLESS_BACKUP_ACCESS_KEY and LOSSLESS_BACKUP_SECRET_KEY in %s", envPath(home))
@@ -118,7 +117,7 @@ func LoadConfig(home string) (*Config, error) {
 		S3: s3.Config{
 			Bucket: bucket, Prefix: prefix,
 			Endpoint: get("LOSSLESS_BACKUP_ENDPOINT"), Region: get("LOSSLESS_BACKUP_REGION"),
-			AccessKey: ak, SecretKey: sk, SessionToken: os.Getenv("AWS_SESSION_TOKEN"),
+			AccessKey: ak, SecretKey: sk, SessionToken: token,
 		},
 		Keep: defaultKeep,
 	}

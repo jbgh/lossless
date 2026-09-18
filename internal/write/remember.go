@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"lossless/internal/claim"
@@ -64,7 +65,12 @@ func Remember(st *store.Store, rec claim.Record) (CatchUpResult, error) {
 	if err != nil {
 		return out, err
 	}
+	// The part's exclusive lock is what append.go holds for one write and
+	// what backup's copyLive waits on (LOCK_SH), so a backup never copies a
+	// half-written remember line.
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
 	_, _ = f.Write(append(line, '\n'))
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 	_ = f.Close()
 	out.RawPath = rawPath
 	msg := Message{Role: "user", Text: rec.Text, Offset: base}

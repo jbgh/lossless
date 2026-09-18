@@ -3,6 +3,7 @@ package backup
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -13,7 +14,8 @@ func TestStateRoundTrip(t *testing.T) {
 	if len(s.Files) != 0 || s.LastOK != "" {
 		t.Fatalf("fresh state: %+v", s)
 	}
-	s.Files["raw/a.jsonl.zst"] = FileState{Size: 3, Mtime: 4, SHA256: "abc", Object: "o/n/abc"}
+	sha := strings.Repeat("ab", 32)
+	s.Files["raw/a.jsonl.zst"] = FileState{Size: 3, Mtime: 4, SHA256: sha, Object: "o/n/" + sha}
 	s.LastOK = time.Date(2026, 9, 14, 1, 2, 3, 0, time.UTC).Format(time.RFC3339)
 	s.Adopt("c-1")
 	s.Adopt("c-1")
@@ -26,7 +28,7 @@ func TestStateRoundTrip(t *testing.T) {
 		t.Fatal(st.Mode())
 	}
 	got := LoadState(home)
-	if got.Files["raw/a.jsonl.zst"].SHA256 != "abc" || len(got.Adopted) != 1 || got.Manifests["g1"].Files["x"].Size != 1 {
+	if got.Files["raw/a.jsonl.zst"].SHA256 != sha || len(got.Adopted) != 1 || got.Manifests["g1"].Files["x"].Size != 1 {
 		t.Fatalf("%+v", got)
 	}
 	ok, has := got.LastOKTime()
@@ -53,5 +55,18 @@ func TestNewGenerationShape(t *testing.T) {
 	}
 	if NewGeneration(time.Now()) == NewGeneration(time.Now()) {
 		t.Fatal("random suffix must differ")
+	}
+}
+
+func TestStateDropsMalformedCachedHash(t *testing.T) {
+	home := t.TempDir()
+	good := strings.Repeat("0", 64)
+	_ = os.WriteFile(filepath.Join(home, "backup-state.json"), []byte(`{"files":{"a":{"size":1,"mtime_ns":1,"sha256":"abc","object":"o/a/abc"},"b":{"size":1,"mtime_ns":1,"sha256":"`+good+`","object":"o/b/`+good+`"}}}`), 0o600)
+	s := LoadState(home)
+	if _, ok := s.Files["a"]; ok {
+		t.Fatal("a short sha256 must not survive load; uploadOne slices it")
+	}
+	if _, ok := s.Files["b"]; !ok {
+		t.Fatal("a well-formed entry must survive")
 	}
 }

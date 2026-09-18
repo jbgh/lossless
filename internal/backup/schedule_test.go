@@ -5,6 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -188,5 +193,78 @@ func TestSchedulerPicksUpLaterInit(t *testing.T) {
 	h.tickAt(3 * time.Minute)
 	if len(h.runAt) != 1 {
 		t.Fatalf("a daemon that was up before init must start backing up: %v", h.runAt)
+	}
+}
+
+func setEvery(t *testing.T, home, every string) {
+	t.Helper()
+	p := filepath.Join(home, "backup.env")
+	b, err := os.ReadFile(p)
+	must(t, err)
+	re := regexp.MustCompile(`(?m)^LOSSLESS_BACKUP_EVERY=.*$`)
+	must(t, os.WriteFile(p, re.ReplaceAll(b, []byte("LOSSLESS_BACKUP_EVERY="+strconv.Quote(every))), 0o600))
+}
+
+func TestSchedulerRecomputesDueWhenIntervalChanges(t *testing.T) {
+	start := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	home := scheduledHome(t, 24*time.Hour, start.Add(-50*time.Minute).Format(time.RFC3339))
+	h := newHarness(t, home, start)
+	h.tickAt(time.Minute) // due tomorrow 11:10
+	setEvery(t, home, "1h")
+	h.tickAt(time.Minute)     // 12:02: due is now 12:10
+	h.tickAt(9 * time.Minute) // 12:11
+	if len(h.runAt) != 1 {
+		t.Fatalf("an edited interval must take effect within a minute: %v", h.runAt)
+	}
+}
+
+func TestSchedulerHonorsManualSuccess(t *testing.T) {
+	start := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	home := scheduledHome(t, time.Hour, start.Add(-50*time.Minute).Format(time.RFC3339))
+	h := newHarness(t, home, start)
+	h.tickAt(time.Minute) // due 12:10
+	st := LoadState(home)
+	st.LastOK = start.Add(5 * time.Minute).Format(time.RFC3339) // `lossless backup` ran by hand
+	must(t, st.Save(home))
+	h.tickAt(5 * time.Minute) // 12:06: due moves to 13:05
+	h.tickAt(6 * time.Minute) // 12:12
+	if len(h.runAt) != 0 {
+		t.Fatalf("a manual success must push the scheduled run out: %v", h.runAt)
+	}
+	h.tickAt(54 * time.Minute) // 13:06
+	if len(h.runAt) != 1 {
+		t.Fatalf("%v", h.runAt)
+	}
+}
+
+func TestSchedulerSurvivesARunPanic(t *testing.T) {
+	start := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	home := scheduledHome(t, time.Hour, "")
+	h := newHarness(t, home, start)
+	var lines []string
+	h.s.Logf = func(format string, args ...any) { lines = append(lines, fmt.Sprintf(format, args...)) }
+	h.s.Run = func(context.Context, string) error {
+		h.runAt = append(h.runAt, h.clock.t)
+		panic("boom")
+	}
+	h.tickAt(3 * time.Minute) // runs, panics
+	select {
+	case <-h.done:
+		t.Fatal("a panic in one run must not end the scheduler")
+	default:
+	}
+	h.tickAt(16 * time.Minute) // retried after the failure interval
+	if len(h.runAt) != 2 || len(lines) == 0 || !strings.Contains(lines[0], "panic") {
+		t.Fatalf("runs=%v lines=%v", h.runAt, lines)
+	}
+}
+
+func TestLogWriterForwardsBackupLines(t *testing.T) {
+	var lines []string
+	w := &logWriter{logf: func(format string, args ...any) { lines = append(lines, fmt.Sprintf(format, args...)) }}
+	_, _ = w.Write([]byte("backup: delete o/x: 403 AccessDenied\nno change\nbackup: cannot read kept "))
+	_, _ = w.Write([]byte("generation g (boom); leaving drops pending\n"))
+	if len(lines) != 2 || lines[0] != "delete o/x: 403 AccessDenied" || !strings.HasPrefix(lines[1], "cannot read kept generation g") {
+		t.Fatalf("%q", lines)
 	}
 }

@@ -7,6 +7,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -182,5 +185,31 @@ func TestRateLimitDifferentKeysNoThrottle(t *testing.T) {
 	putCount := srv.Count("PUT")
 	if putCount != 2 {
 		t.Fatalf("different keys: want 2 PUTs, got %d", putCount)
+	}
+}
+
+// AWS answers a bucket in another region with 301 PermanentRedirect. The
+// client refuses redirects, which surfaces as a transport error from
+// http.Client; that must not be retried three times per object.
+func TestRedirectIsNotRetried(t *testing.T) {
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Location", "https://bkt.s3.eu-west-1.amazonaws.com"+r.URL.Path)
+		w.WriteHeader(http.StatusMovedPermanently)
+	}))
+	defer srv.Close()
+	c, err := s3.New(s3.Config{Bucket: "bkt", Prefix: "pre", Endpoint: srv.URL, AccessKey: "a", SecretKey: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SetSleep(func(time.Duration) {})
+	_, err = c.Head(context.Background(), "manifest")
+	var se *s3.StatusError
+	if !errors.As(err, &se) || se.Status != http.StatusMovedPermanently || hits != 1 {
+		t.Fatalf("want one 301 StatusError, got hits=%d err=%v", hits, err)
+	}
+	if !strings.Contains(err.Error(), "region") {
+		t.Fatalf("error must point at the region setting: %v", err)
 	}
 }

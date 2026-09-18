@@ -9,6 +9,7 @@ type plan struct {
 	Removed  []string             // rels the pointer holds that are gone
 	Kept     []string             // generations kept after this run, newest first
 	Drop     []string             // generations this run pushes out (not the pointer's pending Dropping)
+	Existing []string             // the pointer's generations minus its pending Dropping; every one is referenced until the pointer is rewritten
 	NoChange bool
 }
 
@@ -48,6 +49,7 @@ func makePlan(items []Item, pointer *Manifest, keep int, gen string) plan {
 			existing = append(existing, g)
 		}
 	}
+	p.Existing = existing
 	if p.NoChange {
 		p.Kept = existing
 		return p

@@ -3,6 +3,7 @@ package backup
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -41,15 +43,33 @@ type RestoreSummary struct {
 	Left       []string
 }
 
+// probeHealth is true only for lossless's own /health JSON, the rule
+// serve.alreadyServing and harness.ProbeHealth apply: a plain 200 or a
+// redirect from some other local service must not block a restore.
 func probeHealth(url string) bool {
-	c := &http.Client{Timeout: 2 * time.Second}
+	c := &http.Client{
+		Timeout: 2 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	res, err := c.Get(strings.TrimRight(url, "/") + "/health")
 	if err != nil {
 		return false
 	}
-	_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 4096))
-	_ = res.Body.Close()
-	return res.StatusCode == 200
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return false
+	}
+	raw, err := io.ReadAll(io.LimitReader(res.Body, 4096))
+	if err != nil {
+		return false
+	}
+	var body struct {
+		OK      *bool `json:"ok"`
+		Records *int  `json:"records"`
+	}
+	return json.Unmarshal(raw, &body) == nil && body.OK != nil && *body.OK && body.Records != nil
 }
 
 func hasRegularFile(dir string) bool {
@@ -107,10 +127,10 @@ func Restore(ctx context.Context, home string, o RestoreOptions) (RestoreSummary
 	}
 	m := pointer
 	if o.At != "" && o.At != pointer.Generation {
-		if containsString(pointer.Dropping, o.At) || !containsString(pointer.Generations, o.At) {
+		if slices.Contains(pointer.Dropping, o.At) || !slices.Contains(pointer.Generations, o.At) {
 			var kept []string
 			for _, g := range pointer.Generations {
-				if !containsString(pointer.Dropping, g) {
+				if !slices.Contains(pointer.Dropping, g) {
 					kept = append(kept, g)
 				}
 			}
@@ -266,7 +286,7 @@ func List(ctx context.Context, home string) ([]GenerationInfo, error) {
 	}
 	var out []GenerationInfo
 	for _, g := range pointer.Generations {
-		if containsString(pointer.Dropping, g) {
+		if slices.Contains(pointer.Dropping, g) {
 			continue
 		}
 		m := pointer

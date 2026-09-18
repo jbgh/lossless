@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +43,11 @@ type Summary struct {
 	Dropped    []string
 	Elapsed    time.Duration
 }
+
+// ErrEmptyStore: nothing under raw/, export/, or index/ and no generation
+// in the bucket. Not a successful backup: last_ok stays unset so doctor
+// keeps saying "never backed up" instead of "ok" over an empty bucket.
+var ErrEmptyStore = errors.New("nothing to back up: the store is empty")
 
 // OtherWriterError: the pointer was last written by an install this one
 // has not adopted.
@@ -81,10 +88,16 @@ func Run(ctx context.Context, home string, o RunOptions) (Summary, error) {
 	var sum Summary
 	cfg, err := LoadConfig(home)
 	if err != nil {
+		if !errors.Is(err, ErrNotConfigured) && !o.DryRun {
+			stampFailure(home, start, err)
+		}
 		return sum, &ConfigError{Err: err}
 	}
 	rm, err := newRemote(cfg, home)
 	if err != nil {
+		if !o.DryRun {
+			stampFailure(home, start, err)
+		}
 		return sum, &ConfigError{Err: err}
 	}
 	release, err := Lock(home)
@@ -108,6 +121,16 @@ func Run(ctx context.Context, home string, o RunOptions) (Summary, error) {
 	}
 	sum.Elapsed = o.Now().Sub(start)
 	return sum, err
+}
+
+// stampFailure records a run that failed before the lock was taken (a
+// malformed backup.env, a missing backup.key), so doctor can say why every
+// scheduled run fails. An unconfigured home gets no state file.
+func stampFailure(home string, start time.Time, err error) {
+	st := LoadState(home)
+	st.LastAttempt = start.Format(time.RFC3339)
+	st.LastError = err.Error()
+	_ = st.Save(home)
 }
 
 func run(ctx context.Context, home string, cfg *Config, rm *remote, state *State, o RunOptions, start time.Time, sum *Summary) error {
@@ -137,6 +160,9 @@ func run(ctx context.Context, home string, cfg *Config, rm *remote, state *State
 		return err
 	}
 	sum.Scanned = len(items)
+	if len(items) == 0 && pointer.Generation == "" {
+		return ErrEmptyStore
+	}
 	gen := NewGeneration(start)
 	p := makePlan(items, pointer, cfg.Keep, gen)
 
@@ -146,12 +172,14 @@ func run(ctx context.Context, home string, cfg *Config, rm *remote, state *State
 		return nil
 	}
 
-	// Finish drops a previous run left pending before anything else.
-	kept := p.Kept
-	if !p.NoChange {
-		kept = p.Kept[1:] // existing generations; the new one has no manifest yet
-	}
-	pending := dropGenerations(ctx, rm, state, kept, nil, pointer.Dropping, o.Out, sum)
+	// Finish drops a previous run left pending before anything else. Every
+	// generation the pointer lists (p.Existing) protects its objects here,
+	// including the ones this run is about to push out: the pointer names
+	// them until it is rewritten below, and if this run fails before that
+	// write they stay kept and must stay restorable. The new generation
+	// needs no protection: what it shares with the pointer is covered by
+	// p.Existing, and the rest is uploaded after this phase.
+	pending := dropGenerations(ctx, rm, state, p.Existing, nil, pointer.Dropping, o.Out, sum)
 
 	current := pointer
 	if p.NoChange {
@@ -161,6 +189,7 @@ func run(ctx context.Context, home string, cfg *Config, rm *remote, state *State
 		if err := uploadAll(ctx, rm, tmp, items, p.Upload, o, sum); err != nil {
 			return err
 		}
+		items = withoutGone(items)
 		current = &Manifest{
 			Version:     manifestVersion,
 			Generation:  gen,
@@ -194,20 +223,23 @@ func run(ctx context.Context, home string, cfg *Config, rm *remote, state *State
 		state.Files[it.Rel] = FileState{Size: it.Size, StatSize: it.StatSize, Mtime: it.Mtime, SHA256: it.SHA256, Object: it.Object}
 	}
 	for g := range state.Manifests {
-		if !containsString(current.Generations, g) {
+		if !slices.Contains(current.Generations, g) {
 			delete(state.Manifests, g)
 		}
 	}
 	return nil
 }
 
-func containsString(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
+// withoutGone drops the items uploadOne found missing: they are not part
+// of this generation and the next walk will not list them either.
+func withoutGone(items []Item) []Item {
+	out := make([]Item, 0, len(items))
+	for _, it := range items {
+		if !it.Gone {
+			out = append(out, it)
 		}
 	}
-	return false
+	return out
 }
 
 func printPlan(out io.Writer, p plan, gen string, pending []string) {
@@ -261,6 +293,9 @@ func uploadAll(ctx context.Context, rm *remote, tmp string, all []Item, todo []I
 				return
 			}
 			all[index[it.Rel]] = fixed
+			if fixed.Gone {
+				return
+			}
 			sum.Uploaded++
 			sum.Bytes += n
 			if o.Verbose {
@@ -286,6 +321,13 @@ func (c *countReader) Read(p []byte) (int, error) {
 func uploadOne(ctx context.Context, rm *remote, tmp string, it Item) (Item, int64, error) {
 	src, err := os.Open(it.Src)
 	if err != nil {
+		if !it.Temp && errors.Is(err, fs.ErrNotExist) {
+			// A claim superseded or a project removed since the walk: the
+			// file is not part of this generation. A temp copy cannot
+			// vanish on its own, so that stays an error.
+			it.Gone = true
+			return it, 0, nil
+		}
 		return it, 0, err
 	}
 	defer src.Close()
