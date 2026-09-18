@@ -53,7 +53,8 @@ type query struct {
 	Symbols        []string
 	OwnSymbols     []string // this ask's own symbols; hydrate adds inherited ones to Symbols only
 	ContentTokens  int
-	Targeted       bool // one content token and an interrogative: a lookup, not a task
+	OverlapTokens  []string // distinct content tokens of this ask, minus the project's own name
+	Targeted       bool     // one content token and an interrogative: a lookup, not a task
 	SessionID      string
 	Served         map[string]bool
 	Dwell          map[string]bool
@@ -409,6 +410,9 @@ func extractNoise(rec claim.Record) bool {
 			return true
 		}
 	case "failed":
+		if gate.SuccessReport(t) {
+			return true
+		}
 		if gate.StatusFailed(t) || gate.FailedAsObject(t) || (len(rec.Paths) == 0 && failedOnlyInTicks(t)) {
 			return true
 		}
@@ -450,8 +454,57 @@ func isContentToken(t string) bool {
 	return identLower(t)
 }
 
+// overlapNeed is how many shared content words make the word route to a
+// strong overlap. Two is a topic match on a short goal; a thirty-word goal
+// shares two ordinary words with almost any record, so the bar rises by
+// one for every eight content tokens past sixteen.
+func overlapNeed(contentTokens int) int {
+	need := (contentTokens + 7) / 8
+	if need < OverlapStrongMin {
+		need = OverlapStrongMin
+	}
+	return need
+}
+
+// overlapTokens are the ask's distinct content tokens without the
+// project's own name: "lossless" is in every goal and half the records of
+// jbgh/lossless, so sharing it says nothing about the topic.
+func overlapTokens(q query) []string {
+	own := map[string]bool{}
+	if !strings.HasPrefix(q.ProjectKey, "path-") {
+		for _, t := range claim.Tokens(q.ProjectKey) {
+			own[strings.ToLower(t)] = true
+		}
+	}
+	seen := map[string]bool{}
+	out := []string{}
+	for _, t := range append(append([]string{}, q.QuestionTokens...), q.GoalTokens...) {
+		t = strings.ToLower(strings.TrimSpace(t))
+		if !isContentToken(t) || seen[t] || own[t] {
+			continue
+		}
+		seen[t] = true
+		out = append(out, t)
+	}
+	return out
+}
+
 // Function words. Topic nouns (rate, jwt, redis) stay content.
 var overlapStop = map[string]bool{
+	"after": true, "before": true, "only": true, "every": true, "never": true, "always": true,
+	"ever": true, "when": true, "where": true, "while": true, "until": true, "since": true,
+	"there": true, "here": true, "their": true, "them": true, "they": true, "these": true,
+	"those": true, "some": true, "more": true, "most": true, "each": true, "other": true,
+	"such": true, "both": true, "very": true, "same": true, "still": true, "gets": true,
+	"look": true, "looks": true, "last": true, "sure": true, "lets": true, "onto": true,
+	"again": true, "once": true, "much": true, "many": true, "were": true, "being": true,
+	"because": true, "between": true, "without": true, "within": true, "during": true,
+	// three-letter function words pass the identifier-length exception below
+	"are": true, "was": true, "has": true, "had": true, "can": true, "but": true, "its": true,
+	"our": true, "you": true, "all": true, "any": true, "one": true, "two": true, "out": true,
+	"now": true, "new": true, "own": true, "off": true, "too": true, "via": true, "per": true,
+	"yet": true, "nor": true, "may": true, "did": true, "get": true, "got": true, "let": true,
+	"see": true, "say": true, "way": true, "who": true, "inside": true, "outside": true,
 	"the": true, "and": true, "for": true, "not": true, "why": true, "how": true,
 	"what": true, "which": true, "this": true, "that": true, "with": true, "from": true,
 	"into": true, "then": true, "than": true, "use": true, "using": true, "add": true,

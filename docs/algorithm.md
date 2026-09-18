@@ -115,7 +115,9 @@ Computed only on candidates. Weights scale these features, not raw counts of fai
 | `oon` | 0 or 1 | caller named files, this claim shares none. Discounts P_answer only. |
 | `dwell` / `served` | 0 or 1 | this session’s GET/remember vs last pack. Jobs 1–2 cancel served. |
 
-Strong overlap: path > 0 *or* a shared identifier *or* symbol Jaccard ≥ 0.25 *or* ≥2 content tokens *or* vector ≥ 0.55. One shared word (`rate`) or a 0.05 Jaccard with no shared ident is weak, no warning.
+Strong overlap: path > 0 *or* a shared identifier *or* symbol Jaccard ≥ 0.25 *or* enough shared content tokens *or* vector ≥ 0.55. One shared word (`rate`) or a 0.05 Jaccard with no shared ident is weak, no warning.
+
+The content-token bar rises with the goal: 2 shared tokens up to 16 content tokens in the ask, then one more per 8 (`overlapNeed`). A thirty-word goal shares two ordinary words with almost any record; on the live store 45 of 130 warnings in one month came from pairs like `review`/`look` and `wave`/`count`. Function words (`after`, `only`, `every`, three-letter words like `are`) and the project's own name (`lossless` in `jbgh/lossless`) are not content tokens for this count.
 
 ```
 P_fail    = failed_overlap + 0.25 × failed_weak

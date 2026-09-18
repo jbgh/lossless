@@ -66,6 +66,7 @@ func stripTypeTalk(s string) string {
 
 func stripFailedNoise(s string) string {
 	s = stripTypeTalk(s)
+	s = gate.StripZeroFail(s)
 	s = exceptionTo.ReplaceAllString(s, " ")
 	return s
 }

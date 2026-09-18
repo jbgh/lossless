@@ -12,6 +12,7 @@ import (
 	"lossless/internal/projectkey"
 	"lossless/internal/retrieve"
 	"lossless/internal/store"
+	"lossless/internal/version"
 	"lossless/internal/write"
 )
 
@@ -259,12 +260,42 @@ func markSQLiteCaught(st *store.Store, key string, updated int64) {
 	_ = st.SetCursor(key, updated)
 }
 
+// logf stamps a watcher line the way serve stamps its own: UTC time and
+// the running version, so serve.log reads as one timeline.
+func logf(format string, args ...any) {
+	stamp := time.Now().UTC().Format(time.RFC3339)
+	fmt.Fprintf(os.Stderr, stamp+" lossless watch ("+version.Version+"): "+format+"\n", args...)
+}
+
+// lastReplayLine keeps a job that fails every tick from logging every tick.
+var lastReplayLine string
+
+// replayLogLine is empty when a replay changed nothing. A turn hook gives
+// the daemon 400ms and spools past that; the daemon has usually finished
+// the catch-up by the time the tick replays the job, so most replays find
+// the cursor already at the end of the file.
+func replayLogLine(res write.EnsureResult) string {
+	if res.Moved == 0 && res.Failed == 0 {
+		return ""
+	}
+	s := fmt.Sprintf("replayed %d spooled catch-ups (%d moved tape, %d failed)", res.Replayed, res.Moved, res.Failed)
+	if res.Failed > 0 && len(res.Errors) > 0 {
+		s += ": " + res.Errors[0]
+	}
+	return s
+}
+
 func Tick(st *store.Store, opts Options) (Result, error) {
 	// Hooks spool a catch-up when the daemon is down or slow. Only the
 	// `ensure` CLI replayed the spool before; the tick does it now.
 	if files, _ := write.ListSpool(st.Root); len(files) > 0 {
-		if res, err := write.Ensure(st, st.Root); err == nil && res.Replayed > 0 {
-			fmt.Fprintf(os.Stderr, "lossless watch: replayed %d spooled catch-ups\n", res.Replayed)
+		if res, err := write.Ensure(st, st.Root); err == nil {
+			line := replayLogLine(res)
+			// A job that fails every tick logs once, not once a second.
+			if line != "" && (res.Failed == 0 || line != lastReplayLine) {
+				logf("%s", line)
+			}
+			lastReplayLine = line
 		}
 	}
 	known, err := st.ListSessions()
@@ -383,7 +414,7 @@ func safeTick(st *store.Store, opts Options) (res Result, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("watch tick panic: %v", r)
-			fmt.Fprintln(os.Stderr, "lossless watch:", err)
+			logf("%v", err)
 		}
 	}()
 	if testPanicTick != nil {

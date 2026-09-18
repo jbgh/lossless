@@ -573,3 +573,43 @@ func TestSkipProseLiveResidue(t *testing.T) {
 		t.Fatal("they-found contains-skip")
 	}
 }
+
+// 2026-09-17 survey. A sentence ending in a code span is whole; the rows
+// the old splitter chopped inside a span keep failing the odd-tick rule,
+// and the object-less remainder ("Never touched .") is truncated.
+func TestTruncatedCodeSpanEndings(t *testing.T) {
+	if Truncated("The rerun shows 2 tests failed in `AlbumCardHitAreaTests`.") {
+		t.Fatal("a sentence that ends in a code span is not truncated")
+	}
+	for _, s := range []string{"Worked only in `.", "Never touched .", "claude/worktrees/agent-1` (verified before every edit)."} {
+		if !Truncated(s) {
+			t.Fatalf("chopped remainder must stay truncated: %q", s)
+		}
+	}
+}
+
+func TestSurveyGates(t *testing.T) {
+	if !SuccessReport("Re-ran all-module tests: BUILD SUCCESSFUL, 1,777 passed / 0 failed / 11 skipped.") ||
+		!SuccessReport("625 tests, with no failures.") {
+		t.Fatal("clean run must read as a success report")
+	}
+	if SuccessReport("1,794 passed / 2 failed in AlbumCardHitAreaTests.") || SuccessReport("0 failed, then the deploy threw.") ||
+		SuccessReport("Redis token bucket failed in staging.") {
+		t.Fatal("a real failure is not a success report")
+	}
+	if !LeadIn("Both mechanisms failed:") || !LeadIn("**PASS/FAIL line as requested**:") || !LeadIn("Both failed:**") {
+		t.Fatal("colon lead-in")
+	}
+	if LeadIn("We still store: the session JSONL.") || LeadIn("Decision: react-query for server state") {
+		t.Fatal("a colon inside the sentence is not a lead-in")
+	}
+	if !InvestigationNarration("Looking into the failed email invite.") || !InvestigationNarration("- Diagnosing the failed suite.") {
+		t.Fatal("investigation narration")
+	}
+	if InvestigationNarration("Looking at InviteService, the invite failed because SMTP rejected the sender.") {
+		t.Fatal("a finding is not narration")
+	}
+	if !ProcessState("So there is nothing independent to request this turn.") {
+		t.Fatal("turn-scoped wait")
+	}
+}

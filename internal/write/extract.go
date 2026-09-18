@@ -425,9 +425,21 @@ func splitSentences(text string) []string {
 	var out []string
 	var cur strings.Builder
 	rs := []rune(text)
+	// A terminator inside a code span is code, not prose: "`.woodpecker/**`"
+	// was cut at its leading dot and stored as "Never touched .". A newline
+	// closes an unbalanced tick so one stray backtick cannot swallow the
+	// rest of the message.
+	inTick := false
 	for i, r := range rs {
 		cur.WriteRune(r)
-		if r == '\n' || r == '!' || r == '?' || (r == '.' && !fileExtDot(rs, i) && !listMarkerDot(rs, i)) {
+		if r == '`' {
+			inTick = !inTick
+			continue
+		}
+		if r == '\n' {
+			inTick = false
+		}
+		if r == '\n' || (!inTick && (r == '!' || r == '?' || (r == '.' && !fileExtDot(rs, i) && !listMarkerDot(rs, i) && !dotPathDot(rs, i)))) {
 			if s := strings.TrimSpace(cur.String()); s != "" {
 				out = append(out, s)
 			}
@@ -438,6 +450,21 @@ func splitSentences(text string) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+// dotPathDot is the dot that opens a dotfile or relative path outside a
+// code span (.env, .claude/worktrees, ./scripts): nothing word-like before
+// it and a name or slash right after. A sentence-ending period is followed
+// by space, quote, or the end.
+func dotPathDot(rs []rune, i int) bool {
+	if i > 0 && (alnum(rs[i-1]) || rs[i-1] == '.') {
+		return false
+	}
+	if i+1 >= len(rs) {
+		return false
+	}
+	n := rs[i+1]
+	return alnum(n) || n == '_' || n == '/'
 }
 
 func listMarkerDot(rs []rune, i int) bool {

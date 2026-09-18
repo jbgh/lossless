@@ -245,7 +245,12 @@ func QuotedAttribution(s string) bool {
 
 func Truncated(s string) bool {
 	s = strings.TrimSpace(s)
-	if strings.HasSuffix(s, "(") || strings.HasSuffix(s, "`.") || strings.HasSuffix(s, "do not") {
+	// A sentence that merely ends in a code span ("… failed in `AuthTests`.")
+	// is whole. The old splitter cut at a dot inside a span and left an
+	// unbalanced tick; the odd-count rule below still catches those rows.
+	// " ." is what such a cut left once the dangling tick was trimmed
+	// ("Never touched .").
+	if strings.HasSuffix(s, "(") || strings.HasSuffix(s, " .") || strings.HasSuffix(s, "do not") {
 		return true
 	}
 	if strings.HasSuffix(s, "path (`.") || strings.Contains(s, "path (`.") {
@@ -353,6 +358,39 @@ var (
 		regexp.MustCompile(`^npm (ERR!|WARN) `),
 	}
 )
+
+var (
+	zeroFailRE  = regexp.MustCompile(`(?i)\b(?:0|zero|no|none|nothing)\s+(?:(?:tests?|rows?|cases?|suites?)\s+)?(?:failed|failures?|failing)\b`)
+	otherFailRE = regexp.MustCompile(`(?i)\b(?:fail(?:ed|ure|ures|ing|s)?|rejected|threw|dead end|didn't work|did not work|doesn't work|does not work|won't compile|doesn't compile)\b`)
+)
+
+// StripZeroFail blanks the failure words of a clean run ("0 failed",
+// "with no failures", "nothing failed") so they do not read as a failure.
+func StripZeroFail(s string) string {
+	return zeroFailRE.ReplaceAllString(s, " ")
+}
+
+// SuccessReport is a run summary whose only failure words count zero:
+// "1,794 passed / 0 failed / 11 skipped". "2 passed, 0 failed, then the
+// deploy threw" is not this shape.
+func SuccessReport(s string) bool {
+	return zeroFailRE.MatchString(s) && !otherFailRE.MatchString(StripZeroFail(s))
+}
+
+// LeadIn is a sentence that ends in a colon (after closing emphasis or
+// quotes). It introduces the lines that follow and says nothing alone.
+func LeadIn(s string) bool {
+	t := strings.TrimRight(strings.TrimSpace(s), "*_\"'”’)` ")
+	return strings.HasSuffix(t, ":")
+}
+
+// InvestigationNarration is an agent announcing what it is about to look
+// at ("Looking into the failed invite."). Nothing has been found yet. A
+// finding that merely opens with Looking at … is not this shape.
+func InvestigationNarration(s string) bool {
+	t := strings.TrimLeft(strings.TrimSpace(s), "\"“”'`*_- ")
+	return hasPrefixFold(t, []string{"looking into ", "diagnosing ", "investigating ", "digging into "})
+}
 
 // TagWrapped is a whole sentence inside one harness tag
 // (<summary>Background command … failed with exit code 1</summary>).
@@ -567,7 +605,7 @@ func SkipProse(s string) bool {
 	if JSONFragment(t) {
 		return true
 	}
-	if InstructionChrome(t) || TagWrapped(t) || RunnerOutput(t) {
+	if InstructionChrome(t) || TagWrapped(t) || RunnerOutput(t) || LeadIn(t) || InvestigationNarration(t) {
 		return true
 	}
 	t = strings.TrimLeft(t, "\"“”'`")
@@ -700,6 +738,8 @@ var (
 		"in this session", "the next stop", "next test that matters",
 		"not another fixture", "that row is always there", "i'll inspect",
 		"right next step", "right-next-step",
+		// turn-scoped waits: the agent's scheduling, not project state
+		"nothing independent to request", "arrives by notification", "depends on a notification",
 	}
 	skillTalk = []string{
 		"ignore a skill", "can ignore a skill",

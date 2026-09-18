@@ -238,6 +238,17 @@ func finishMessage(m Message) (Message, bool) {
 		m.Text = ""
 		return m, true
 	}
+	// A subagent hand-back (<agent-message>) or a turn that is nothing but
+	// a <task-notification> is model or command output delivered in a user
+	// slot. It extracts as assistant text: its "Never ran …" lines are a
+	// self-report, not a rule the user typed.
+	if m.Role == "user" {
+		if body, ok := agentHandBack(m.Text); ok {
+			m.Role, m.Text = "assistant", body
+		} else if onlyTaskNotifications(m.Text) {
+			m.Role = "assistant"
+		}
+	}
 	m.Text = stripHarnessChrome(m.Text)
 	if stripped := stripEmbeddedOwnPayload(m.Text); stripped != m.Text {
 		m.Text = stripped

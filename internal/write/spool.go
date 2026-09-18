@@ -25,6 +25,7 @@ type SpoolJob struct {
 
 type EnsureResult struct {
 	Replayed int      `json:"replayed"`
+	Moved    int      `json:"moved"` // replays that copied tape; the rest found the cursor already there
 	Failed   int      `json:"failed"`
 	Skipped  int      `json:"skipped"`
 	Pushed   int      `json:"pushed"`
@@ -143,7 +144,7 @@ func Ensure(st *store.Store, home string) (EnsureResult, error) {
 			_ = os.Remove(p)
 			continue
 		}
-		_, err = CatchUp(st, CatchUpRequest{
+		res, err := CatchUp(st, CatchUpRequest{
 			JSONL: job.JSONL, Project: job.Project, WorkspaceRoot: job.WorkspaceRoot,
 			Harness: job.Harness, SessionID: job.SessionID, Source: job.Source,
 		})
@@ -158,6 +159,9 @@ func Ensure(st *store.Store, home string) (EnsureResult, error) {
 			continue
 		}
 		out.Replayed++
+		if !res.Noop && res.Copied > 0 {
+			out.Moved++
+		}
 	}
 	pushed, perr := FlushPush(home)
 	out.Pushed = pushed

@@ -210,8 +210,8 @@ Compute only on the candidate set. Every feature is in `[0, 1]` except `type_ran
 
 Overlap uses `goal_tokens ∪ question_tokens` against `text` tokens, plus `ExpandIdent` aliases (`jwt` ↔ `jsonwebtoken`). Function words (`the`, `library`, `choice`, `add`) do not count.
 
-**Strong:** `path>0` OR `symbol>0` OR ≥2 content tokens OR `vector>=0.55`.  
-**Weak:** exactly one content token and none of the above. One shared "rate" is not job 1.
+**Strong:** `path>0` OR `symbol>0` OR enough shared content tokens OR `vector>=0.55`. Enough is 2 for an ask of up to 16 content tokens, then one more per 8; function words and the project's own name do not count (see [algorithm.md](algorithm.md) §7).  
+**Weak:** at least one shared content token, below that bar, and none of the above. One shared "rate" is not job 1.
 
 Do not persist `stale`. Prefix `[verify] ` on `text` at pack time if `stale=1`.
 

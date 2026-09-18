@@ -188,6 +188,71 @@ func dropConflictHEAD(s string) string {
 	return b.String()
 }
 
+// agentHandBack returns the report bodies of the <agent-message> blocks in
+// a Claude Code hand-back, without the harness frame ("[Subagent
+// hand-back] … The report follows:") or the text around the blocks
+// ("Another Claude session sent a message:", the trailing caveat). The
+// harness indents every report line by two spaces.
+func agentHandBack(text string) (string, bool) {
+	const open, close = "<agent-message", "</agent-message>"
+	const follows = "The report follows:"
+	low := asciiLower(text)
+	if !strings.Contains(low, open) {
+		return "", false
+	}
+	var out strings.Builder
+	for pos := 0; pos < len(text); {
+		i := strings.Index(low[pos:], open)
+		if i < 0 {
+			break
+		}
+		i += pos
+		gt := strings.IndexByte(text[i:], '>')
+		if gt < 0 {
+			break
+		}
+		start := i + gt + 1
+		end, next := len(text), len(text)
+		if j := strings.Index(low[start:], close); j >= 0 {
+			end = start + j
+			next = end + len(close)
+		}
+		inner := text[start:end]
+		if k := strings.Index(inner, follows); k >= 0 && strings.Contains(inner[:k], "[Subagent hand-back]") {
+			inner = inner[k+len(follows):]
+		}
+		inner = strings.ReplaceAll(inner, "\n  ", "\n")
+		out.WriteString(strings.TrimSpace(inner))
+		out.WriteByte('\n')
+		pos = next
+	}
+	return strings.TrimSpace(out.String()), true
+}
+
+// onlyTaskNotifications is true when the text is nothing but
+// <task-notification> blocks: a queued subagent or background-command
+// result, not something the user typed alongside one.
+func onlyTaskNotifications(text string) bool {
+	const open, close = "<task-notification>", "</task-notification>"
+	low := asciiLower(text)
+	if !strings.Contains(low, open) {
+		return false
+	}
+	for {
+		i := strings.Index(low, open)
+		if i < 0 {
+			break
+		}
+		end := len(text)
+		if j := strings.Index(low[i:], close); j >= 0 {
+			end = i + j + len(close)
+		}
+		text = text[:i] + text[end:]
+		low = low[:i] + low[end:]
+	}
+	return strings.TrimSpace(text) == ""
+}
+
 // stripTaskNotifications reduces a Claude Code <task-notification> block
 // to its <result> bodies. The summary ("Background command … failed with
 // exit code 1"), note, ids, and status are harness chrome, not claims.

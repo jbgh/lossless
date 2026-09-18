@@ -237,6 +237,10 @@ Same heuristic extract as the spike (`failed` / `decision` / `constraint` / `sta
 
 **Skip on ingest:** `system`, `reasoning`, synthetic user dumps (`synthetic_reason`, or user text that is only a `<system-reminder>` / skills catalog), and any tool call/result named `ask`, `remember`, or `catch-up`. Those stay in raw. They must not become claims (see [pipeline.md](pipeline.md)).
 
+**Model output in a user slot:** Claude Code delivers a subagent's final report as a user-role message wrapped in `<agent-message>` ("[Subagent hand-back] …"), and queues a finished subagent or background command as a `<task-notification>`. Both extract as **assistant** text, without the harness frame: a report's "Never ran approve-ci.sh, never merged" is a self-report, not a rule the user typed, so it cannot become a constraint. A user who types next to a notification is still the user.
+
+**Sentence split:** a terminator inside a code span is code (`` `.woodpecker/**` `` is one token, not a sentence end), and the dot that opens a dotfile or relative path (`.env`, `./scripts`) does not end a sentence. A newline closes an unbalanced tick.
+
 `remember` bypasses heuristics: the payload *is* the claim. Still redacted. Still gets a raw line in a `manual/<date>.jsonl` so it is part of "everything."
 
 After a claim is written, embed `text` (+ symbols) into `claim_vectors` if `Store.Embedder` is set. Missing embedder is fine (degraded retrieve). Do not embed raw lines or tool bodies. A write never fails because embed failed. `lossless embed-backfill` fills gaps after you attach a model (`LOSSLESS_EMBED_CMD` or `LOSSLESS_EMBED_MODEL`).

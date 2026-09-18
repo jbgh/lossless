@@ -89,6 +89,7 @@ func (e Engine) prepare(req Request) (prep, error) {
 	seedPaths := append([]string{}, q.PathKeys...)
 	q = e.hydrateActions(req, q)
 	q.ContentTokens = contentTokenCount(q.QuestionTokens, q.GoalTokens)
+	q.OverlapTokens = overlapTokens(q)
 	q.Targeted = q.ContentTokens == 1 && hasInterrogative(q.QuestionTokens, q.GoalTokens)
 	prof := selectProfile(q)
 	empty := Response{Context: []Hit{}, Warnings: []string{}, Project: q.ProjectKey}
@@ -489,8 +490,11 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64,
 		nAgree++
 	}
 	s.agree = float64(nAgree) / 3
-	overlapTokens := append(append([]string{}, q.QuestionTokens...), q.GoalTokens...)
-	hits := contentOverlap(overlapTokens, jobOverlapText(rec.Text))
+	ov := q.OverlapTokens
+	if ov == nil {
+		ov = overlapTokens(q)
+	}
+	hits := contentOverlap(ov, jobOverlapText(rec.Text))
 	// Strong overlap judges this ask's own symbols. Symbols inherited
 	// from the action tape rank (s.symbol) but never force-pack: a topic
 	// shift must not carry the old topic's job-1 warning. The Jaccard
@@ -499,7 +503,7 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64,
 	ownSym := q.OwnSymbols
 	strong := s.path > 0 || sharedCodeIdent(ownSym, rec.Symbols, q.Targeted) ||
 		(jaccard(ownSym, rSym) >= OverlapSymbolMin && sharedCount(ownSym, rSym) >= 2) ||
-		hits >= OverlapStrongMin || s.vector >= VectorGate
+		hits >= overlapNeed(len(ov)) || s.vector >= VectorGate
 	weak := !strong && hits >= 1
 	switch rec.Type {
 	case "failed":

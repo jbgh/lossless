@@ -57,7 +57,10 @@ func TestParseTaskNotificationKeepsResultDropsChrome(t *testing.T) {
 		t.Fatalf("expected one kept message: %+v", msgs)
 	}
 	m := msgs[0]
-	if m.Role != "user" {
+	// A message that is nothing but the notification is the subagent's or
+	// the command's output, not something the user typed: it extracts as
+	// assistant text and cannot mint a user constraint.
+	if m.Role != "assistant" {
 		t.Fatalf("role %q", m.Role)
 	}
 	if !strings.Contains(m.Text, "Redis token bucket failed in src/middleware/auth.ts staging.") {

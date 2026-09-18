@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"lossless/internal/store"
 )
 
 // 1,088 virtual-*.jsonl staging files from one day in August sat in the
@@ -69,5 +71,35 @@ func TestEnsureDropsDeadJobs(t *testing.T) {
 	}
 	if res.Skipped != 2 || res.Failed != 0 {
 		t.Fatalf("%+v", res)
+	}
+}
+
+// Ensure reports how many replays actually copied tape, so the watcher can
+// stay quiet about a job the daemon had already finished.
+func TestEnsureCountsReplaysThatMovedTape(t *testing.T) {
+	home := t.TempDir()
+	st, err := store.Open(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	src := filepath.Join(t.TempDir(), "chat_history.jsonl")
+	if err := os.WriteFile(src, []byte(`{"type":"assistant","content":"We decided to use jose, not jsonwebtoken, for Edge."}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	job := SpoolJob{JSONL: src, Project: "acme/api", Harness: "grok", SessionID: "s1", Source: "turn"}
+	if _, err := WriteSpool(home, job); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Ensure(st, home)
+	if err != nil || res.Replayed != 1 || res.Moved != 1 {
+		t.Fatalf("first replay copies the tape: %+v %v", res, err)
+	}
+	if _, err := WriteSpool(home, job); err != nil {
+		t.Fatal(err)
+	}
+	res, err = Ensure(st, home)
+	if err != nil || res.Replayed != 1 || res.Moved != 0 {
+		t.Fatalf("a replay behind an up-to-date cursor moves nothing: %+v %v", res, err)
 	}
 }

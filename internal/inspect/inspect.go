@@ -28,13 +28,16 @@ type Report struct {
 	Projects   []store.ProjectStats `json:"projects"`
 	Cursors    []store.CursorRow    `json:"cursors,omitempty"`
 	CursorNote map[string]string    `json:"cursor_note,omitempty"`
-	Notes      []string             `json:"notes,omitempty"`
-	Detail     *ProjectDetail       `json:"detail,omitempty"`
-	Ask        *AskView             `json:"ask,omitempty"`
-	Extract    *ExtractView         `json:"extract,omitempty"`
-	Prune      *PruneResult         `json:"prune,omitempty"`
-	Debug      []debuglog.Event     `json:"debug,omitempty"`
-	DebugPath  string               `json:"debug_path,omitempty"`
+	// NoLiveSource marks a project none of whose sessions has a source file
+	// left on disk (the harness cleaned them up). Its tape is kept.
+	NoLiveSource map[string]bool  `json:"no_live_source,omitempty"`
+	Notes        []string         `json:"notes,omitempty"`
+	Detail       *ProjectDetail   `json:"detail,omitempty"`
+	Ask          *AskView         `json:"ask,omitempty"`
+	Extract      *ExtractView     `json:"extract,omitempty"`
+	Prune        *PruneResult     `json:"prune,omitempty"`
+	Debug        []debuglog.Event `json:"debug,omitempty"`
+	DebugPath    string           `json:"debug_path,omitempty"`
 }
 
 type ProjectDetail struct {
@@ -113,6 +116,7 @@ func Build(st *store.Store, project string) (Report, error) {
 		return Report{}, err
 	}
 	rep.CursorNote = cursorNotes(allSess, curs)
+	rep.NoLiveSource = noLiveSource(stats, allSess, curs)
 	rep.Notes = healthNotes(stats, curs)
 	rep.DebugPath = debuglog.Path(st.Root)
 	keyFilter := ""
@@ -306,7 +310,7 @@ func Format(w io.Writer, r Report) {
 			"PROJECT", "CLAIMS", "F", "D", "C", "S", "SESS", "RAW", "CURSORS")
 		hidden, hidClaims, hidRaw := 0, 0, int64(0)
 		for _, p := range r.Projects {
-			if tinyPathHash(p) {
+			if tinyPathHash(p) || (strings.HasPrefix(p.Key, "path-") && r.NoLiveSource[p.Key]) {
 				hidden++
 				hidClaims += p.Active
 				hidRaw += p.RawBytes
@@ -364,6 +368,8 @@ func Format(w io.Writer, r Report) {
 	// operator (behind, past-eof, missing, no cursor) print.
 	okByHarness := map[string]int{}
 	okTotal := 0
+	goneByHarness := map[string]int{}
+	goneTotal := 0
 	var rows []string
 	for _, s := range d.Sessions {
 		cur, status := "no-cursor", ""
@@ -379,6 +385,13 @@ func Format(w io.Writer, r Report) {
 			okTotal++
 			continue
 		}
+		// The harness deleted the source (Claude's cleanupPeriodDays, a
+		// cleared ~/.grok/sessions). raw/ keeps the tape; nothing to do.
+		if status == "missing" {
+			goneByHarness[s.Harness]++
+			goneTotal++
+			continue
+		}
 		rows = append(rows, fmt.Sprintf("  session  %s  %s  %s  %s", s.Harness, s.SessionID, filepath.Base(s.JSONL), cur))
 	}
 	if okTotal > 0 {
@@ -392,6 +405,18 @@ func Format(w io.Writer, r Report) {
 			parts = append(parts, fmt.Sprintf("%s %d", h, okByHarness[h]))
 		}
 		fmt.Fprintf(w, "  sessions  %d ok  (%s)\n", okTotal, strings.Join(parts, ", "))
+	}
+	if goneTotal > 0 {
+		names := make([]string, 0, len(goneByHarness))
+		for h := range goneByHarness {
+			names = append(names, h)
+		}
+		sort.Strings(names)
+		parts := make([]string, 0, len(names))
+		for _, h := range names {
+			parts = append(parts, fmt.Sprintf("%s %d", h, goneByHarness[h]))
+		}
+		fmt.Fprintf(w, "  sessions  %d source gone, tape kept  (%s)\n", goneTotal, strings.Join(parts, ", "))
 	}
 	for _, row := range rows {
 		fmt.Fprintln(w, row)
@@ -498,14 +523,22 @@ func healthNotes(stats []store.ProjectStats, curs []store.CursorRow) []string {
 	if tiny > 0 {
 		out = append(out, fmt.Sprintf("%d path-hash projects with almost no claims (folders without git origin)", tiny))
 	}
-	nPast, nBehind := 0, 0
+	nPast, nBehind, nGone := 0, 0, 0
 	for _, c := range curs {
 		switch c.Status {
 		case "past-eof":
 			nPast++
 		case "behind":
 			nBehind++
+		case "missing":
+			// A sqlite: key tracks a harness database row, not a file.
+			if !strings.HasPrefix(c.Path, "sqlite:") {
+				nGone++
+			}
 		}
+	}
+	if nGone > 0 {
+		out = append(out, fmt.Sprintf("%d sessions whose source file is no longer on disk (harness cleanup or swept staging); raw/ keeps their tape", nGone))
 	}
 	if nPast+nBehind > 0 {
 		out = append(out, fmt.Sprintf("cursors: %d past-eof  %d behind  (catch-up not even with the tape)", nPast, nBehind))
@@ -553,10 +586,8 @@ func cursorNotes(sess []store.Session, curs []store.CursorRow) map[string]string
 	}
 	out := map[string]string{}
 	for k, t := range by {
-		if t.behind+t.past+t.miss == 0 {
-			out[k] = fmt.Sprintf("%d ok", t.ok)
-			continue
-		}
+		// What needs an operator first (behind, past-eof), then what is
+		// fine: current sessions, and sources the harness cleaned up.
 		var bits []string
 		if t.behind > 0 {
 			bits = append(bits, fmt.Sprintf("%d behind", t.behind))
@@ -564,13 +595,36 @@ func cursorNotes(sess []store.Session, curs []store.CursorRow) map[string]string
 		if t.past > 0 {
 			bits = append(bits, fmt.Sprintf("%d past-eof", t.past))
 		}
-		if t.miss > 0 {
-			bits = append(bits, fmt.Sprintf("%d missing", t.miss))
-		}
 		if t.ok > 0 {
 			bits = append(bits, fmt.Sprintf("%d ok", t.ok))
 		}
+		if t.miss > 0 {
+			bits = append(bits, fmt.Sprintf("%d gone", t.miss))
+		}
 		out[k] = strings.Join(bits, " ")
+	}
+	return out
+}
+
+// noLiveSource is true for a project with no session whose source file is
+// still on disk. Such a project cannot grow until a new session starts in
+// that folder, and a new session brings its own row.
+func noLiveSource(stats []store.ProjectStats, sess []store.Session, curs []store.CursorRow) map[string]bool {
+	status := map[string]string{}
+	for _, c := range curs {
+		status[c.Path] = c.Status
+	}
+	live := map[string]bool{}
+	for _, s := range sess {
+		if st, ok := status[s.JSONL]; ok && st != "missing" {
+			live[s.Project] = true
+		}
+	}
+	out := map[string]bool{}
+	for _, p := range stats {
+		if !live[p.Key] {
+			out[p.Key] = true
+		}
 	}
 	return out
 }
