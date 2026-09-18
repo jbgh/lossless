@@ -1,10 +1,11 @@
 # Changelog
 
-## 0.1.26 — unreleased
+## 0.1.26 — 2026-09-17
 
 - `backup init`, `backup`, and `restore`: opt-in encrypted copy of `raw/`, `export/`, and `VACUUM INTO` index snapshots to an S3-compatible bucket (AWS, Cloudflare R2, B2, MinIO). Per-file objects under HMAC names, chunked AES-256-GCM with a per-object key, manifest written last, the last five generations kept and objects deleted only when no kept generation references them. `restore --list` and `restore --at` pick a generation. A writer guard refuses a bucket last written by another install; `restore` adopts it, `--take-over` overrides.
 - `serve --watch` runs backup on a due time from the last success (two minutes after start if overdue, retry in fifteen minutes on failure); `backup init` schedules hourly by default. `doctor` prints the backup line.
 - Hand-rolled SigV4 client with signed payloads and region `auto` on R2 hosts; no new modules.
+- Review fixes before release: a drop left pending by an earlier run protects every generation the pointer still lists (with `keep=1` it deleted objects the current generation referenced); the scheduler survives a panic in one run, logs drop failures, recomputes the due time when the interval or `last_ok` changes, and reports an empty store as `nothing to back up` instead of a success; a session token is used only with the `AWS_*` pair; a config error stamps `last_error` for `doctor`; a file removed mid-walk is skipped; `remember` takes the part lock; `restore` treats only lossless's `/health` JSON as a running daemon; a refused redirect fails at once with a region hint.
 - Pack of five and 4.0 / 2.5 unchanged.
 
 ## 0.1.25 — 2026-09-11
