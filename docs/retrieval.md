@@ -299,7 +299,7 @@ After packing, scan the **packed** hits plus any `failed_overlap=1` candidate th
 
 If a `failed_overlap` record did not fit in the 5, **evict the lowest-score non-failed packed hit** and insert it. Job 1 is not allowed to lose to the cap.
 
-Warnings must cite ids that appear in `context`. If you warn, the record is in `context`.
+Warnings must cite ids that appear in `context`. If you warn, the record is in `context`. One carve-out: the recurrence warning cites the cluster's newest record, which may sit outside `context` (gate-named faileds stay out of packs by design) — it is still get_record-able by id.
 
 ---
 

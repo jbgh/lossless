@@ -24,6 +24,10 @@ const (
 	HeadConstraintCap    = 8
 	ColdPathCap          = 40
 	ColdStateCap         = 10
+	RecurrenceWindowDays = 60
+	RecurrenceMinRecords = 3
+	RecurrenceMaxWarn    = 1
+	ConstraintFTSStrong  = 0.8
 	PackCap              = 5
 	PackTypeCap          = 2
 	StaleStatCap         = 30

@@ -80,9 +80,11 @@ Recall-oriented union. Structure first. Vectors only if an on-box embedder is at
 | Path | 40 / path, 80 total | caller files + basename |
 | Symbol | 40 / symbol, 80 total | `jose`, `tokenBucket`. Not `library`. |
 | Failed / decision / constraint | 40 each | path or symbol overlap |
-| Inferred path (two-hop) | 6 paths, 24 / type | pathless only: first hits name files, pull job 1–2 on those files |
+| Inferred path (two-hop) | 6 paths, 24 / type | pathless ask, or a weak-path ask whose caller paths matched nothing: first hits name files, pull job 1–2 on those files |
 | Recent faileds | 8 | only if the union is still empty |
 | Vector kNN | 120 | optional. skip if no embedder |
+
+Weak-path parity: harnesses send agent-*guessed* paths, and guessed paths that match nothing are the same recall situation as no paths. If the caller sent paths but the path route returned zero rows, the two-hop runs anyway — the same recall route as a pathless ask. Scoring still applies: hopped records on a dead-path ask keep `oon=1` and its P_answer discount, which a pathless ask does not have.
 
 Pathless two-hop:
 
@@ -142,6 +144,14 @@ score = 4.0 × P_fail
 
 4.0 and 2.5 are sacred. Recency cannot beat an overlapping year-old constraint. Named constants live in `internal/retrieve/weights.go`.
 
+### Recurrence-keyed warnings
+
+Overlap and the score both need vocabulary agreement with the ask, and the 2026-09-21 audit-bundle miss happened on an ask that shared none: five prior trips of `pr-size-check` were in FTS candidacy but died post-candidacy, and no warning route could fire. Recurrence is the one signal that needs zero vocabulary agreement.
+
+After emit, a store-level scan groups the project's active failed + constraint records of the last 60 days by code-shaped identifier (contains `-`, `_`, or `.`; ≥5 chars; not a file extension, not version- or ticket-shaped, not a project-name substring; separator variants count as one trap). A cluster warns when it has ≥3 but at most `max(10, 5% of the window)` records (a compound in most of the window's records is prose, not a trap), spans ≥2 distinct days or ≥2 distinct sessions (one session's retry burst is not recurrence), and contains at least one constraint (real standing traps get written up as rules — this gate removed `first-row`/`img-src`-class chatter from the live store). The newest-rule cluster emits one warning (reference constraint recency, then count) independent of any overlap test and of the ask's vocabulary. That is deliberate: the audit-bundle miss happened on an ask sharing no real vocabulary with the trap records, and any ask-side relevance gate is either too porous (stopword FTS hits) or misses exactly the incident it exists for. A standing trap warns on any ask until its constraint lifecycle retires it; the cluster gates above bound the noise instead. If any member constraint already packed with `shipped_overlap` (so the standing-constraint warning fired), the recurrence warning stays out to avoid a double.
+
+The scan reads the store directly, deliberately not through the read-time extract gates — a gate-named failed that `statusFailed` keeps out of packs still counts toward the trigger without entering it. If any member constraint already packed with `shipped_overlap` (so the standing-constraint warning fired), the recurrence warning stays out to avoid a double.
+
 ## 8. Pack: the checkout
 
 Sort by score, then `created_at`, then id. Then walk. Hard cap 5. At most 2 per type if another type is still available.
@@ -149,13 +159,14 @@ Sort by score, then `created_at`, then id. Then walk. Hard cap 5. At most 2 per 
 1. **Drop oon states.** Ask named files, this claim shares none. Skill-state on `SKILL.md` cannot take a slot from `auth.ts`.
 2. **Drop ungrounded faileds.** No caller path, no symbol, no failed-overlap, no hop. Weekday chatter dies. Two-hop Redis on an inferred file stays.
 3. **Force the best `failed_overlap`.** Job 1 cannot lose to the type cap. Then repeatedly take max(score − 0.8 × similarity to packed). Skip hash or text Jaccard ≥ 0.8. Type-cap 2.
-4. **evictFailed, then emit.** Swap in a path/symbol failed-overlap if it missed the pack. Then ≤5 hits and blocking warnings.
+4. **evictFailed, then evictConstraint, then emit.** Swap in a path/symbol failed-overlap if it missed the pack. Then swap in a strong constraint that missed: `shipped_overlap`, vector ≥ 0.55, or top-of-FTS bm25 ≥ 0.8 with at least two FTS candidates (a lone FTS hit normalizes to bm25 = 1 regardless of match quality — rank 1 of 1 is not "top of FTS") — never pathlessness or bare candidacy, or a noisy project's pathless constraints become a faucet. A bm25-rescued constraint ships as context only; the warning still requires `shipped_overlap`, so rescue cannot mint warnings on rank. Neither rescue evicts a job-1 failed or a warning-bearing record. Then ≤5 hits and blocking warnings.
 
 | Packed hit | Warning |
 |------------|---------|
 | failed + `failed_overlap` | A prior attempt failed (see id). Do not repeat without new evidence. |
 | decision + `shipped_overlap` | Existing implementation may already cover this (see id). get_record that id before treating it as done. |
 | constraint + `shipped_overlap` | A standing constraint applies (see id). |
+| recurrence cluster | Recurring failure in this project: `<ident>` appears in N records (newest id). get_record the newest id and confirm this goal will not trip it again. |
 
 If a tagged file’s mtime is newer than the stored claim, text is prefixed `[verify]` for this response only. Not persisted. Claims are shared by project. The action tape (served / dwell / continue) is only the asking session.
 

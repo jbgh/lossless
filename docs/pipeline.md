@@ -148,7 +148,8 @@ ask(work context)
   mark [verify] if file mtime moved (stat top 30 only)
   context ≤5, token budget, diversity
   if a failed-overlap missed the cap, evict something else
-  warnings only for ids that are in context
+  warnings only for ids that are in context (carve-out: the recurrence
+    warning cites the cluster's newest id, which may be outside context)
   return
 ```
 

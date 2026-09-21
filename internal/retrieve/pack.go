@@ -359,6 +359,109 @@ func evictFailed(packed, all []scored, limit int) []scored {
 	return packed
 }
 
+// evictConstraint reserves a pack slot for a strong constraint the
+// greedy packer left out — the audit-bundle miss: the standing rule
+// ranked #1 by bm25 yet lost the PackCap race to unrelated records.
+// Strong evidence means a warning-bearing overlap (shippedOverlap), a
+// gate-level vector hit, or top-of-FTS bm25 — never pathlessness or
+// bare candidacy, or the 161 pathless constraints of a noisy project
+// become a faucet. The bm25 route additionally needs ftsN >= 2: with a
+// single FTS hit normBM25 awards 1.0 regardless of match quality, and
+// rank 1 of 1 is not "top of FTS". A bm25-rescued constraint ships as
+// context only; emit() still requires shippedOverlap for the
+// standing-constraint warning, so rescue cannot mint warnings on rank
+// alone.
+func evictConstraint(packed, all []scored, limit, ftsN int) []scored {
+	packed = append([]scored(nil), packed...)
+	in := map[string]bool{}
+	for _, p := range packed {
+		in[p.rec.ID] = true
+	}
+	var missing []scored
+	for _, c := range all {
+		if c.rec.Type != "constraint" || in[c.rec.ID] {
+			continue
+		}
+		ftsStrong := c.isFTS && ftsN >= 2 && c.bm25 >= ConstraintFTSStrong
+		strong := c.shippedOverlap == 1 || c.vector >= VectorGate || ftsStrong
+		if !strong {
+			continue
+		}
+		missing = append(missing, c)
+	}
+	if len(missing) == 0 {
+		return packed
+	}
+	sort.SliceStable(missing, func(i, j int) bool {
+		return missing[i].score > missing[j].score
+	})
+	// evictable: not a job-1 failed, not a warning-bearing record — the
+	// rescue must never destroy a warning to deliver context.
+	evictable := func(p scored) bool {
+		if p.rec.Type == "failed" && p.failedOverlap == 1 {
+			return false
+		}
+		if p.shippedOverlap == 1 {
+			return false
+		}
+		return true
+	}
+	for _, m := range missing {
+		if typeCount(packed, "constraint") >= PackTypeCap {
+			break
+		}
+		if len(packed) < PackCap {
+			packed = append(packed, m)
+			in[m.rec.ID] = true
+			continue
+		}
+		idx := -1
+		for i, p := range packed {
+			if !evictable(p) {
+				continue
+			}
+			if idx < 0 || p.score < packed[idx].score {
+				idx = i
+			}
+		}
+		if idx < 0 {
+			break
+		}
+		delete(in, packed[idx].rec.ID)
+		packed[idx] = m
+		in[m.rec.ID] = true
+	}
+	sortScored(packed)
+	if len(packed) > PackCap {
+		packed = packed[:PackCap]
+	}
+	// Rescues re-earn their budget like evictFailed re-adds do — but if
+	// nothing evictable remains, stop rather than force-evicting a
+	// warning-bearing record: the rescue may exceed limit, a lone
+	// record may not, and a standing-constraint warning must survive.
+	est := func(c scored) int { return estimateTokens(mustJSON(toHit(c, false))) }
+	total := 0
+	for _, p := range packed {
+		total += est(p)
+	}
+	for len(packed) > 1 && total > limit {
+		idx := -1
+		for i := len(packed) - 1; i >= 0; i-- {
+			if !evictable(packed[i]) {
+				continue
+			}
+			idx = i
+			break
+		}
+		if idx < 0 {
+			break
+		}
+		total -= est(packed[idx])
+		packed = append(packed[:idx], packed[idx+1:]...)
+	}
+	return packed
+}
+
 func emit(packed []scored, st *store.Store) ([]Hit, []string, int) {
 	hits := make([]Hit, 0, len(packed))
 	var warnings []string

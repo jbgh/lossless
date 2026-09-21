@@ -82,7 +82,7 @@ For You’s contract, not Phoenix: hydrate what this session just did, retrieve 
 8. **Dedup + filters** — newest `claim_hash`. Drop older same-path conflicts (Jaccard ≥ 0.35). Drop a decision if a newer same-path failed shares topic (≥ 0.2). Filters, not scores.
 9. **Features + score** — type, recency (half-life by type; constraint = 1), path/symbol Jaccard, min-max BM25, cosine, agree, graded overlap, dwell, served, OON. Stat mtimes on the current top 30 only. `[verify]` is ephemeral.
 10. **Pack ≤ 5** — best failed-overlap first. Then `score − 0.8 × max_sim`. Type cap 2 if another type is uncovered. Diversity Jaccard 0.8. Evict so a job-1 failed cannot lose to the cap.
-11. **Emit + record** — warnings cite ids that are in the packet. Then write `ask` / `warn` rows to the tape. Fail-open.
+11. **Emit + record** — warnings cite ids that are in the packet; the recurrence warning may cite the cluster's newest id from outside it (still get_record-able). Then write `ask` / `warn` rows to the tape. Fail-open.
 
 Details and diagrams: [algorithm.md](algorithm.md).
 

@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -153,6 +154,17 @@ func (e Engine) prepare(req Request) (prep, error) {
 	packed := pack(cand, q.LimitTokens, q.Head)
 	preEvict := packed
 	packed = evictFailed(packed, cand, q.LimitTokens)
+	// A single FTS hit normalizes to bm25=1 regardless of match quality,
+	// so the bm25 rescue route needs a second FTS candidate to be
+	// meaningful: rank 1 of 1 is not "top of FTS".
+	ftsN := 0
+	for _, c := range cand {
+		if c.isFTS {
+			ftsN++
+		}
+	}
+	preCon := packed
+	packed = evictConstraint(packed, cand, q.LimitTokens, ftsN)
 	in := map[string]bool{}
 	for _, c := range packed {
 		in[c.rec.ID] = true
@@ -164,6 +176,11 @@ func (e Engine) prepare(req Request) (prep, error) {
 	for _, c := range preEvict {
 		if !in[c.rec.ID] {
 			p.drops = append(p.drops, traceDrop{rec: c.rec, reason: "evicted-for-failed", sc: c, scored: true})
+		}
+	}
+	for _, c := range preCon {
+		if !in[c.rec.ID] {
+			p.drops = append(p.drops, traceDrop{rec: c.rec, reason: "evicted-for-constraint", sc: c, scored: true})
 		}
 	}
 	packedText := make([][]string, 0, len(packed))
@@ -180,6 +197,17 @@ func (e Engine) prepare(req Request) (prep, error) {
 		p.drops = append(p.drops, traceDrop{rec: c.rec, reason: packSkipReason(c, packed, packedText), sc: c, scored: true})
 	}
 	hits, warnings, tokens := emit(packed, e.Store)
+	// Recurrence-keyed warnings fire independent of overlap, of
+	// packing, and of ask vocabulary: the store-level scan sees
+	// gate-named faileds that the extract-noise gate keeps out of packs,
+	// so they count toward the trigger without entering it. A standing
+	// trap warns on any ask until its constraint lifecycle retires it.
+	for _, w := range recurrenceWarnings(e.Store, q, packed, e.now()) {
+		if !slices.Contains(warnings, w) {
+			warnings = append(warnings, w)
+			tokens += estimateTokens(w)
+		}
+	}
 	p.cand = cand
 	p.packed = packed
 	p.out = Response{Context: hits, Warnings: warnings, Tokens: tokens, Project: q.ProjectKey}
@@ -323,10 +351,14 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]fl
 		}
 		add(ftsIDs)
 	}
+	pathFound := false
 	if len(q.PathKeys) > 0 {
 		p, err := e.Store.IDsByPath(q.ProjectKey, q.PathKeys, PathPerCap, PathTotalCap)
 		if err != nil {
 			return nil, nil, nil, nil, err
+		}
+		if len(p) > 0 {
+			pathFound = true
 		}
 		add(p)
 	}
@@ -357,10 +389,14 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]fl
 	if vecIDs := e.vectorHits(q, knn); len(vecIDs) > 0 {
 		add(vecIDs)
 	}
-	// Pathless ask: hop through files the first pass already found.
-	// "add rate limiting" hits the limiter decision, then pulls the Redis
-	// failed on that same file — without dumping last week's warehouse timeout.
-	if len(q.PathKeys) == 0 && len(ids) > 0 {
+	// Path hop through files the first pass already found. Two entry
+	// conditions, same route: a pathless ask ("add rate limiting" hits
+	// the limiter decision, then pulls the Redis failed on that same
+	// file — without dumping last week's warehouse timeout), and a
+	// weak-path ask whose guessed paths matched nothing. Harnesses send
+	// agent-guessed paths, so a pathed ask with an empty path route is
+	// the same recall situation as a pathless one; parity is the fix.
+	if !pathFound && len(ids) > 0 {
 		inferred, err := e.inferredPaths(ids)
 		if err != nil {
 			return nil, nil, nil, nil, err
