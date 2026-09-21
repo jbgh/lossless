@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.29 — unreleased
+## 0.1.29 — 2026-09-21
 
 - OpenCode: a reply that is still streaming no longer reaches the tape. The dump renders the whole session on every catch-up and the copy is by byte cursor, while the watcher polls `opencode.db` mid-turn: a step rendered as `"content":null` (53 bytes) grew into its reply under the cursor, and the next copy started 53 bytes into the line. 37 of 155 live OpenCode tape lines were front-truncated JSON (`e":"text","text":"A look at the repo …`) that parse dropped, so the model's prose from 15 of 20 sessions never reached extract; 99 more lines were `"content":null`. The dump now stops at the first message that can still change: an assistant step counts once it has `time.completed` or an `error`, or once a later step exists (144 of 34,596 live steps died without either). Steps with nothing for the tape are skipped.
 - OpenCode tool output is on the tape. The dump read `output` at the top of a tool part; OpenCode keeps it under `state.output` (`state.error` on a failed call), so no tool result had ever been copied. It lands as a `tool_result` part with the tool's name, clipped like a long turn, and stays out of claim prose like every other harness's tool output.
