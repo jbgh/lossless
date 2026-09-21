@@ -314,7 +314,7 @@ CREATE TABLE message (id TEXT, session_id TEXT, time_created INTEGER, data TEXT)
 CREATE TABLE part (id TEXT, message_id TEXT, time_created INTEGER, data TEXT);
 INSERT INTO session(id, directory, time_updated) VALUES('ses_watch', ?, 42);
 INSERT INTO message(id, session_id, time_created, data) VALUES
- ('m1', 'ses_watch', 1, '{"role":"assistant"}');
+ ('m1', 'ses_watch', 1, '{"role":"assistant","time":{"created":1,"completed":2}}');
 INSERT INTO part(id, message_id, time_created, data) VALUES
  ('p1', 'm1', 1, '{"type":"text","text":"We decided to use jose, not jsonwebtoken, for Edge."}');
 `, ws)

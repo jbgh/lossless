@@ -91,9 +91,11 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 	}
 	defer src.Close()
 	srcOff := st.Cursor(req.JSONL)
-	if srcOff > info.Size() {
+	if srcOff > info.Size() || offLineBoundary(src, srcOff) {
 		// Compact (or a rewrite) shrank the harness file. A cursor past
 		// EOF would no-op forever and drop every turn after the rewrite.
+		// A rewrite that did not shrink leaves the cursor inside a line,
+		// and copying from there puts a front-truncated line on the tape.
 		live := st.LiveRawPath(project, session, info.ModTime())
 		if _, err := os.Stat(live); err == nil {
 			if z, err := SealRaw(live); err == nil {
@@ -251,6 +253,20 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 	return out, nil
 }
 
+// offLineBoundary reports a cursor that does not sit just past a newline.
+// CatchUp only ever advances the cursor over whole lines, so an append-only
+// source never trips this.
+func offLineBoundary(f *os.File, off int64) bool {
+	if off <= 0 {
+		return false
+	}
+	var b [1]byte
+	if _, err := f.ReadAt(b[:], off-1); err != nil {
+		return false
+	}
+	return b[0] != '\n'
+}
+
 func fileByteSize(f *os.File) int64 {
 	if f == nil {
 		return 0
@@ -313,6 +329,7 @@ type virtualLine struct {
 
 type virtualPart struct {
 	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
 	Text string `json:"text,omitempty"`
 }
 
@@ -332,6 +349,7 @@ func stabilizeContent(v any) any {
 			}
 			out = append(out, virtualPart{
 				Type: stringField(m, "type", "text"),
+				Name: stringField(m, "name", ""),
 				Text: stringField(m, "text", ""),
 			})
 		}

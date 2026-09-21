@@ -24,7 +24,7 @@ CREATE TABLE part (id TEXT, message_id TEXT, time_created INTEGER, data TEXT);
 INSERT INTO session(id, directory) VALUES('ses_1', '/Users/jay/dev/api');
 INSERT INTO message(id, session_id, time_created, data) VALUES
  ('m1', 'ses_1', 1, '{"role":"user"}'),
- ('m2', 'ses_1', 2, '{"role":"assistant"}');
+ ('m2', 'ses_1', 2, '{"role":"assistant","time":{"created":2,"completed":3}}');
 INSERT INTO part(id, message_id, time_created, data) VALUES
  ('p1', 'm1', 1, '{"type":"text","text":"Always use jose please."}'),
  ('p2', 'm2', 2, '{"type":"text","text":"We decided to use jose, not jsonwebtoken, for Edge."}'),

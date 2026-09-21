@@ -99,7 +99,7 @@ Install order: **Grok → Claude → Codex → Pi → OpenCode**. That is popula
 
 - Locate: **no tail-able JSONL**. Live install is `~/.local/share/opencode/opencode.db` (Drizzle): `session.directory`, `message.data` (role), `part.data` (text / tool / reasoning). `storage/` is not a session log.
 - Fire: plugin `session.idle`, `experimental.session.compacting`, `session.compacted`, `session.deleted`. The watcher lists `session` rows and dumps those whose `time_updated` is ahead of the cursor (16 per tick) so a missed plugin still copies the tape.
-- Normalize: dump message+parts to `{role, content}` and catch-up. HTTP `POST /v1/catch-up` with `harness=opencode` + `session_id` reads the DB; `messages[]` is the no-file fallback.
+- Normalize: dump message+parts to `{role, content}` and catch-up. HTTP `POST /v1/catch-up` with `harness=opencode` + `session_id` reads the DB; `messages[]` is the no-file fallback. The dump is rendered whole each time and copied by byte cursor, so it only holds messages that can no longer change: it stops at the first assistant step without `time.completed` or `error` (a dead step counts once a later step exists). Text parts are prose; a tool part's `state.output` / `state.error` is a clipped `tool_result`; reasoning and empty steps are left out.
 - Install: `~/.config/opencode/plugins/lossless.ts` (auto-loaded).
 
 OpenCode is last because the on-disk format is SQLite, not a file we can tail. The core still does not change.

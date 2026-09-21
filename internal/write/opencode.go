@@ -55,6 +55,12 @@ func ListOpenCodeSessions(dbPath string) []OpenCodeSession {
 
 // ReadOpenCodeSession dumps one session from OpenCode's SQLite store
 // (message.data + part.data) into generic {role, content} objects.
+//
+// The dump is rendered whole on every catch-up and copied by byte cursor,
+// and the watcher polls mid-turn. A line may only appear once it can no
+// longer change, so the dump stops at the first message that is not settled.
+// A streaming reply rendered early grew under the cursor and the next copy
+// started inside it: 37 of 155 live tape lines were front-truncated JSON.
 func ReadOpenCodeSession(dbPath, sessionID string) (directory string, msgs []map[string]any, err error) {
 	db, err := sql.Open("sqlite", "file:"+dbPath+"?mode=ro")
 	if err != nil {
@@ -85,9 +91,16 @@ func ReadOpenCodeSession(dbPath, sessionID string) (directory string, msgs []map
 	if err := rows.Err(); err != nil {
 		return directory, nil, err
 	}
-	for _, r := range list {
-		var data map[string]any
-		_ = json.Unmarshal([]byte(r.data), &data)
+	datas := make([]map[string]any, len(list))
+	lastAssistant := -1
+	for i, r := range list {
+		_ = json.Unmarshal([]byte(r.data), &datas[i])
+		if role, _ := datas[i]["role"].(string); role == "assistant" {
+			lastAssistant = i
+		}
+	}
+	for i, r := range list {
+		data := datas[i]
 		role, _ := data["role"].(string)
 		if role == "" {
 			role = "other"
@@ -102,6 +115,20 @@ func ReadOpenCodeSession(dbPath, sessionID string) (directory string, msgs []map
 				content = []any{map[string]any{"type": "text", "text": t}}
 			}
 		}
+		settled := len(content) > 0 || i < len(list)-1
+		if role == "assistant" {
+			// OpenCode runs one step at a time: a step that died without
+			// time.completed is final once a later step exists.
+			settled = openCodeStepDone(data) || i < lastAssistant
+		}
+		if !settled {
+			break
+		}
+		if len(content) == 0 {
+			// A step of reasoning or an empty tool call has nothing for the
+			// tape. It is settled, so skipping it is stable.
+			continue
+		}
 		msgs = append(msgs, map[string]any{
 			"type":    "message",
 			"role":    role,
@@ -109,6 +136,15 @@ func ReadOpenCodeSession(dbPath, sessionID string) (directory string, msgs []map
 		})
 	}
 	return directory, msgs, nil
+}
+
+func openCodeStepDone(data map[string]any) bool {
+	if data["error"] != nil {
+		return true
+	}
+	tm, _ := data["time"].(map[string]any)
+	done, _ := tm["completed"].(float64)
+	return done > 0
 }
 
 func loadOpenCodeParts(db *sql.DB, messageID string) ([]any, error) {
@@ -134,10 +170,21 @@ func loadOpenCodeParts(db *sql.DB, messageID string) ([]any, error) {
 				out = append(out, map[string]any{"type": "text", "text": t})
 			}
 		case "tool", "tool-result", "tool_result":
-			if t := flatten(p["output"]); t != "" {
-				out = append(out, map[string]any{"type": "text", "text": t})
-			} else if t, _ := p["text"].(string); t != "" {
-				out = append(out, map[string]any{"type": "text", "text": t})
+			// OpenCode keeps a call's result under state. As a text part it
+			// would extract as the model's prose; tool_result stays on the
+			// tape only. Clipped so a long session fits the virtual cap.
+			t := flatten(p["output"])
+			if st, ok := p["state"].(map[string]any); ok && t == "" {
+				if t = flatten(st["output"]); t == "" {
+					t = flatten(st["error"])
+				}
+			}
+			if t == "" {
+				t, _ = p["text"].(string)
+			}
+			if t != "" {
+				name, _ := p["tool"].(string)
+				out = append(out, map[string]any{"type": "tool_result", "name": name, "text": clip(t)})
 			}
 		case "reasoning", "step-start", "step-finish":
 			continue
