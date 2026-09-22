@@ -91,6 +91,56 @@ Each record is one of five types:
 
 `id` is a citation. `get_record` opens the tape excerpt behind any record, so a one-line claim is never the whole story.
 
+# Install
+
+```bash
+curl -fsSL https://github.com/jbgh/lossless/releases/latest/download/install.sh | sh
+lossless setup
+lossless doctor
+```
+
+That writes a real binary to `~/.local/bin/lossless` (a dest symlink is replaced, not followed), then hooks, MCP, a skill, and a user service — home rules only inside `<!-- lossless:start -->` … `<!-- lossless:end -->` markers. Start a new agent session so the MCP tools appear (Grok: `/hooks` then `r`; `/skills` then `r` if the session is already open). Everything stays on this machine.
+
+Binaries: macOS and Linux, amd64 and arm64.
+
+```bash
+lossless update          # later
+lossless update --check
+lossless version
+```
+
+`update` is the only command that calls GitHub. A token is only needed if `LOSSLESS_UPDATE_REPO` points at a private fork.
+
+### From source
+
+```bash
+go test ./...
+go build -o lossless ./cmd/lossless
+./lossless setup
+./lossless doctor
+```
+
+### Where it runs
+
+| | Local (default) | From source | Remote home |
+|---|-----------------|-------------|-------------|
+| **Best for** | This machine | Contributors | A box lossless already runs on |
+| **Setup** | `install.sh` then `lossless setup` | `go build` then `./lossless setup` | TLS + `LOSSLESS_URL` + `LOSSLESS_TOKEN` |
+| **Store** | `~/.lossless` | same | copy `raw/` or start empty |
+| **Network** | none, except `update` | none, except `update` | client to home only |
+
+A remote home is documented and manual. lossless does not provision a cloud or ship the store. See [docs/deploy.md](docs/deploy.md).
+
+### Basic usage
+
+After the new session starts, the agent calls `ask` on its own — no typing required. The same JSON is available three ways: MCP tools (`ask`, `remember`, `get_record`), `POST /v1/ask`, or the CLI:
+
+```bash
+lossless ask --project owner/repo --goal "what the agent is about to do" --path src/app.ts
+lossless remember --type decision --text "..." --project owner/repo
+lossless inspect --project owner/repo --ask
+```
+
 # How it works
 
 ### Compact only
@@ -152,98 +202,6 @@ Write is push (hooks on compact, stop, prompt submit, session end). Read is pull
 - **Across models and harnesses.** Grok, Claude Code, Codex, Pi, and OpenCode write to one store. Switch tools on the same repo and `ask` still returns the same faileds and decisions.
 - **Local by default.** `127.0.0.1`, no token, nothing uploaded. No LLM on retrieve, no hosted embeddings. `doctor` does not phone home. `update` is the only command that calls GitHub.
 - **Backup is yours.** Optional `lossless backup` copies the store to an S3-compatible bucket you own (AWS, R2, B2, MinIO) — encrypted with a key you hold, on a schedule, generations restorable with `lossless restore`. `ask` still reads local files. See [docs/deploy.md](docs/deploy.md).
-
-# Quickstart
-
-### Tell the agent
-
-Open any supported coding agent and paste this. The agent does the rest.
-
-```
-Install lossless from https://github.com/jbgh/lossless.
-
-This machine only. macOS or Linux. Not Windows. setup writes Grok, Claude,
-Codex, Pi, and OpenCode even if this session is only one of them.
-Do not upload anything. Do not auto-inject packs. Do not edit the user's
-CLAUDE.md / AGENTS.md outside <!-- lossless:start --> ... <!-- lossless:end -->.
-
-1. If lossless version works, skip to 2. Else:
-   curl -fsSL https://github.com/jbgh/lossless/releases/latest/download/install.sh | sh
-   Fallback (needs Go): git clone --depth 1 https://github.com/jbgh/lossless.git /tmp/lossless
-   && cd /tmp/lossless && go build -o lossless ./cmd/lossless
-   && mkdir -p "$HOME/.local/bin" && mv lossless "$HOME/.local/bin/lossless"
-   Put ~/.local/bin on PATH. Confirm: lossless version
-
-2. lossless setup && lossless doctor
-   If daemon is FAIL: lossless serve --watch
-   If hooks/mcp/skills are missing: lossless setup again
-   Do not finish while daemon is FAIL.
-
-3. This session will not see MCP until reload. Tell the user:
-   Grok:     /hooks then r. /skills then r if this session is already open.
-   Claude:   new Claude Code session
-   Codex:    new Codex session
-   Pi:       new Pi session
-   OpenCode: new OpenCode session
-   Unknown:  start a new agent session so lossless MCP tools appear.
-
-4. After reload, on real work call MCP ask (workspace_root, goal, paths,
-   session_id when the prompt has one) before implementing.
-   Treat warnings as blocking unless the user overrides.
-   Do not wait for /lossless. Later: lossless update && lossless doctor
-
-Print lossless version, doctor, and which reload is needed. Then stop.
-```
-
-### Manual
-
-```bash
-curl -fsSL https://github.com/jbgh/lossless/releases/latest/download/install.sh | sh
-lossless setup
-lossless doctor
-```
-
-That writes a real binary to `~/.local/bin/lossless` (a dest symlink is replaced, not followed), then hooks, MCP, a skill, and a user service. Start a new agent session (Grok: `/hooks` then `r`; `/skills` then `r` if the session is already open). Everything stays on this machine.
-
-Binaries: macOS and Linux, amd64 and arm64.
-
-```bash
-lossless update          # later
-lossless update --check
-lossless version
-```
-
-`update` is the only command that calls GitHub. A token is only needed if `LOSSLESS_UPDATE_REPO` points at a private fork.
-
-### From source
-
-```bash
-go test ./...
-go build -o lossless ./cmd/lossless
-./lossless setup
-./lossless doctor
-```
-
-### Where it runs
-
-| | Local (default) | From source | Remote home |
-|---|-----------------|-------------|-------------|
-| **Best for** | This machine | Contributors | A box lossless already runs on |
-| **Setup** | `install.sh` then `lossless setup` | `go build` then `./lossless setup` | TLS + `LOSSLESS_URL` + `LOSSLESS_TOKEN` |
-| **Store** | `~/.lossless` | same | copy `raw/` or start empty |
-| **Network** | none, except `update` | none, except `update` | client to home only |
-
-A remote home is documented and manual. lossless does not provision a cloud or ship the store. See [docs/deploy.md](docs/deploy.md).
-
-### Basic usage
-
-After reload, the agent calls `ask` on its own — no typing required. The same JSON is available three ways: MCP tools (`ask`, `remember`, `get_record`), `POST /v1/ask`, or the CLI:
-
-```bash
-lossless ask --project owner/repo --goal "what the agent is about to do" --path src/app.ts
-lossless remember --type decision --text "..." --project owner/repo
-lossless inspect --project owner/repo --ask
-```
 
 # Commands
 
