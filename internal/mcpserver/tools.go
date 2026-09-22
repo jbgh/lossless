@@ -22,7 +22,7 @@ func toolDefs() []map[string]any {
 					"workspace_root": map[string]any{"type": "string", "description": "Absolute git checkout of this repo (origin derives owner/repo). Used for [verify] mtimes."},
 					"goal":           map[string]any{"type": "string", "description": "What the agent is about to do."},
 					"paths":          map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Repo-relative files in this checkout, not /tmp reports."},
-					"session_id":     map[string]any{"type": "string", "description": "Harness session id from this prompt (child's own id in a subagent or workflow). Omit if the prompt does not have one. Do not invent. Never send default."},
+					"session_id":     map[string]any{"type": "string", "description": "Harness session id (the child's own id in a subagent or workflow): from this prompt, or from the shell — `echo $PI_SESSION_ID` — when the prompt does not show one. Omit only if both are empty. Do not invent. Never send default."},
 					"limit_tokens":   map[string]any{"type": "integer", "description": "Token budget for context. Default 1200."},
 				},
 			},
@@ -40,7 +40,7 @@ func toolDefs() []map[string]any {
 					"workspace_root": map[string]any{"type": "string"},
 					"paths":          map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 					"why":            map[string]any{"type": "string"},
-					"session_id":     map[string]any{"type": "string", "description": "Harness session id from this prompt, so the remember lands on this session's tape. Omit if the prompt does not have one."},
+					"session_id":     map[string]any{"type": "string", "description": "Harness session id, so the remember lands on this session's tape: from this prompt, or `echo $PI_SESSION_ID` in the shell. Omit if both are empty."},
 				},
 			},
 		},
@@ -54,7 +54,7 @@ func toolDefs() []map[string]any {
 					"id":             map[string]any{"type": "string"},
 					"project":        map[string]any{"type": "string"},
 					"workspace_root": map[string]any{"type": "string"},
-					"session_id":     map[string]any{"type": "string", "description": "Harness session id from this prompt, so the dwell is booked to this session. Omit if the prompt does not have one."},
+					"session_id":     map[string]any{"type": "string", "description": "Harness session id, so the dwell is booked to this session: from this prompt, or `echo $PI_SESSION_ID` in the shell. Omit if both are empty."},
 				},
 			},
 		},
@@ -91,6 +91,7 @@ func (s *Server) toolAsk(args json.RawMessage) (any, error) {
 			return toolErr("invalid ask arguments"), nil
 		}
 	}
+	req.SessionID = fillSession(req.SessionID)
 	out, err := s.Backend.Ask(req)
 	if err != nil {
 		return toolErr(err.Error()), nil
@@ -110,7 +111,7 @@ func (s *Server) toolRemember(args json.RawMessage) (any, error) {
 	if rec.ProjectKey == "" {
 		rec.ProjectKey = body.Project
 	}
-	rec.SessionID = retrieve.CleanSessionID(rec.SessionID)
+	rec.SessionID = fillSession(rec.SessionID)
 	out, err := s.Backend.Remember(rec)
 	if err != nil {
 		return toolErr(err.Error()), nil
@@ -132,7 +133,7 @@ func (s *Server) toolGet(args json.RawMessage) (any, error) {
 	if project == "" && p.WorkspaceRoot != "" {
 		project = projectkey.FromWorkspace(p.WorkspaceRoot)
 	}
-	rec, ok, err := s.Backend.Get(p.ID, project, retrieve.CleanSessionID(p.SessionID))
+	rec, ok, err := s.Backend.Get(p.ID, project, fillSession(p.SessionID))
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}

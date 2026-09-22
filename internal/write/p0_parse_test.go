@@ -24,3 +24,26 @@ func TestStripHarnessChromeNonASCII(t *testing.T) {
 		}
 	}
 }
+
+// Pi injects skill bodies wrapped in <skill name=… location=…>…</skill>
+// and <skills>. Open tags with attributes must strip; lookalike tags and
+// user-typed angle brackets must survive.
+func TestStripSkillSpans(t *testing.T) {
+	cases := map[string]string{
+		`before <skill name="lossless" location="/x/SKILL.md">Never undo a decision.</skill> after`: "before  after",
+		`<skills><skill>a</skill><skill name="k" location="l">b</skill></skills>kept`:               "kept",
+		`<SKILL NAME="x" LOCATION="y">hidden</SKILL>`:                                               "",
+		`<skillful>docs</skillful>`:                             "<skillful>docs</skillful>",
+		`unclosed <skill name="x">drops to end`:                 "unclosed",
+		`İstanbul <skill name="x">hidden</skill> we decided X.`: "İstanbul  we decided X.",
+	}
+	for in, want := range cases {
+		got := stripHarnessChrome(in)
+		if got != want {
+			t.Errorf("stripHarnessChrome(%q) = %q, want %q", in, got, want)
+		}
+		if strings.Contains(got, "hidden") && !strings.Contains(in, "skillful") {
+			t.Errorf("skill chrome survived in %q", got)
+		}
+	}
+}

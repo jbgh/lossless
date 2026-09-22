@@ -41,6 +41,32 @@ func TestParseSkipsSkillAndCommandChrome(t *testing.T) {
 	}
 }
 
+// Pi wraps skill bodies in <skill name=… location=…>…</skill> inside a
+// user message. The skill's rules and doc examples are not the user's
+// constraints; the user's own lines around the block still extract.
+func TestParseSkipsPiSkillWrapper(t *testing.T) {
+	skill := `<skill name="lossless" location="/home/u/.pi/agent/skills/lossless/SKILL.md">` + "\n" +
+		"# lossless\n\nCall ask before implementing.\n" +
+		`question: <the user's ask, or "what must I not forget">,` + "\n" +
+		"Never undo a decision or violate a constraint.\n</skill>"
+	body := claudeUser(skill+"\n\nNever log Authorization headers in src/middleware/auth.ts.", "")
+	msgs, _ := ParseJSONL(body, 0)
+	got := Extract(msgs, ExtractOpts{ProjectKey: "acme/api", Harness: "pi", SessionID: "s", Source: "turn"})
+	realConstraint := false
+	for _, r := range got {
+		switch {
+		case strings.Contains(r.Text, "must not forget"), strings.Contains(r.Text, "Never undo"),
+			strings.Contains(r.Text, "ask before implementing"):
+			t.Fatalf("skill text stored as claim: %+v", r)
+		case strings.Contains(r.Text, "Authorization headers"):
+			realConstraint = r.Type == "constraint"
+		}
+	}
+	if !realConstraint {
+		t.Fatalf("real user constraint lost: %+v", got)
+	}
+}
+
 // isMeta is shell output, isCompactSummary is the harness's own summary,
 // isSidechain user turns are a parent's prompt to a subagent.
 func TestParseHonorsClaudeFlags(t *testing.T) {

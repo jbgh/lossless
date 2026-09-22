@@ -129,21 +129,9 @@ func asciiLower(s string) string {
 func stripHarnessChrome(text string) string {
 	text = stripTaskNotifications(text)
 	for _, tag := range []string{"system-reminder", "user_info", "agent-reminder", "claude-user-context",
-		"command-name", "command-message", "command-args", "local-command-stdout", "local-command-caveat"} {
-		open, close := "<"+tag+">", "</"+tag+">"
-		for {
-			low := asciiLower(text)
-			i := strings.Index(low, open)
-			if i < 0 {
-				break
-			}
-			if j := strings.Index(low[i:], close); j >= 0 {
-				text = text[:i] + text[i+j+len(close):]
-				continue
-			}
-			text = text[:i]
-			break
-		}
+		"command-name", "command-message", "command-args", "local-command-stdout", "local-command-caveat",
+		"skills", "skill"} {
+		text = stripTagSpan(text, tag)
 	}
 	for {
 		i := strings.Index(text, "<!--")
@@ -256,6 +244,44 @@ func onlyTaskNotifications(text string) bool {
 // stripTaskNotifications reduces a Claude Code <task-notification> block
 // to its <result> bodies. The summary ("Background command … failed with
 // exit code 1"), note, ids, and status are harness chrome, not claims.
+// stripTagSpan drops <tag …>…</tag> spans. The open tag may carry
+// attributes: Pi injects skill bodies as
+// <skill name=… location=…>…</skill>, and a skill's rules and examples
+// are not the user's constraints. An unclosed span drops to the end of
+// the text.
+func stripTagSpan(text, tag string) string {
+	open, close := "<"+tag, "</"+tag+">"
+	for {
+		low := asciiLower(text)
+		i := tagOpen(low, open)
+		if i < 0 {
+			return text
+		}
+		next := len(text)
+		if j := strings.Index(low[i:], close); j >= 0 {
+			next = i + j + len(close)
+		}
+		text = text[:i] + text[next:]
+	}
+}
+
+// tagOpen finds open only at a tag-name boundary: <skillful> is not
+// <skill>.
+func tagOpen(low, open string) int {
+	for from := 0; ; {
+		i := strings.Index(low[from:], open)
+		if i < 0 {
+			return -1
+		}
+		i += from
+		j := i + len(open)
+		if j >= len(low) || low[j] == '>' || low[j] == '/' || low[j] <= ' ' {
+			return i
+		}
+		from = i + 1
+	}
+}
+
 func stripTaskNotifications(text string) string {
 	const open, close = "<task-notification>", "</task-notification>"
 	for {

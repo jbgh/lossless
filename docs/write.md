@@ -235,7 +235,7 @@ From new messages only:
 
 Same heuristic extract as the spike (`failed` / `decision` / `constraint` / `state` / `thread`), same 12-per-batch cap, same `claim_hash` supersede.
 
-**Skip on ingest:** `system`, `reasoning`, synthetic user dumps (`synthetic_reason`, or user text that is only a `<system-reminder>` / skills catalog), and any tool call/result named `ask`, `remember`, or `catch-up`. Those stay in raw. They must not become claims (see [pipeline.md](pipeline.md)).
+**Skip on ingest:** `system`, `reasoning`, synthetic user dumps (`synthetic_reason`, or user text that is only a `<system-reminder>` / skills catalog), skill-doc wrappers (Pi injects a skill body as user text in `<skill name=… location=…>…</skill>` / `<skills>`; attributed opens included, `<skillful>` is not a match), and any tool call/result named `ask`, `remember`, or `catch-up`. Those stay in raw. They must not become claims (see [pipeline.md](pipeline.md)).
 
 **Model output in a user slot:** Claude Code delivers a subagent's final report as a user-role message wrapped in `<agent-message>` ("[Subagent hand-back] …"), and queues a finished subagent or background command as a `<task-notification>`. Both extract as **assistant** text, without the harness frame: a report's "Never ran approve-ci.sh, never merged" is a self-report, not a rule the user typed, so it cannot become a constraint. A user who types next to a notification is still the user.
 
