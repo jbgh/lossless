@@ -32,6 +32,7 @@ func Encode(key string) string {
 
 func Normalize(input string) string {
 	s := strings.ToLower(strings.TrimSpace(input))
+	s = strings.TrimSuffix(strings.TrimRight(s, "/"), "/.git")
 	s = strings.TrimSuffix(s, ".git")
 	if strings.Contains(s, "/") {
 		if k := FromOrigin(s); k != "" {
@@ -57,6 +58,8 @@ func Normalize(input string) string {
 func FromOrigin(origin string) string {
 	raw := strings.TrimSpace(origin)
 	raw = strings.TrimPrefix(raw, "git+")
+	// An origin at a repo's own .git dir names the repo by its parent.
+	raw = strings.TrimSuffix(strings.TrimRight(raw, "/"), "/.git")
 	if m := looseOrigin.FindStringSubmatch(raw); len(m) == 3 {
 		repo := strings.TrimSuffix(strings.ToLower(m[2]), ".git")
 		return strings.ToLower(m[1]) + "/" + repo

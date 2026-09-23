@@ -56,6 +56,7 @@ Install: `lossless setup`. That is hooks + MCP for all five and a health check. 
 | MCP config | `~/.grok/config.toml` HTTP `/mcp` | `~/.claude.json` stdio `lossless mcp` | `~/.pi/agent/mcp.json` stdio | `~/.config/opencode/opencode.json` local | `~/.codex/config.toml` stdio |
 | Token | `headers.Authorization = Bearer ${LOSSLESS_TOKEN}` | inherit env | inherit env | inherit env | inherit env |
 | Skill | `~/.grok/skills/lossless/SKILL.md` | `~/.claude/skills/lossless/SKILL.md` | `~/.pi/agent/skills/lossless/SKILL.md` (+ `~/.agents/skills`) | `~/.config/opencode/skills/lossless/SKILL.md` (also sees `~/.claude/skills` and `~/.agents/skills`) | `~/.codex/skills/lossless/SKILL.md` (+ `~/.agents/skills`) |
+| Ask `session_id` | model sends it if the prompt shows it | MCP child env `CLAUDE_CODE_SESSION_ID`, taken only when the MCP server's parent process is `claude` (a Pi or OpenCode started from a Claude shell inherits the id). Subagents share the parent's MCP server and book to the parent session. | extension `tool_call` stamps `ctx.sessionManager.getSessionId()` on every lossless call | plugin `tool.execute.before` stamps `input.sessionID` | model sends it if the prompt shows it |
 | Always-on rule | `~/.grok/rules/lossless.md` | `~/.claude/CLAUDE.md` marked section + `~/.claude/rules/lossless.md` | `~/.pi/agent/AGENTS.md` marked section | `~/.config/opencode/AGENTS.md` marked section | `~/.codex/AGENTS.md` marked section (`AGENTS.override.md` if that file is already the active global) |
 
 The skill is when/how to call `ask`. The always-on rule is the one-liner that stays in session context so the model does not wait for `/lossless`. Setup upserts a marked `<!-- lossless:start -->` … `<!-- lossless:end -->` block and leaves the rest of the user's CLAUDE.md / AGENTS.md alone.
@@ -63,6 +64,8 @@ The skill is when/how to call `ask`. The always-on rule is the one-liner that st
 Install order: **Grok → Claude → Codex → Pi → OpenCode**. That is popularity plus "do we have a file we can copy before the window dies."
 
 ---
+
+The MCP server keeps a caller-sent `session_id` only when it has a harness shape (UUID, `ses_…`, `agent-<hex>`; a UUID with a `-<pid>` or `.partN` suffix trims to the UUID). A made-up name (`w22-ios`) is dropped, then the harness fill above applies (`LOSSLESS_SESSION_ID` first, for wrappers). Nothing is guessed from other sessions.
 
 ## Per harness
 

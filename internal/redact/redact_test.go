@@ -90,8 +90,8 @@ func TestLineRedacts(t *testing.T) {
 	if ContainsSecret(got) {
 		t.Fatalf("redacted line still secret: %s", got)
 	}
-	if !strings.Contains(got, `_redacted`) {
-		t.Fatalf("marker: %s", got)
+	if got != `{"content":"[redacted]"}`+"\n" {
+		t.Fatalf("span marker: %s", got)
 	}
 	if Line("") != "" {
 		t.Fatal("empty")

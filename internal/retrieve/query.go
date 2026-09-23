@@ -392,7 +392,7 @@ func extractNoise(rec claim.Record) bool {
 			return true
 		}
 	case "decision":
-		if gate.Planning(t) || gate.QuotedAttribution(t) || gate.NarrativeDecision(t) {
+		if gate.Planning(t) || gate.QuotedAttribution(t) || gate.NarrativeDecision(t) || write.HypotheticalDecision(t) {
 			return true
 		}
 		// Legacy turn-extracted decisions with no referent. Explicit
@@ -413,7 +413,7 @@ func extractNoise(rec claim.Record) bool {
 		if gate.SuccessReport(t) {
 			return true
 		}
-		if gate.StatusFailed(t) || gate.FailedAsObject(t) || (len(rec.Paths) == 0 && failedOnlyInTicks(t)) {
+		if gate.StatusFailed(t) || gate.FailedAsObject(t) || (len(rec.Paths) == 0 && failedOnlyInTicks(t)) || write.NotAFailure(t) {
 			return true
 		}
 		if !write.GroundedFailed(t, rec.Paths) {

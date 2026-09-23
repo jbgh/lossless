@@ -187,7 +187,7 @@ catch_up(harness_path, project_key, session_id, workspace_root, harness, source)
   2. src_off = cursors.harness[harness_path] or 0
   3. if src_off >= size(harness_path): unlock; return
   4. read harness_path[src_off:] as bytes
-  5. redact_stream(bytes) → clean_bytes     # drop secret lines, keep the rest
+  5. redact_stream(bytes) → clean_bytes     # blank secret spans, keep the lines
   6. append clean_bytes to raw/.../<session_id>.jsonl
      (temp + flush + size-check; do not rename away a live append file)
   7. cursors.harness[harness_path] = src_off + consumed
@@ -212,7 +212,7 @@ Never call a model inside catch-up.
 Applied to bytes **before** they hit `raw/`. Once in raw, we do not go back and rewrite history except via an explicit `scrub` command (operator, offline).
 
 - Same deny-list as the design (AWS keys, `BEGIN PRIVATE`, `Bearer`, `ghp_`, `sk-`, `.env` bodies).
-- A redacted line is replaced with `{"_redacted":true}` so offsets stay line-oriented. We do not silently drop lines (that desyncs cursors).
+- A secret blanks its own span inside the line's JSON strings, as `[redacted]`: a token whole, a connection URL's password, a `NAME=value` value, a private key BEGIN…END block (to the string end when END is missing). Every other byte stays, so the turn still extracts. Placeholders (`<pw>`, `${VAR}`), code references (`process.env.API_KEY`), secret names (`from_secret: android_keystore_b64`), and paths are not secrets. A line that is not JSON, or still holds a secret after the span pass, is replaced whole with `{"_redacted":true}` so offsets stay line-oriented. We do not silently drop lines (that desyncs cursors).
 - Claims that would still contain a secret after extract are not written.
 
 Raw is "everything we are willing to keep on disk." Secrets are not remembered.

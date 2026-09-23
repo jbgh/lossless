@@ -26,8 +26,21 @@ var secrets = []*regexp.Regexp{
 	regexp.MustCompile(`https://hooks\.slack\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]+`),
 	regexp.MustCompile(`https://discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]+`),
 	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`),
-	regexp.MustCompile(`(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|mssql|redis|rediss|amqp|amqps)://[^:\s/@]*:[^@\s]+@`),
 }
+
+// dsnPassword is a connection URL's password: group 1 keeps scheme and
+// user, group 2 is the password. A placeholder (<pw>, ${PGPASSWORD}) is
+// not one.
+var dsnPassword = regexp.MustCompile(`(?i)\b((?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|mssql|redis|rediss|amqp|amqps)://[^:\s/@]*:)([^@\s]+)@`)
+
+// privateKey is a PEM private key block; privateKeyOpen is one whose END
+// never arrived in this string (a clipped cat), blanked to the string end.
+var (
+	privateKey     = regexp.MustCompile(`(?s)-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----.*?-----END (?:[A-Z ]+ )?PRIVATE KEY-----`)
+	privateKeyOpen = regexp.MustCompile(`(?s)-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----.*`)
+)
+
+const redacted = "[redacted]"
 
 // secretAssign is a name-keyed credential: password=…, AWS_SECRET_ACCESS_KEY=…,
 // api_key: hex. The value must look generated (credentialShaped);
@@ -49,6 +62,47 @@ func credentialShaped(v string) bool {
 	return len(v) >= 24
 }
 
+var (
+	fromSecretKey = regexp.MustCompile(`(?i)\bfrom_secret\s*:\s*["']?$`)
+	dottedRef     = regexp.MustCompile(`^[A-Za-z_$][A-Za-z_$]*(?:\.[A-Za-z_$][A-Za-z_$]*)+$`)
+	lowerPath     = regexp.MustCompile(`^(?:/|\./|~/|refs/)[a-z0-9_./~-]*$`)
+	slashWords    = regexp.MustCompile(`^[a-z]+(?:/[a-z]+)+$`)
+	envPlacehold  = regexp.MustCompile(`^(?:\$\{[^}]+\}|\$[A-Z_][A-Z0-9_]*|<[^>]+>|\{\{?[^}]+\}\}?)$`)
+)
+
+// assignedSecret: the value of a name-keyed assignment (match is the
+// whole secretAssign match, v its value) is a credential, not a
+// reference to one. References: a CI secret name (from_secret:
+// android_keystore_b64), a digit-free dotted code path
+// (cookieStore.refreshToken) or a known env/module namespace
+// (process.env.X, base64.b64decode), a lowercase path or refspec
+// (/etc/prometheus/…, refs/for/main), a slash-joined package (next/font).
+// Each exemption is that exact shape: a weak password in snake_case, a
+// hyphenated passphrase, or base64 that opens with / still redacts.
+func assignedSecret(match, v string) bool {
+	if !credentialShaped(v) {
+		return false
+	}
+	name := match[:strings.LastIndex(match, v)]
+	if fromSecretKey.MatchString(name) {
+		return false
+	}
+	low := strings.ToLower(v)
+	for _, ns := range []string{"process.env.", "os.environ", "import.meta.env.", "base64."} {
+		if strings.HasPrefix(low, ns) {
+			return false
+		}
+	}
+	return !dottedRef.MatchString(v) && !lowerPath.MatchString(v) && !slashWords.MatchString(v)
+}
+
+// placeholder is a stand-in a doc or command writes where the password
+// goes: <pw>, ${PGPASSWORD}, $PGPASSWORD, {{password}}, ****, or our own
+// [redacted].
+func placeholder(v string) bool {
+	return v == redacted || envPlacehold.MatchString(v) || strings.Trim(v, "*xX.") == ""
+}
+
 var sensitivePath = regexp.MustCompile(`(?:^|/)(?:\.env(?:\..+)?|\.envrc|.*\.pem|id_rsa|id_rsa\.pub|id_ed25519|id_ed25519\.pub|id_ecdsa|id_dsa|authorized_keys|credentials(?:\.json)?|aws-exports\.js)$`)
 
 func ContainsSecret(text string) bool {
@@ -57,12 +111,65 @@ func ContainsSecret(text string) bool {
 			return true
 		}
 	}
+	for _, m := range dsnPassword.FindAllStringSubmatch(text, -1) {
+		if !placeholder(m[2]) {
+			return true
+		}
+	}
 	for _, m := range secretAssign.FindAllStringSubmatch(text, -1) {
-		if credentialShaped(m[1]) {
+		if assignedSecret(m[0], m[1]) {
 			return true
 		}
 	}
 	return false
+}
+
+// Scrub blanks each secret's own span: a token whole, a URL's password,
+// an assignment's value, a private key block. The rest of the text stays.
+// A blank runs to the end of the token (tokenEnd): a pattern's character
+// class can stop inside a secret, and the tail must not survive.
+func Scrub(text string) string {
+	text = privateKey.ReplaceAllString(text, redacted)
+	text = privateKeyOpen.ReplaceAllString(text, redacted)
+	for _, re := range secrets {
+		text = blankGroup(text, re, 0, nil)
+	}
+	text = blankGroup(text, dsnPassword, 2, func(_, v string) bool { return placeholder(v) })
+	text = blankGroup(text, secretAssign, 1, func(m, v string) bool { return !assignedSecret(m, v) })
+	return text
+}
+
+// blankGroup blanks submatch g of each match, through the end of its
+// token, unless keep (given the whole match and the value) says the value
+// is not a secret.
+func blankGroup(text string, re *regexp.Regexp, g int, keep func(match, v string) bool) string {
+	idx := re.FindAllStringSubmatchIndex(text, -1)
+	if idx == nil {
+		return text
+	}
+	var b strings.Builder
+	last := 0
+	for _, m := range idx {
+		lo, hi := m[2*g], m[2*g+1]
+		if lo < last || lo < 0 || (keep != nil && keep(text[m[0]:m[1]], text[lo:hi])) {
+			continue
+		}
+		hi = tokenEnd(text, hi)
+		b.WriteString(text[last:lo])
+		b.WriteString(redacted)
+		last = hi
+	}
+	b.WriteString(text[last:])
+	return b.String()
+}
+
+// tokenEnd extends i to the end of the token it sits in: the next space,
+// quote, or closing punctuation. A URL password already ends at its @.
+func tokenEnd(text string, i int) int {
+	for i < len(text) && !strings.ContainsRune(" \t\r\n\"'`,;)]}<>@", rune(text[i])) {
+		i++
+	}
+	return i
 }
 
 func ShouldDropClaim(text string, paths []string) bool {
@@ -204,13 +311,18 @@ func codeFileStem(p string) bool {
 	}
 }
 
-// Line returns the line to append to raw. Secret lines become {"_redacted":true}.
+// Line returns the line to append to raw. A JSON line with a secret keeps
+// every byte but the secret spans inside its string values; a line that is
+// not JSON, or still holds a secret after that, becomes {"_redacted":true}.
 func Line(line string) string {
 	trim := strings.TrimSpace(line)
 	if trim == "" {
 		return line
 	}
 	if ContainsSecret(line) {
+		if out, ok := scrubJSONStrings(strings.TrimRight(line, "\r\n")); ok {
+			return out + "\n"
+		}
 		b, _ := json.Marshal(map[string]bool{"_redacted": true})
 		return string(b) + "\n"
 	}
@@ -218,4 +330,60 @@ func Line(line string) string {
 		return line + "\n"
 	}
 	return line
+}
+
+// scrubJSONStrings runs Scrub over each JSON string token of line (keys
+// and values, decoded so escapes are real text) and splices the changed
+// ones back re-encoded. Bytes outside changed strings are untouched.
+func scrubJSONStrings(line string) (string, bool) {
+	if !json.Valid([]byte(line)) {
+		return "", false
+	}
+	var b strings.Builder
+	last := 0
+	for i := 0; i < len(line); i++ {
+		if line[i] != '"' {
+			continue
+		}
+		j := i + 1
+		for j < len(line) && line[j] != '"' {
+			if line[j] == '\\' {
+				j++
+			}
+			j++
+		}
+		if j >= len(line) {
+			return "", false
+		}
+		tok := line[i : j+1]
+		var text string
+		if json.Unmarshal([]byte(tok), &text) == nil {
+			// A key whose END is not in this string continues in strings
+			// the key regex never sees (one string per file line in an
+			// Edit patch): drop the line.
+			if privateKeyOpen.MatchString(privateKey.ReplaceAllString(text, "")) {
+				return "", false
+			}
+			if clean := Scrub(text); clean != text {
+				b.WriteString(line[last:i])
+				b.WriteString(jsonString(clean))
+				last = j + 1
+			}
+		}
+		i = j
+	}
+	b.WriteString(line[last:])
+	out := b.String()
+	if !json.Valid([]byte(out)) || ContainsSecret(out) {
+		return "", false
+	}
+	return out, true
+}
+
+func jsonString(s string) string {
+	var buf strings.Builder
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(s)
+	return strings.TrimSuffix(buf.String(), "\n")
 }

@@ -248,8 +248,8 @@ func TestCatchUpRedactsSecrets(t *testing.T) {
 	if strings.Contains(string(raw), "AKIA") {
 		t.Fatalf("secret leaked into raw: %s", raw)
 	}
-	if !strings.Contains(string(raw), `_redacted`) {
-		t.Fatalf("expected redacted marker: %s", raw)
+	if !strings.Contains(string(raw), `the key is [redacted] do not commit`) {
+		t.Fatalf("expected the secret span blanked and the turn kept: %s", raw)
 	}
 	claims, _ := st.ListActive("acme/api")
 	for _, c := range claims {

@@ -145,3 +145,23 @@ func TestIdentityNoGitCwd(t *testing.T) {
 		t.Fatalf("empty dir should not fail: %q", detail)
 	}
 }
+
+// An origin that points at a repo's own .git directory (a clone from a
+// local path, or a remote set to itself) keys like any local-path origin:
+// parent/name. Matching ".git" as the repo name gave "town-rescue/".
+func TestFromOriginLocalGitDir(t *testing.T) {
+	for in, want := range map[string]string{
+		"/Users/jaybyoun/developer/town-rescue/.git":  "developer/town-rescue",
+		"/Users/jaybyoun/developer/town-rescue/.git/": "developer/town-rescue",
+		"file:///srv/git/town-rescue/.git":            "git/town-rescue",
+		"/srv/repos/foo.git":                          "repos/foo",
+		"git@github.com:jbgh/lossless.git":            "jbgh/lossless",
+	} {
+		if got := FromOrigin(in); got != want {
+			t.Errorf("FromOrigin(%q) = %q, want %q", in, got, want)
+		}
+		if got := Normalize(in); got != want {
+			t.Errorf("Normalize(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

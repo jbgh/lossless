@@ -786,3 +786,56 @@ func ArrowChrome(s string) bool {
 	}
 	return false
 }
+
+var (
+	// speculativeFailRE: the failure is a guess ("may have failed",
+	// "probably failed", "might not work").
+	speculativeFailRE = regexp.MustCompile(`(?i)\b(?:may|might|could)\s+(?:have\s+)?(?:failed|fail|not\s+work|broken|break)\b|\bprobably\s+(?:failed|broke|didn't work)\b`)
+	// eitherOrRE: two rival explanations, neither settled ("Either the
+	// update didn't take … or the failure is unrelated").
+	eitherOrRE = regexp.MustCompile(`(?i)^\W*either\b.*\bor\b`)
+	// offerRE: an action held out to the user ("Revert them if you want…").
+	offerRE = regexp.MustCompile(`(?i)\bif\s+you(?:'d)?\s+(?:want|like|prefer|rather|need)\b`)
+	// hypotheticalRE: a check that would let a wrong input through ("would
+	// still pass"). "would break" is a reason for a choice, not this.
+	hypotheticalRE = regexp.MustCompile(`(?i)\bwould\s+still\s+(?:pass|succeed|work|go\s+through|be\s+accepted)\b`)
+	// toolMishapRE: the agent's own edit/tool call bounced ("the whole call
+	// was rejected", "my second edit was rejected"); "the call was rejected
+	// with a 401" is a product failure.
+	toolMishapRE = regexp.MustCompile(`(?i)\bwhole\s+(?:tool\s+)?(?:call|edit)\s+was\s+rejected\b|\bmy\s+(?:(?:first|second|third|last|previous|next)\s+)?(?:tool\s+call|call|edit)\s+was\s+rejected\b|\btool\s+call\s+was\s+rejected\b`)
+)
+
+// StripSpeculation blanks hedged failure phrases ("may have failed",
+// "probably broke") so only a failure the agent saw still reads as one:
+// "the build failed, and the retry may have failed too" keeps "failed".
+func StripSpeculation(s string) string {
+	return speculativeFailRE.ReplaceAllString(s, " ")
+}
+
+// EitherOr is two rival explanations, neither settled: "Either the
+// update didn't take effect the way I think, or the failure is unrelated."
+// "Either way, the deploy failed" is settled.
+func EitherOr(s string) bool {
+	t := strings.TrimSpace(s)
+	return eitherOrRE.MatchString(t) && !hasPrefixFold(strings.TrimLeft(t, "\"“”'`*_- "), []string{"either way"})
+}
+
+// ConditionalOffer is an action offered to the user ("Revert them if you
+// want the brief kept strictly."), not a revert that happened. It only
+// vetoes revert/abort wording; a failure stated beside an offer stands.
+func ConditionalOffer(s string) bool {
+	return offerRE.MatchString(s)
+}
+
+// Hypothetical is a check that would let a wrong input through ("passing
+// the wrong id would still pass"), not a choice. "X would break" as the
+// reason for a choice is not this.
+func Hypothetical(s string) bool {
+	return hypotheticalRE.MatchString(s)
+}
+
+// ToolMishap is the agent's own edit or tool call refused ("so the whole
+// call was rejected"): harness friction, not project memory.
+func ToolMishap(s string) bool {
+	return toolMishapRE.MatchString(s)
+}

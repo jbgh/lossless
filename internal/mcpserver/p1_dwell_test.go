@@ -16,7 +16,7 @@ func TestGetRecordDwellUsesSessionID(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	s := New(Local{Store: st})
-	got := s.Handle([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"remember","arguments":{"type":"decision","text":"Use jose, not jsonwebtoken, for Edge.","project":"acme/api","session_id":"s8"}}}`))
+	got := s.Handle([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"remember","arguments":{"type":"decision","text":"Use jose, not jsonwebtoken, for Edge.","project":"acme/api","session_id":"ses_s8aaaaaaaaaaaaaaaaaaaaaa"}}}`))
 	var wrap rpcResponse
 	if err := json.Unmarshal(got, &wrap); err != nil || wrap.Error != nil {
 		t.Fatal(string(got))
@@ -28,8 +28,8 @@ func TestGetRecordDwellUsesSessionID(t *testing.T) {
 		t.Fatal(string(got))
 	}
 	id, _ := ids[0].(string)
-	s.Handle([]byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_record","arguments":{"id":"` + id + `","project":"acme/api","session_id":"s9"}}}`))
-	acts, err := st.RecentActions("acme/api", "s9", 10)
+	s.Handle([]byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_record","arguments":{"id":"` + id + `","project":"acme/api","session_id":"ses_s9aaaaaaaaaaaaaaaaaaaaaa"}}}`))
+	acts, err := st.RecentActions("acme/api", "ses_s9aaaaaaaaaaaaaaaaaaaaaa", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

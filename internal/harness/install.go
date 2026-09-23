@@ -210,12 +210,48 @@ func WriteCodexHooks(home, exe string) (string, error) {
 	return dest, nil
 }
 
+// stampLosslessJS sets session_id on a lossless ask/remember/get_record
+// call: a direct tool (lossless_ask, mcp__lossless__ask) or a proxy call
+// (pi-mcp-adapter's mcp__lossless {tool,args} and mcp {server?,tool,args},
+// args possibly a JSON string). The harness's own id wins over whatever
+// the model sent. Shared by the Pi extension and the OpenCode plugin.
+const stampLosslessJS = `function stampLossless(toolName, input, sid) {
+  if (!sid || !input || typeof input !== "object") return false;
+  const name = String(toolName || "").toLowerCase();
+  const op = /(?:^|[_.:])(ask|remember|get_record)$/;
+  if (name.includes("lossless") && op.test(name)) {
+    input.session_id = sid;
+    return true;
+  }
+  if (name !== "mcp" && !name.startsWith("mcp__")) return false;
+  const tool = String(input.tool || "").toLowerCase();
+  const target = name + " " + String(input.server || "").toLowerCase() + " " + tool;
+  if (!target.includes("lossless") || !op.test(tool)) return false;
+  let args = input.args;
+  if (typeof args === "string") {
+    try {
+      args = JSON.parse(args || "{}");
+    } catch {
+      return false;
+    }
+    if (!args || typeof args !== "object") return false;
+    args.session_id = sid;
+    input.args = JSON.stringify(args);
+    return true;
+  }
+  if (!args || typeof args !== "object") args = input.args = {};
+  args.session_id = sid;
+  return true;
+}
+`
+
 func PiExtensionSource(exe string) string {
 	return `import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn, spawnSync } from "node:child_process";
 
 const exe = ` + jsonQuote(exe) + `;
 
+` + stampLosslessJS + `
 function fire(ctx: { cwd: string; sessionManager: { getSessionFile(): string | undefined; getSessionId(): string } }, source: string) {
   const file = ctx.sessionManager.getSessionFile();
   if (!file) return;
@@ -247,6 +283,13 @@ export default function (pi: ExtensionAPI) {
   pi.on("agent_settled", (_event, ctx) => fire(ctx, "turn"));
   pi.on("session_before_compact", (_event, ctx) => fire(ctx, "compact"));
   pi.on("session_shutdown", (_event, ctx) => fire(ctx, "session_end"));
+  pi.on("tool_call", (event, ctx) => {
+    try {
+      stampLossless(event.toolName, event.input, ctx.sessionManager.getSessionId());
+    } catch {
+      // fail-open: a throw here would block the tool
+    }
+  });
 }
 `
 }
@@ -269,6 +312,7 @@ func WritePiExtension(home, exe string) (string, error) {
 
 func OpenCodePluginSource() string {
 	return `// lossless OpenCode plugin — fail-open catch-up to the local sidecar
+` + stampLosslessJS + `
 export const AgentMemory = async ({ directory }) => {
   const url = (process.env.LOSSLESS_SIDECAR || "http://127.0.0.1:7432").replace(/\/$/, "");
   const token = process.env.LOSSLESS_TOKEN || "";
@@ -303,6 +347,14 @@ export const AgentMemory = async ({ directory }) => {
     "experimental.session.compacting": async (input) => {
       const sid = input?.sessionID || input?.sessionId || input?.session_id;
       await fire(sid, "compact");
+    },
+    // OpenCode hands this args object to the MCP call; mutate in place.
+    "tool.execute.before": async (input, output) => {
+      try {
+        stampLossless(input?.tool, output?.args, input?.sessionID);
+      } catch {
+        // fail-open
+      }
     },
   };
 };

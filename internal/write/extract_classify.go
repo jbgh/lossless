@@ -20,10 +20,16 @@ var (
 	hedgeRE      = regexp.MustCompile(`(?i)\b(i don't think|i do not think|not sure|maybe|probably|might|should we|could we|can we|do we)\b`)
 	questionRE   = regexp.MustCompile(`(?i)^\s*(should|could|can|may|do|did|is|are|will)\b`)
 	stateRE      = regexp.MustCompile(`(?i)\b(working on|current plan|next step|now implementing)\b`)
-	decisionRE   = regexp.MustCompile(`(?i)\b(decided|going with|we'll use|we will use|picked \w+ over|chose|instead of|prefer \S+ over|stick with)\b`)
-	useNotRE     = regexp.MustCompile(`(?i)\buse\s+([A-Za-z][\w./@+-]*),?\s+not\s+([A-Za-z][\w./@+-]*)`)
-	backtickSpan = regexp.MustCompile("`[^`]*`")
-	typeTalkRE   = regexp.MustCompile(`(?i)\b(failed-overlap|shipped-overlap|type-cap|packtypecap|classified as|claim type|as a failed|as failed)\b`)
+	// decisionCues say outright that something was chosen; "instead of"
+	// alone only implies it.
+	decisionCues       = `decided|going with|we'll use|we will use|picked \w+ over|chose|prefer \S+ over|stick with`
+	decisionRE         = regexp.MustCompile(`(?i)\b(` + decisionCues + `|instead of)\b`)
+	explicitDecisionRE = regexp.MustCompile(`(?i)\b(` + decisionCues + `)\b`)
+	// completedRevertRE: a revert that happened, not an offer or a plan.
+	completedRevertRE = regexp.MustCompile(`(?i)\b(reverted|rolled\s+back|backed\s+out|aborted)\b`)
+	useNotRE          = regexp.MustCompile(`(?i)\buse\s+([A-Za-z][\w./@+-]*),?\s+not\s+([A-Za-z][\w./@+-]*)`)
+	backtickSpan      = regexp.MustCompile("`[^`]*`")
+	typeTalkRE        = regexp.MustCompile(`(?i)\b(failed-overlap|shipped-overlap|type-cap|packtypecap|classified as|claim type|as a failed|as failed)\b`)
 )
 
 func classify(sentence string, msg Message) string {
@@ -32,12 +38,13 @@ func classify(sentence string, msg Message) string {
 	}
 	folded := gate.Fold(sentence)
 	probe := stripFailedNoise(stripPaths(folded))
-	hard := hardFailedRE.MatchString(probe)
-	soft := softFailedRE.MatchString(probe) && !nounRevertRE.MatchString(probe)
+	notFailed := notAFailure(sentence, probe)
+	hard := hardFailedRE.MatchString(probe) && !notFailed
+	soft := softFailedRE.MatchString(probe) && !nounRevertRE.MatchString(probe) && !notFailed
 	if hard && !gate.MetaFailedTalk(sentence) {
 		return "failed"
 	}
-	if isDecision(folded) && !gate.Planning(sentence) && !gate.NarrativeDecision(sentence) {
+	if isDecision(folded) && !gate.Planning(sentence) && !gate.NarrativeDecision(sentence) && !hypotheticalDecision(sentence, folded) {
 		return "decision"
 	}
 	if (msg.Error || (soft && !gate.MetaFailedTalk(sentence))) && !(isDecision(folded) && !gate.Planning(sentence)) {
@@ -50,6 +57,45 @@ func classify(sentence string, msg Message) string {
 		return "state"
 	}
 	return ""
+}
+
+// NotAFailure is failure-worded narration, not a failure of the project:
+// the only failure words are hedged ("the push may have failed"), two
+// rival explanations ("Either … or the failure is unrelated"), a revert
+// offered to the user ("Revert them if you want …"), or the agent's own
+// edit/tool call refused ("so the whole call was rejected"). A failure
+// stated beside a guess or an offer still counts, and so does a revert
+// that happened ("may have failed, so I reverted …"). Extract and the
+// read-time noise gate share it.
+func NotAFailure(s string) bool {
+	return notAFailure(s, stripFailedNoise(stripPaths(gate.Fold(s))))
+}
+
+// notAFailure is NotAFailure on classify's already-folded probe.
+func notAFailure(s, probe string) bool {
+	hard := hardFailedRE.MatchString(probe)
+	soft := softFailedRE.MatchString(probe)
+	if !hard && !soft {
+		return false
+	}
+	if gate.ToolMishap(s) || gate.EitherOr(s) {
+		return true
+	}
+	if hard {
+		return !hardFailedRE.MatchString(gate.StripSpeculation(probe)) && !completedRevertRE.MatchString(probe)
+	}
+	return gate.ConditionalOffer(s)
+}
+
+// HypotheticalDecision is a decision cue ("instead of") inside a check
+// that would let a wrong input through ("passing the photo's id instead
+// of the album's would still pass"). An explicit chose/decided stands.
+func HypotheticalDecision(s string) bool {
+	return hypotheticalDecision(s, gate.Fold(s))
+}
+
+func hypotheticalDecision(s, folded string) bool {
+	return gate.Hypothetical(s) && !explicitDecisionRE.MatchString(folded)
 }
 
 func skipSentence(s string) bool {
