@@ -299,10 +299,18 @@ func Format(w io.Writer, r Report) {
 	fmt.Fprintf(w, "records %d   vectors %d   embedder %s   projects %d\n",
 		r.Records, r.Vectors, r.Embedder, len(r.Projects))
 	if r.Prune != nil {
-		fmt.Fprintf(w, "pruned  projects %d  sessions %d  records %d  noise %d\n",
-			len(r.Prune.DroppedProjects), r.Prune.DroppedSessions, r.Prune.DroppedRecords, r.Prune.SupersededNoise)
+		fmt.Fprintf(w, "pruned  projects %d  sessions %d  records %d  noise %d  status-reports %d\n",
+			len(r.Prune.DroppedProjects), r.Prune.DroppedSessions, r.Prune.DroppedRecords,
+			r.Prune.SupersededNoise, r.Prune.SupersededStatusReports)
 		for _, k := range r.Prune.DroppedProjects {
 			fmt.Fprintf(w, "  drop  %s\n", k)
+		}
+		if len(r.Prune.StaleConstraints) > 0 {
+			fmt.Fprintf(w, "\nstale constraints  %d decayed, not superseded — retire with: lossless supersede <id> [reason]\n",
+				len(r.Prune.StaleConstraints))
+			for _, s := range r.Prune.StaleConstraints {
+				fmt.Fprintf(w, "  stale  %s  %s  %s  %.0fd  %s\n", s.ID, s.Project, s.Reason, s.AgeDays, clip(s.Text, 72))
+			}
 		}
 	}
 	if r.Detail == nil {

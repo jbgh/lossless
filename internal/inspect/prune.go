@@ -11,10 +11,14 @@ import (
 )
 
 type PruneResult struct {
-	DroppedProjects []string `json:"dropped_projects,omitempty"`
-	DroppedSessions int      `json:"dropped_sessions"`
-	DroppedRecords  int      `json:"dropped_records"`
-	SupersededNoise int      `json:"superseded_noise"`
+	DroppedProjects         []string `json:"dropped_projects,omitempty"`
+	DroppedSessions         int      `json:"dropped_sessions"`
+	DroppedRecords          int      `json:"dropped_records"`
+	SupersededNoise         int      `json:"superseded_noise"`
+	SupersededStatusReports int      `json:"superseded_status_reports"`
+	// StaleConstraints are decayed but still active: listed, not retired.
+	// Each one is a prompt to run `lossless supersede <id> [reason]`.
+	StaleConstraints []retrieve.StaleCandidate `json:"stale_constraints,omitempty"`
 }
 
 func testSession(s store.Session) bool {
@@ -64,6 +68,16 @@ func Prune(st *store.Store, project string) (PruneResult, error) {
 	}
 	if err := supersedeNoise(st, key, &out); err != nil {
 		return out, err
+	}
+	if err := supersedeStatusReports(st, key, &out); err != nil {
+		return out, err
+	}
+	// Listing only: a stale constraint is retired by an explicit
+	// `lossless supersede`, never by the sweep.
+	if stale, err := staleConstraints(st, key); err != nil {
+		return out, err
+	} else {
+		out.StaleConstraints = stale
 	}
 	return out, nil
 }

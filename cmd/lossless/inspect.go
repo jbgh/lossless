@@ -24,6 +24,7 @@ func runInspect(args []string) int {
 	ws := fs.String("workspace", "", "workspace root (derives project if set)")
 	jsonl := fs.String("jsonl", "", "session JSONL to show extract keep/skip")
 	prune := fs.Bool("prune", false, "drop hook-test ingest and supersede extract-noise (this --project if set)")
+	sealRaw := fs.Bool("seal-raw", false, "report plain tapes in raw/ idle past the idle-seal window, and what sealing them would save (dry run; the daemon seals them)")
 	var paths stringsFlag
 	fs.Var(&paths, "path", "repo-relative path for --ask (repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -47,6 +48,23 @@ func runInspect(args []string) int {
 			return 1
 		}
 		pruned = &res
+	}
+	// The seal sweep is its own report: it walks raw/ rather than the
+	// index, and the daemon does the sealing. Dry run here, always, so
+	// the flag can never be the thing that removes a tape.
+	if *sealRaw {
+		res, err := inspect.SealRawSweep(st, 0, false)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		if *asJSON {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return encErr(enc.Encode(res))
+		}
+		inspect.FormatSealSweep(os.Stdout, res)
+		return 0
 	}
 	rep, err := inspect.Build(st, *project)
 	if err != nil {

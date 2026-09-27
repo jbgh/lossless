@@ -308,11 +308,58 @@ The hook only talks to a **local sidecar**. Bytes reach a remote home via increm
 
 ## Sealing and compression
 
-On `SessionEnd`, or if a live `.jsonl` has not grown for 24h:
+On `SessionEnd`, if a live `.jsonl` has not grown for 24h, or when the
+orphan sweep finds one:
 
 1. Final catch-up.
-2. `zstd` the raw file next to itself, fsync, then delete the uncompressed file.
-3. Further catch-up for that session is a no-op unless the harness file grows (resume). If it grows, decompress-or-open-append: write a new `.jsonl` part `session_id.part2.jsonl` rather than mutating the zstd. Raw is append-only even across resume.
+2. `zstd` the raw file next to itself into `.jsonl.zst.tmp`, and hash the
+   plaintext as it streams.
+3. **Verify before removing anything.** Decompress the `.tmp` back and
+   compare its SHA-256 to the plaintext's. A mismatch is a failure: the
+   `.tmp` is removed and the plaintext is left exactly where it is.
+4. Rename to `.jsonl.zst`, fsync the directory, and only then unlink the
+   uncompressed file.
+5. Further catch-up for that session is a no-op unless the harness file grows (resume). If it grows, decompress-or-open-append: write a new `.jsonl` part `session_id.part2.jsonl` rather than mutating the zstd. Raw is append-only even across resume.
+
+**Delete never.** The plaintext is the only copy of a tape until step 4
+completes, so no failure above can lose it. zstd is lossless
+compression, and a tape is never dropped to save space.
+
+**One seal path.** Everything that compresses a tape — `SessionEnd`,
+idle-seal, the orphan sweep — goes through `write.SealRaw`, so they all
+get the same guarantees. There is no second compactor.
+
+**The lock.** A seal takes the same `flock` the append path takes for a
+single write, and holds it across the whole copy-verify-unlink, so a
+line appended mid-seal cannot land in a file that is about to be
+unlinked. The other half is on the writer: every raw writer (hook
+catch-up, sidecar append, `remember`) opens through `openLiveLocked`,
+which re-checks the link count once it has the lock and reopens through
+`LiveRawPath` (landing in a `.partN`) rather than writing into a file
+nothing points at. Without both halves, a line is lost and the cursor
+moves past it.
+
+**No clobber.** A seal refuses when a `.zst` sibling already exists,
+rather than renaming over it. `manual/<month>/remember.jsonl` has no
+`.partN` rollover, so sealing it and then remembering again would
+otherwise overwrite the earlier `.zst` on the next seal.
+
+### The orphan sweep
+
+Some tapes are never idle-sealed, because idle-seal only covers what
+the watcher has a target for: a Claude Code subagent dump ingested
+before dumps were excluded from watch targets, or a session whose source
+transcript is already gone. Those stay plain forever.
+
+The daemon sweeps `raw/` for plain `.jsonl` tapes idle at least as long
+as the idle-seal window and seals them through the same `SealRaw`. It
+shares the process with the watcher and the appends, so it contends for
+the same lock. The current month's `manual/remember.jsonl` is always
+skipped: it is the open append target.
+
+`lossless inspect --seal-raw` reports the same pass as a **dry run** —
+tapes, bytes, and what sealing would save — and never compresses or
+removes anything.
 
 ---
 

@@ -152,6 +152,27 @@ After emit, a store-level scan groups the project's active failed + constraint r
 
 The scan reads the store directly, deliberately not through the read-time extract gates — a gate-named failed that `statusFailed` keeps out of packs still counts toward the trigger without entering it. If any member constraint already packed with `shipped_overlap` (so the standing-constraint warning fired), the recurrence warning stays out to avoid a double.
 
+### 7a. Warning decay
+
+An incident-shaped constraint keeps warning after the incident closes. The typical case is "Since 2026-09-13T04:29:03Z api-prod's node key is EXPIRED …", closed a day later by a `state` record ("key renewed"). Nothing at read time links them: `dropOlderConflicts` needs a same-type pair sharing a path cluster and the state row has no paths, and `dropInvalidatedByNewerFailed` retires a decision or constraint only for a newer **failed**. The read-time `statusFailed` gate is out of scope, so decay runs in the ask's warning path, after `emit`, on the emitted warnings only. The pack, the weights, and the gate are untouched.
+
+Decay is warning-only: a decayed constraint still packs, with its visible date. `lossless supersede <id> [reason]` is the explicit primitive; decay is the guard for the ones nobody retires by hand.
+
+| Anchor | Example | Decays |
+|--------|---------|--------|
+| end | `until 2026-03-01`, `expires 2026-09-20` | once the date has passed |
+| start + incident vocabulary | `Since 2026-09-13 the prod key is EXPIRED` | after 14 days (`DefaultStaleWindow`) |
+| start on a standing rule | `Since 2026-01, CI requires Go 1.23` | never |
+| none | `Never log Authorization headers` | never |
+
+Incident vocabulary (expired, expires, down, broken, blocked, outage, not deployed) is what separates an incident snapshot from a standing rule wearing the same "since" words. The two rules are independent: a text carrying both anchors still decays on the start anchor when its end date has not passed, because a trailing "(eu expires 2026-10-06)" about a different box must not shield the api-prod incident. With several end dates, the latest decides. A future `until` date (the constraint's own end, unlike an `expires` date) keeps the warning past the window. A newer constraint that has itself decayed re-confirms nothing. Decay runs from the later of the anchor and `created_at`, so a back-dated import earns its own window. Tuned by `Engine.StaleWindow` or `LOSSLESS_STALE_WINDOW` (a Go duration, `336h`; a bad value falls back rather than un-retiring everything).
+
+A newer active constraint re-enables a decayed one by deterministic match only: the same `claim_hash`, or at least two of its rare code-shaped identifiers from the set recurrence already clusters on (`recIdents`), so the two cannot drift. A shared ISO date fragment is not a match. Auto-supersede on contradiction is out of scope.
+
+A decayed constraint cannot be the constraint a §7 recurrence cluster needs, so the recurrence route does not bring back a warning decay stopped.
+
+`inspect --prune` lists decayed, still-active, un-reconfirmed constraints as a prompt to run `supersede`. Listing only — it never supersedes and never deletes.
+
 ## 8. Pack: the checkout
 
 Sort by score, then `created_at`, then id. Then walk. Hard cap 5. At most 2 per type if another type is still available.

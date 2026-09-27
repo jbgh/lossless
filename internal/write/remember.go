@@ -3,8 +3,6 @@ package write
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -14,6 +12,15 @@ import (
 	"lossless/internal/redact"
 	"lossless/internal/store"
 )
+
+// RememberRefused reports whether Remember would refuse rec as carrying a
+// secret. It is the one probe: a caller that must check before changing
+// anything else (supersede, before retiring a record) asks the same
+// question Remember will.
+func RememberRefused(rec claim.Record) bool {
+	probe := strings.Join(append([]string{rec.Text, rec.Why}, rec.Symbols...), "\n")
+	return redact.ShouldDropClaim(probe, redact.FilterPaths(rec.Paths))
+}
 
 func Remember(st *store.Store, rec claim.Record) (CatchUpResult, error) {
 	var out CatchUpResult
@@ -30,8 +37,7 @@ func Remember(st *store.Store, rec claim.Record) (CatchUpResult, error) {
 	rec.Paths = redact.FilterPaths(rec.Paths)
 	// Every other ingest door redacts. Reject before any write so the
 	// secret reaches neither the manual tape nor the claim store.
-	probe := strings.Join(append([]string{rec.Text, rec.Why}, rec.Symbols...), "\n")
-	if redact.ShouldDropClaim(probe, rec.Paths) {
+	if RememberRefused(rec) {
 		return out, fmt.Errorf("text looks like it contains a secret; redact it and retry")
 	}
 	if rec.Harness == "" {
@@ -50,25 +56,20 @@ func Remember(st *store.Store, rec claim.Record) (CatchUpResult, error) {
 		rec.ID = claim.NewID()
 	}
 
-	rawPath := st.ManualRawPath(time.Now())
-	if err := os.MkdirAll(filepath.Dir(rawPath), 0o700); err != nil {
-		return out, err
-	}
-	base := int64(0)
-	if fi, err := os.Stat(rawPath); err == nil {
-		base = fi.Size()
-	}
 	line, _ := json.Marshal(map[string]any{
 		"type": "remember", "role": "user", "text": rec.Text, "claim_type": rec.Type,
 	})
-	f, err := os.OpenFile(rawPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	// The part's exclusive lock is what append.go holds for one write and
+	// what backup's copyLive waits on (LOCK_SH), so a backup never copies a
+	// half-written remember line. openLiveLocked also re-checks that the
+	// raw sweep did not seal last month's file between the open and the
+	// lock (a remember that straddles the month boundary).
+	f, err := openLiveLocked(func() string { return st.ManualRawPath(time.Now()) }, false)
 	if err != nil {
 		return out, err
 	}
-	// The part's exclusive lock is what append.go holds for one write and
-	// what backup's copyLive waits on (LOCK_SH), so a backup never copies a
-	// half-written remember line.
-	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
+	rawPath := f.Name()
+	base := fileByteSize(f)
 	_, _ = f.Write(append(line, '\n'))
 	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 	_ = f.Close()

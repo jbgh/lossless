@@ -131,18 +131,15 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 	}
 
 	now := time.Now()
-	rawPath := st.LiveRawPath(project, session, now)
-	if err := os.MkdirAll(filepath.Dir(rawPath), 0o700); err != nil {
-		return out, err
-	}
-	raw, err := os.OpenFile(rawPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	// Opened and locked through openLiveLocked: a seal (idle-seal or the
+	// daemon's raw sweep) can unlink this tape between the open and the
+	// lock, and a line written then would be lost while the cursor moved
+	// past it.
+	raw, err := openLiveLocked(func() string { return st.LiveRawPath(project, session, now) }, true)
 	if err != nil {
 		return out, err
 	}
-	if err := syscall.Flock(int(raw.Fd()), syscall.LOCK_EX); err != nil {
-		_ = raw.Close()
-		return out, err
-	}
+	rawPath := raw.Name()
 	unlockRaw := func() {
 		_ = syscall.Flock(int(raw.Fd()), syscall.LOCK_UN)
 		_ = raw.Close()
@@ -206,6 +203,10 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 		SessionID:     session,
 		Source:        req.Source,
 		Trace:         tr,
+		FailedNameSeen: func(name string) bool {
+			ok, err := st.FailedNameSeen(project, name, "", "")
+			return err == nil && ok
+		},
 	})
 	for _, rec := range recs {
 		sup, err := st.WriteClaim(rec)
@@ -278,12 +279,18 @@ func fileByteSize(f *os.File) int64 {
 	return fi.Size()
 }
 
+// lockSession serializes catch-ups of one session. The lock file is keyed
+// on the session's base tape name, not the live part: LiveRawPath moves to
+// <sid>.part2.jsonl the moment a seal (idle-seal or the raw sweep) seals
+// the base tape, and two catch-ups resolving the path on either side of
+// that seal used to take different locks, read the same cursor, and copy
+// the same bytes twice.
 func lockSession(st *store.Store, project, session string) (func(), error) {
-	live := st.LiveRawPath(project, session, time.Now())
-	if err := os.MkdirAll(filepath.Dir(live), 0o700); err != nil {
+	base := st.RawPath(project, session, time.Now())
+	if err := os.MkdirAll(filepath.Dir(base), 0o700); err != nil {
 		return nil, err
 	}
-	lp := live + ".lock"
+	lp := base + ".lock"
 	f, err := os.OpenFile(lp, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err

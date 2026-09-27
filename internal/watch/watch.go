@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"lossless/internal/harness"
+	"lossless/internal/inspect"
 	"lossless/internal/projectkey"
 	"lossless/internal/retrieve"
 	"lossless/internal/store"
@@ -273,7 +275,29 @@ func idleSeal(st *store.Store, t Target, opts Options, known map[string]string) 
 	if project == "" || t.SessionID == "" {
 		return false
 	}
-	return idleSealPath(st.LiveRawPath(project, t.SessionID, time.Now()), idle)
+	// Seal the tape this session actually wrote. Resolving with
+	// time.Now() looked in the current month only, so a session whose
+	// tape lives in an earlier month's folder was never sealed once
+	// the month rolled over. The catch-up's RawPath is exact when the
+	// tick has one; here the session's own month comes from its source
+	// file's mtime.
+	return idleSealPath(st.LiveRawPath(project, t.SessionID, tapeMonth(t)), idle)
+}
+
+// tapeMonth is the month a session's tape lives in: the month its
+// source file last changed. A target with no source file (an OpenCode
+// or Codex-desktop session tracked in the harness database) uses the
+// harness's own update time.
+func tapeMonth(t Target) time.Time {
+	if t.JSONL != "" {
+		if fi, err := os.Stat(t.JSONL); err == nil {
+			return fi.ModTime()
+		}
+	}
+	if t.UpdatedAt > 0 {
+		return time.Unix(t.UpdatedAt, 0)
+	}
+	return time.Now()
 }
 
 func idleSealPath(raw string, idle time.Duration) bool {
@@ -457,15 +481,63 @@ func Run(ctx context.Context, st *store.Store, opts Options) error {
 	defer sweep.Stop()
 	_ = write.SweepStaleVirtual(st.Root)
 	_, _ = safeTick(st, opts)
+	var sweeping atomic.Bool
+	var sweeps sync.WaitGroup
+	// Run returns only after a running sweep has stopped, so nothing
+	// seals under a store the caller is about to close.
+	defer sweeps.Wait()
+	sweepRawTapesAsync(ctx, st, opts, &sweeping, &sweeps)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-sweep.C:
 			_ = write.SweepStaleVirtual(st.Root)
+			sweepRawTapesAsync(ctx, st, opts, &sweeping, &sweeps)
 		case <-t.C:
 			_, _ = safeTick(st, opts)
 		}
+	}
+}
+
+// sweepRawTapesAsync runs the raw sweep off the watcher goroutine, so the
+// first sweep after an upgrade (hundreds of MB of plain tapes to compress
+// and verify) does not stall capture ticks. At most one sweep runs at a
+// time; a sweep still running when the next hour comes is not doubled. A
+// panic in the sweep is logged, not fatal, like a tick's.
+func sweepRawTapesAsync(ctx context.Context, st *store.Store, opts Options, running *atomic.Bool, wg *sync.WaitGroup) {
+	if !running.CompareAndSwap(false, true) {
+		return
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer running.Store(false)
+		defer func() {
+			if r := recover(); r != nil {
+				logf("raw seal sweep panic: %v", r)
+			}
+		}()
+		sweepRawTapes(ctx, st, opts)
+	}()
+}
+
+// sweepRawTapes seals plain tapes that no watch target reaches: a
+// Claude Code subagent dump ingested before it was excluded, a session
+// whose source transcript is gone, or a month the watcher never revisits.
+// It runs here so it shares the process (and the lock) with the watcher
+// and the appends, and it seals through write.SealRaw like every other
+// path: verified round-trip, never a bare delete.
+func sweepRawTapes(ctx context.Context, st *store.Store, opts Options) {
+	idle := opts.IdleSeal
+	res, err := inspect.SealRawSweepCtx(ctx, st, idle, true)
+	if err != nil {
+		logf("raw seal sweep: %v", err)
+		return
+	}
+	if res.Sealed > 0 {
+		logf("sealed %d raw tapes (idle >= %s), saved %d bytes",
+			res.Sealed, res.Idle, res.BytesSaved)
 	}
 }
 

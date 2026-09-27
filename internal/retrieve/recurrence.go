@@ -56,7 +56,11 @@ type recurrenceCluster struct {
 
 // recurrenceClusters scans the project's active failed/constraint
 // records inside the recency window and groups them by identifier.
-func recurrenceClusters(st *store.Store, project string, now time.Time) []recurrenceCluster {
+//
+// A decayed constraint (docs/algorithm.md §7a) cannot be a cluster's
+// constraint: its own warning has stopped, and the recurrence route must
+// not bring it back under another heading. It still counts as a member.
+func recurrenceClusters(st *store.Store, project string, now time.Time, memo *decayMemo) []recurrenceCluster {
 	if st == nil {
 		return nil
 	}
@@ -78,6 +82,15 @@ func recurrenceClusters(st *store.Store, project string, now time.Time) []recurr
 	rareMax := 10
 	if r := len(recs) / 20; r > rareMax {
 		rareMax = r
+	}
+	isDecayed := func(r store.RecurrenceRow) bool {
+		if memo == nil {
+			return false
+		}
+		return memo.decayed(claim.Record{
+			ID: r.ID, Type: r.Type, Text: r.Text, CreatedAt: r.CreatedAt,
+			ProjectKey: project, ClaimHash: claim.Hash(project, r.Type, r.Text),
+		})
 	}
 	var out []recurrenceCluster
 	for ident, rs := range byIdent {
@@ -107,7 +120,9 @@ func recurrenceClusters(st *store.Store, project string, now time.Time) []recurr
 			if r.CreatedAt > newest.CreatedAt {
 				newest = r
 			}
-			if r.Type == "constraint" && (ref.Type != "constraint" || r.CreatedAt >= ref.CreatedAt) {
+			// hasConstraint, not ref.Type: ref starts at rs[0], which may
+			// be a decayed constraint that must not outrank a live one.
+			if r.Type == "constraint" && (!hasConstraint || r.CreatedAt >= ref.CreatedAt) && !isDecayed(r) {
 				ref = r
 				hasConstraint = true
 			}
@@ -176,6 +191,15 @@ func recIdents(text string, projToks map[string]bool) map[string]bool {
 	return out
 }
 
+// RareIdents is the recurrence identifier set for one text, keyed by
+// recKey-normalized form. Exported so warning decay's re-confirmation match
+// (docs/algorithm.md §7a) clusters on the same identifiers recurrence
+// detection does, rather than growing a second extractor that can drift from
+// it. project is the project key, whose own name is excluded as prose.
+func RareIdents(text, project string) map[string]bool {
+	return recIdents(text, claimTokensLower(project))
+}
+
 func claimTokensLower(s string) map[string]bool {
 	out := map[string]bool{}
 	for _, t := range claim.Tokens(s) {
@@ -194,15 +218,20 @@ func claimTokensLower(s string) map[string]bool {
 // rarity, a constraint member, day/session span, one warning per ask —
 // bound the noise instead. Suppressed when any member constraint
 // already delivered the standing-constraint warning from the pack.
-func recurrenceWarnings(st *store.Store, q query, packed []scored, now time.Time) []string {
-	clusters := recurrenceClusters(st, q.ProjectKey, now)
+func recurrenceWarnings(st *store.Store, q query, packed []scored, now time.Time, memo *decayMemo) []string {
+	clusters := recurrenceClusters(st, q.ProjectKey, now, memo)
 	if len(clusters) == 0 {
 		return nil
 	}
+	// A packed constraint with shipped overlap has already warned, unless
+	// its warning decayed: then it said nothing, and suppressing the
+	// cluster would silence a live constraint in the same cluster too.
 	warnedAlready := map[string]bool{}
 	for _, p := range packed {
 		if p.rec.Type == "constraint" && p.shippedOverlap == 1 {
-			warnedAlready[p.rec.ID] = true
+			if !memo.decayed(p.rec) {
+				warnedAlready[p.rec.ID] = true
+			}
 		}
 	}
 	var live []recurrenceCluster

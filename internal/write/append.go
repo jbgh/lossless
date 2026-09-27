@@ -38,6 +38,76 @@ func appendCursorKey(client, session string) string {
 	return "append:" + client + ":" + session
 }
 
+// openLiveLocked opens the tape path names, takes its exclusive lock, and
+// re-checks after locking that the file is still linked. A seal unlinks
+// the plaintext it compressed while holding this same lock, so a writer
+// that opened the file before the unlink and only then got the lock
+// would be holding an inode nothing points at, and its line would be
+// lost. path is called again on each retry: LiveRawPath rolls over to a
+// .partN beside the sealed .zst. Every raw writer (Append, CatchUp,
+// Remember) opens through here.
+//
+// rolls says whether path() moves past a sealed file. Session tapes do
+// (LiveRawPath); manual/<month>/remember.jsonl does not, so for it a
+// plain file beside a .zst is kept rather than removed and retried
+// forever.
+func openLiveLocked(path func() string, rolls bool) (*os.File, error) {
+	for try := 0; try < 8; try++ {
+		p := path()
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			return nil, err
+		}
+		f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			return nil, err
+		}
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+		linked, err := fileLinked(f)
+		if err == nil && linked {
+			// A seal that finished between path() and the open leaves the
+			// .zst in place and no plaintext, so O_CREATE made a fresh
+			// empty file beside the sealed one. Writing to it would hide
+			// the sealed history behind a plain tape that every later seal
+			// refuses to overwrite. It is empty and locked, so remove it
+			// and resolve the path again (the next .partN).
+			// A path that does not roll (the manual tape) keeps the file
+			// only when resolving again gives the same path; at a month
+			// boundary it gives the new month's, which is where the line
+			// belongs.
+			if fileByteSize(f) == 0 && fileExists(p+".zst") && (rolls || path() != p) {
+				_ = os.Remove(p)
+			} else {
+				return f, nil
+			}
+		}
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return nil, fmt.Errorf("raw tape kept being sealed under the writer")
+}
+
+func fileExists(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && !fi.IsDir()
+}
+
+// fileLinked reports whether the file behind an open descriptor still
+// has a name. Its link count drops to zero at unlink, which is how a
+// writer notices a seal took its tape away.
+func fileLinked(f *os.File) (bool, error) {
+	var stt syscall.Stat_t
+	if err := syscall.Fstat(int(f.Fd()), &stt); err != nil {
+		return false, err
+	}
+	return stt.Nlink > 0, nil
+}
+
 // Append is the home ingest path. Sidecars POST incremental redacted JSONL.
 // Idempotent: same X-Prev-Offset after a successful ack is a 409 with the
 // current accepted_through so the client retries from there.
@@ -79,16 +149,8 @@ func Append(st *store.Store, req AppendRequest) (AppendResult, error) {
 	}
 
 	now := time.Now()
-	rawPath := st.LiveRawPath(req.Project, req.SessionID, now)
-	if err := os.MkdirAll(filepath.Dir(rawPath), 0o700); err != nil {
-		return out, err
-	}
-	raw, err := os.OpenFile(rawPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	raw, err := openLiveLocked(func() string { return st.LiveRawPath(req.Project, req.SessionID, now) }, true)
 	if err != nil {
-		return out, err
-	}
-	if err := syscall.Flock(int(raw.Fd()), syscall.LOCK_EX); err != nil {
-		_ = raw.Close()
 		return out, err
 	}
 	current := st.Cursor(key)
@@ -135,6 +197,10 @@ func Append(st *store.Store, req AppendRequest) (AppendResult, error) {
 		Harness:       req.Harness,
 		SessionID:     req.SessionID,
 		Source:        req.Source,
+		FailedNameSeen: func(name string) bool {
+			ok, err := st.FailedNameSeen(req.Project, name, "", "")
+			return err == nil && ok
+		},
 	})
 	for _, rec := range recs {
 		if _, err := st.WriteClaim(rec); err != nil {

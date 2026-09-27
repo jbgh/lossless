@@ -71,6 +71,8 @@ func main() {
 		os.Exit(runDoctor(args))
 	case "inspect":
 		os.Exit(runInspect(args))
+	case "supersede":
+		os.Exit(runSupersede(args))
 	case "version", "-v", "--version":
 		os.Exit(runVersion(args))
 	case "update":
@@ -116,6 +118,7 @@ func usage() {
   lossless setup              # local hooks + MCP + skill + optional user service
   lossless doctor             # daemon, hooks, MCP, service
   lossless inspect            # tape vs claims vs last packs; --project KEY; --ask; --jsonl FILE; --prune
+  lossless supersede <id> [reason]   # retire a record: status=superseded, row and text kept; reason stored as a linked decision
   lossless update             # replace ~/.local/bin/lossless from GitHub Releases
   lossless version            # printed semver (release channel is GitHub Releases)
   lossless token              # optional: print a random bearer
@@ -393,6 +396,10 @@ func runBench(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
+	// A bench run is reproducible, so it leaves nothing behind in -home
+	// (the live home by default): every run used to add a TestBench*000
+	// dir that nothing ever removed.
+	defer os.RemoveAll(dir)
 	rep, err := bench.RunDir(*root, dir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

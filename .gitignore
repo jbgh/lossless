@@ -12,6 +12,7 @@ coverage.out
 coverage.html
 /lossless
 .gstack/
+.pi/
 
 # superpowers SDD scratch (ledger, briefs, review packages)
 .superpowers/

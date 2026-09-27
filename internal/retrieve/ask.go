@@ -26,6 +26,10 @@ type Engine struct {
 	Now           func() time.Time
 	Home          string
 	LocateSession func(project, workspace string) string
+	// StaleWindow overrides the incident-constraint decay window
+	// (docs/algorithm.md §7a). Zero means StaleWindow(): the
+	// LOSSLESS_STALE_WINDOW env, else DefaultStaleWindow.
+	StaleWindow time.Duration
 }
 
 func (e Engine) embedder() embed.Embedder {
@@ -197,12 +201,18 @@ func (e Engine) prepare(req Request) (prep, error) {
 		p.drops = append(p.drops, traceDrop{rec: c.rec, reason: packSkipReason(c, packed, packedText), sc: c, scored: true})
 	}
 	hits, warnings, tokens := emit(packed, e.Store)
+	// An incident-shaped constraint past its window stops warning but keeps
+	// packing, with its visible date. Applied here, on the emitted warnings
+	// only: the pack, the weights, and the read-time gate are untouched.
+	now := e.now()
+	memo := newDecayMemo(e.Store, now, staleWindow(e.StaleWindow))
+	warnings, tokens = decayConstraintWarnings(packed, warnings, hits, tokens, memo)
 	// Recurrence-keyed warnings fire independent of overlap, of
 	// packing, and of ask vocabulary: the store-level scan sees
 	// gate-named faileds that the extract-noise gate keeps out of packs,
 	// so they count toward the trigger without entering it. A standing
 	// trap warns on any ask until its constraint lifecycle retires it.
-	for _, w := range recurrenceWarnings(e.Store, q, packed, e.now()) {
+	for _, w := range recurrenceWarnings(e.Store, q, packed, now, memo) {
 		if !slices.Contains(warnings, w) {
 			warnings = append(warnings, w)
 			tokens += estimateTokens(w)

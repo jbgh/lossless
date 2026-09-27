@@ -29,6 +29,10 @@ type ExtractOpts struct {
 	SessionID     string
 	Source        string
 	Trace         *ExtractTrace
+	// FailedNameSeen answers "has this failing test name failed
+	// before?" for the tally guard in StatusReportSkip. Nil (inspect
+	// --jsonl replay has no store) keeps every tally.
+	FailedNameSeen func(name string) bool
 }
 
 // ExtractTrace is why extract kept or skipped sentences. Nil on the live path.
@@ -139,6 +143,16 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 				}
 				tr.skip(reason, sent)
 				continue
+			}
+			// Status narration is not a failure of the project. This is
+			// capture-time only; the read-time gate is untouched. It runs
+			// after the cheap failed gates because it can query the store
+			// (the seen-before guard) for each name.
+			if typ == "failed" {
+				if reason, drop := StatusReportSkip(sent, opts.FailedNameSeen); drop {
+					tr.skip(reason, sent)
+					continue
+				}
 			}
 			// A referent one sentence away in the same message still
 			// grounds ("We decided to keep the limiter. See src/…") —
