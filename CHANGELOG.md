@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.34 — 2026-09-26
+
+- **Pi: MCP config follows pi-mcp-adapter 3.0.** The adapter now reads `~/.pi/agent/mcp-adapter.json` and ignores `~/.pi/agent/mcp.json`, which is reserved for Pi's own upcoming MCP support. `lossless setup` and `install-mcp` now write the lossless server to `mcp-adapter.json`, so a fresh install gets the lossless tools in Pi again, and remove lossless's old entry from `mcp.json` (other servers in that file are kept) so it cannot start twice once Pi reads that file itself. An adapter older than 3.0 still gets `mcp.json`.
+- **`doctor` checks the files Pi actually reads.** It accepts the lossless server in `~/.pi/agent/mcp-adapter.json`, `~/.config/mcp/mcp.json`, or `~/.agents/mcp.json`, and no longer reports Pi as missing after the adapter update.
+
 ## 0.1.33 — 2026-09-26
 
 - **Test and status reports no longer store as failures.** Verification narration was being stored as failures: gate summaries ("npm test 882 passed/16 skipped/0 failed; playwright 39 passed/1 failed"), self-labeled known or flaky failures ("the failure is the known worktree-only font test"), clean pass reports ("5/5 consecutive runs pass"), and non-failure statuses ("CI is pending (not failed)"). One flaky test re-reported on every gate run could fill the failure list. These no longer store.
