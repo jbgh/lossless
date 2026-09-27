@@ -216,7 +216,7 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 		"grok":     filepath.Join(userHome, ".grok", "config.toml"),
 		"claude":   filepath.Join(userHome, ".claude.json"),
 		"codex":    filepath.Join(userHome, ".codex", "config.toml"),
-		"pi":       filepath.Join(userHome, ".pi", "agent", "mcp.json"),
+		"pi":       piMCPDoctorPath(userHome),
 		"opencode": opencodeJSONPath(userHome),
 	}, "lossless")
 	add("mcp", mcpOK, mcpDetail)
@@ -282,6 +282,18 @@ func checkFiles(files map[string]string, needle string) (bool, string) {
 		return false, "none — lossless setup"
 	}
 	return false, "ok " + strings.Join(ok, " ") + "; missing " + strings.Join(missing, " ")
+}
+
+// piMCPDoctorPath is the first file the installed pi-mcp-adapter reads that
+// names lossless, or the file setup writes when none does (so doctor reports
+// pi missing).
+func piMCPDoctorPath(home string) string {
+	for _, p := range piMCPReadPaths(home) {
+		if b, err := os.ReadFile(p); err == nil && strings.Contains(string(b), "lossless") {
+			return p
+		}
+	}
+	return PiMCPPath(home)
 }
 
 func opencodePluginPath(home string) string {

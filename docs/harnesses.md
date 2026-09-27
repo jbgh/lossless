@@ -53,7 +53,7 @@ Install: `lossless setup`. That is hooks + MCP for all five and a health check. 
 
 | | Grok | Claude Code | Pi | OpenCode | Codex |
 |--|------|-------------|----|----------|-------|
-| MCP config | `~/.grok/config.toml` HTTP `/mcp` | `~/.claude.json` stdio `lossless mcp` | `~/.pi/agent/mcp.json` stdio | `~/.config/opencode/opencode.json` local | `~/.codex/config.toml` stdio |
+| MCP config | `~/.grok/config.toml` HTTP `/mcp` | `~/.claude.json` stdio `lossless mcp` | `~/.pi/agent/mcp-adapter.json` stdio (pi-mcp-adapter 3.0+; `mcp.json` for older adapters) | `~/.config/opencode/opencode.json` local | `~/.codex/config.toml` stdio |
 | Token | `headers.Authorization = Bearer ${LOSSLESS_TOKEN}` | inherit env | inherit env | inherit env | inherit env |
 | Skill | `~/.grok/skills/lossless/SKILL.md` | `~/.claude/skills/lossless/SKILL.md` | `~/.pi/agent/skills/lossless/SKILL.md` (+ `~/.agents/skills`) | `~/.config/opencode/skills/lossless/SKILL.md` (also sees `~/.claude/skills` and `~/.agents/skills`) | `~/.codex/skills/lossless/SKILL.md` (+ `~/.agents/skills`) |
 | Ask `session_id` | model sends it if the prompt shows it | MCP child env `CLAUDE_CODE_SESSION_ID`, taken only when the MCP server's parent process is `claude` (a Pi or OpenCode started from a Claude shell inherits the id). Subagents share the parent's MCP server and book to the parent session. | extension `tool_call` stamps `ctx.sessionManager.getSessionId()` on every lossless call | plugin `tool.execute.before` stamps `input.sessionID` | model sends it if the prompt shows it |

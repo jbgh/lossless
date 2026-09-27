@@ -233,8 +233,68 @@ func MergeJSONMCPServers(existing []byte, exe string, env map[string]string) ([]
 	return append(out, '\n'), nil
 }
 
+// Pi reaches MCP servers through the pi-mcp-adapter package. From 3.0 the
+// adapter reads <agent dir>/mcp-adapter.json and leaves <agent dir>/mcp.json
+// to Pi's upcoming built-in MCP support; it ignores a lossless entry there.
+// Writing both would also start lossless twice once Pi ships built-in MCP,
+// so setup writes the one file the installed adapter reads.
+
+// PiMCPPath is where setup writes the lossless entry for the installed
+// pi-mcp-adapter: mcp-adapter.json, or mcp.json for an adapter older than
+// 3.0.
+func PiMCPPath(home string) string {
+	if piAdapterLegacy(home) {
+		return piLegacyMCPPath(home)
+	}
+	return filepath.Join(home, ".pi", "agent", "mcp-adapter.json")
+}
+
+func piLegacyMCPPath(home string) string {
+	return filepath.Join(home, ".pi", "agent", "mcp.json")
+}
+
+// piMCPReadPaths are the user-level files the installed adapter reads MCP
+// servers from, in its own lookup order. Project-level files are not
+// setup's business.
+func piMCPReadPaths(home string) []string {
+	if piAdapterLegacy(home) {
+		return []string{piLegacyMCPPath(home)}
+	}
+	return []string{
+		filepath.Join(home, ".config", "mcp", "mcp.json"),
+		filepath.Join(home, ".agents", "mcp.json"),
+		filepath.Join(home, ".agents", "mcp", "mcp.json"),
+		PiMCPPath(home),
+	}
+}
+
+// piAdapterLegacy reports whether the pi-mcp-adapter Pi installed is older
+// than 3.0, which still read <agent dir>/mcp.json. An adapter that cannot be
+// found is taken to be current.
+func piAdapterLegacy(home string) bool {
+	b, err := os.ReadFile(filepath.Join(home, ".pi", "agent", "npm", "node_modules", "pi-mcp-adapter", "package.json"))
+	if err != nil {
+		return false
+	}
+	var pkg struct {
+		Version string `json:"version"`
+	}
+	if json.Unmarshal(b, &pkg) != nil {
+		return false
+	}
+	major, _, _ := strings.Cut(strings.TrimPrefix(pkg.Version, "v"), ".")
+	n := 0
+	for _, c := range major {
+		if c < '0' || c > '9' {
+			return false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return major != "" && n < 3
+}
+
 func WritePiMCP(home, exe string, env map[string]string) (string, error) {
-	dest := filepath.Join(home, ".pi", "agent", "mcp.json")
+	dest := PiMCPPath(home)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err
 	}
@@ -249,7 +309,41 @@ func WritePiMCP(home, exe string, env map[string]string) (string, error) {
 	if err := writeUserConfig(dest, merged, 0o600); err != nil {
 		return "", err
 	}
+	if dest != piLegacyMCPPath(home) {
+		if err := dropPiLegacyEntry(piLegacyMCPPath(home)); err != nil {
+			return dest, err
+		}
+	}
 	return dest, nil
+}
+
+// dropPiLegacyEntry removes the lossless entry an older setup wrote to
+// <agent dir>/mcp.json. The adapter no longer reads it and warns about it,
+// and Pi's built-in MCP would start a second lossless from it. Other
+// servers and keys in the file are left alone; a file that held only the
+// lossless entry is removed. A file that does not parse is not touched.
+func dropPiLegacyEntry(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	root := map[string]any{}
+	if json.Unmarshal(bytes.TrimSpace(b), &root) != nil {
+		return nil
+	}
+	servers, _ := root["mcpServers"].(map[string]any)
+	if _, ok := servers["lossless"]; !ok {
+		return nil
+	}
+	delete(servers, "lossless")
+	if len(servers) == 0 && len(root) == 1 {
+		return os.Remove(path)
+	}
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeUserConfig(path, append(out, '\n'), 0o600)
 }
 
 func MergeOpenCodeMCP(existing []byte, exe string, env map[string]string) ([]byte, error) {

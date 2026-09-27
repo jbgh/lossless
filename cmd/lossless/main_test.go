@@ -201,7 +201,7 @@ func TestRunInstallHooks(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, ".codex", "config.toml")); err != nil {
 		t.Fatal("codex mcp", err)
 	}
-	if _, err := os.Stat(filepath.Join(home, ".pi", "agent", "mcp.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, ".pi", "agent", "mcp-adapter.json")); err != nil {
 		t.Fatal("pi mcp", err)
 	}
 	if runInstallHooks(nil) != 0 {

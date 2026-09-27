@@ -32,7 +32,7 @@ func TestSetupWritesHooksAndMCP(t *testing.T) {
 		".grok/config.toml",
 		".claude.json",
 		".codex/config.toml",
-		".pi/agent/mcp.json",
+		".pi/agent/mcp-adapter.json",
 		".grok/skills/lossless/SKILL.md",
 		".claude/skills/lossless/SKILL.md",
 		".agents/skills/lossless/SKILL.md",

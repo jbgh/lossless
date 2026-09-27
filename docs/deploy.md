@@ -126,7 +126,7 @@ export LOSSLESS_TOKEN=...
 lossless install-mcp --url "$LOSSLESS_URL"
 ```
 
-That writes the five configs we know (`~/.grok/config.toml`, `~/.claude.json`, `~/.codex/config.toml`, `~/.pi/agent/mcp.json`, `~/.config/opencode/opencode.json`). Restart the harness so MCP attaches.
+That writes the five configs we know (`~/.grok/config.toml`, `~/.claude.json`, `~/.codex/config.toml`, `~/.pi/agent/mcp-adapter.json`, `~/.config/opencode/opencode.json`). Restart the harness so MCP attaches.
 
 **Any other harness:** add an MCP server named `lossless` with one of the two shapes above, or call REST directly. The skill and home rule are markdown; copy `internal/harness/skill.md` and `internal/harness/rule.md` into whatever always-on / skill directory that harness loads.
 
