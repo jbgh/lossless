@@ -12,6 +12,19 @@ type Message struct {
 	Skip    bool // system, reasoning, synthetic, own ask I/O — raw only
 	Compact bool // session compact event; not a claim
 	Offset  int64
+	// full is the turn before the long-turn clip, kept so extract can
+	// decide what is pasted data on all of it. Empty for a message that
+	// did not come through parse, and for roles extract never reads.
+	full string
+}
+
+// prose is the text extract splits into sentences: Text without the
+// pasted data in it (diffs, fenced code, JSON). Excerpts keep Text.
+func (m Message) prose() string {
+	if m.full != "" {
+		return clipProse(m.full)
+	}
+	return stripNonProse(m.Text)
 }
 
 func ParseJSONL(chunk string, base int64) (msgs []Message, consumed int64) {
@@ -258,7 +271,12 @@ func finishMessage(m Message) (Message, bool) {
 		m.Text = ""
 		return m, true
 	}
-	m.Text = compactWorkflowText(m.Text)
+	full := m.Text
+	var workflow bool
+	m.Text, workflow = compactWorkflowText(full)
+	if !workflow && m.Role != "tool" {
+		m.full = full
+	}
 	return m, true
 }
 

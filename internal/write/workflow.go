@@ -101,11 +101,12 @@ func findingsFromObject(text string) ([]string, bool) {
 }
 
 // compactWorkflowText keeps leftover prose plus a small findings JSON so
-// a 32KB prefix cannot cut the issues. Non-loop bodies still clip.
-func compactWorkflowText(text string) string {
+// a 32KB prefix cannot cut the issues. Non-loop bodies still clip, and
+// report workflow=false.
+func compactWorkflowText(text string) (out string, workflow bool) {
 	issues, rest, ok := splitWorkflowMessage(text)
 	if !ok {
-		return clip(text)
+		return clip(text), false
 	}
 	findings := make([]map[string]string, 0, len(issues))
 	for _, issue := range issues {
@@ -113,24 +114,24 @@ func compactWorkflowText(text string) string {
 	}
 	payload, err := json.Marshal(map[string]any{"asked": true, "findings": findings})
 	if err != nil {
-		return clip(text)
+		return clip(text), false
 	}
 	body := string(payload)
 	rest = strings.TrimSpace(rest)
 	budget := 32<<10 - len(body) - 1
 	if budget < 0 {
 		if len(body) > 32<<10 {
-			return body[:32<<10]
+			return body[:32<<10], true
 		}
-		return body
+		return body, true
 	}
 	if len(rest) > budget {
 		rest = rest[:budget]
 	}
 	if rest == "" {
-		return body
+		return body, true
 	}
-	return rest + "\n" + body
+	return rest + "\n" + body, true
 }
 
 func askedTrue(v any) bool {

@@ -380,6 +380,18 @@ func extractNoise(rec claim.Record) bool {
 	if gate.SkipProse(t) || gate.ListChrome(t, true) {
 		return true
 	}
+	// A stored line of source or of a diff (rows from before extract
+	// skipped them) is nobody's rule, decision, or failure.
+	// A workflow finding stores as a failure whatever its shape, and one
+	// can quote a statement or read like a call: for failures only the
+	// start-of-line shapes (a diff marker, a comment, a JSON member) count.
+	if rec.Type == "failed" {
+		if gate.CodeLead(t) {
+			return true
+		}
+	} else if gate.CodeLine(t) || gate.CodeStatement(t) {
+		return true
+	}
 	// Constraints are user-typed by construction; an arrow there is
 	// memory, not a diagram.
 	if rec.Type != "constraint" && !claim.ExplicitMemory(rec.Source) && gate.ArrowChrome(t) && len(rec.Paths) == 0 &&

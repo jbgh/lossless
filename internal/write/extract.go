@@ -93,11 +93,15 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			continue
 		}
 		near := nearby(msg, usable)
-		sents := splitSentences(msg.Text)
+		// A diff or a JSON dump in a turn is data, not prose: see stripNonProse.
+		var sents []string
 		fromFindings := map[string]bool{}
-		if issues, rest, ok := splitWorkflowMessage(msg.Text); ok {
+		issues, rest, workflow := splitWorkflowMessage(msg.Text)
+		if !workflow {
+			sents = splitSentences(msg.prose())
+		} else {
 			tr.skip("workflow-json", msg.Text)
-			sents = splitSentences(rest)
+			sents = splitSentences(stripNonProse(rest))
 			for _, issue := range issues {
 				fromFindings[issue] = true
 				sents = append(sents, issue)
@@ -107,6 +111,11 @@ func Extract(msgs []Message, opts ExtractOpts) []claim.Record {
 			}
 		}
 		for k, sent := range sents {
+			// Workflow findings are failure memory whatever their shape.
+			if !fromFindings[sent] && (gate.CodeLine(sent) || gate.CodeStatement(sent)) {
+				tr.skip("code-line", sent)
+				continue
+			}
 			if skipSentence(sent) {
 				reason := "skip-prose"
 				if !gate.SkipProse(sent) {

@@ -239,6 +239,15 @@ Same heuristic extract as the spike (`failed` / `decision` / `constraint` / `sta
 
 **Model output in a user slot:** Claude Code delivers a subagent's final report as a user-role message wrapped in `<agent-message>` ("[Subagent hand-back] …"), and queues a finished subagent or background command as a `<task-notification>`. Both extract as **assistant** text, without the harness frame: a report's "Never ran approve-ci.sh, never merged" is a self-report, not a rule the user typed, so it cannot become a constraint. A user who types next to a notification is still the user.
 
+**Pasted data is not prose:** extract reads a turn without the pasted data in it. Removed, line by line:
+
+- unified-diff hunks, consumed by the line counts in the `@@ -a,b +c,d @@` header, context lines included. A hunk ends early at the first line that cannot be a diff line, when the side a line belongs to is used up, and at a blank line followed by a bullet, so a cited header or a truncated hunk does not eat the prose after it;
+- fenced blocks that name a source or data language (```` ```go ````, ```` ```diff title="a.ts" ````). A bare fence, a prose fence (`text`, `md`), and a log or shell fence (`console`, `log`, `bash`, …) stay, and so does a fence that is never closed;
+- JSON objects and arrays that stand on their own lines, compact or pretty-printed, and what a truncated one leaves behind (member lines such as `"fix": "Do not …"`). JSON inside a sentence stays;
+- single lines of code (`code-line`): a diff-marked comment, word, or code-indented line, a line that opens with `// `, `/*`, or a docstring quote, a statement with a trailing comment, a bare call statement. The whole line goes, not only its first sentence.
+
+An automated review prompt carries the whole change, and its comment lines (`// never null`) were being stored as the user's constraints. Which lines are data is decided on the whole turn, before a long turn is cut to its head and tail: past the cut, the tail of a diff has no header left. The head and tail themselves do not move, so extract sees nothing of a long turn that it did not see before. Bullets (`- Never push to main`, `+ faster builds`), names (`-race`, `+page.server.ts`, `//pkg:target`), counts (`+1`), a statement quoted in a code span, and a quoted term with a prose gloss are not code lines, and workflow findings store whatever their shape. The line test also runs at read time on single-line rows, so rows stored before this stop packing and `inspect --prune` retires them; for a stored failure only the start-of-line shapes count (a diff marker, a comment, a JSON member), because a finding can quote a statement or read like a call. The raw tape keeps the full text, and excerpts are cut from the turn as before.
+
 **Sentence split:** a terminator inside a code span is code (`` `.woodpecker/**` `` is one token, not a sentence end), and the dot that opens a dotfile or relative path (`.env`, `./scripts`) does not end a sentence. A newline closes an unbalanced tick.
 
 `remember` bypasses heuristics: the payload *is* the claim. Still redacted. Still gets a raw line in a `manual/<date>.jsonl` so it is part of "everything."

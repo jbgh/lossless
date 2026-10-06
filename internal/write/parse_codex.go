@@ -24,9 +24,10 @@ func normalizeCodexEvent(o map[string]any, offset int64) Message {
 	ptype, _ := p["type"].(string)
 	switch ptype {
 	case "user_message":
-		return Message{Role: "user", Text: clip(codexText(p)), Offset: offset}
+		// Unclipped: finishMessage clips, after it has stripped pasted data.
+		return Message{Role: "user", Text: codexText(p), Offset: offset}
 	case "agent_message":
-		return Message{Role: "assistant", Text: clip(codexText(p)), Offset: offset}
+		return Message{Role: "assistant", Text: codexText(p), Offset: offset}
 	default:
 		return Message{Skip: true, Offset: offset}
 	}
@@ -69,7 +70,7 @@ func normalizeCodexItem(o map[string]any, offset int64, ownIDs map[string]bool) 
 		if strings.TrimSpace(text) == "" {
 			return Message{Skip: true, Offset: offset}
 		}
-		return Message{Role: mapRole(role), Text: clip(text), Offset: offset}
+		return Message{Role: mapRole(role), Text: text, Offset: offset}
 	default:
 		return Message{Skip: true, Offset: offset}
 	}

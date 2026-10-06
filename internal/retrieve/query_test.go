@@ -357,3 +357,29 @@ func TestExtractNoiseAndJobOverlap(t *testing.T) {
 		t.Fatal("real failed should still overlap redis")
 	}
 }
+
+// Stored lines of code are noise at read time. A bare call statement is
+// the weaker shape and is not applied to failures: a workflow finding
+// stores whatever its shape and must stay readable.
+func TestExtractNoiseCodeLines(t *testing.T) {
+	cases := []struct {
+		rec  claim.Record
+		want bool
+	}{
+		{claim.Record{Type: "constraint", Source: "turn", Text: "+    // the toast fades at the card's lower edge, never inside it"}, true},
+		{claim.Record{Type: "decision", Source: "turn", Text: "+  // instead of hiding it.", Paths: []string{"src/ui/card.ts"}}, true},
+		{claim.Record{Type: "failed", Source: "turn", Text: "+  // The browser throws and the whole build failed in src/ui/card.ts.", Paths: []string{"src/ui/card.ts"}}, true},
+		{claim.Record{Type: "constraint", Source: "turn", Text: "expect(missed, 'never reached').toEqual([]);"}, true},
+		{claim.Record{Type: "failed", Source: "turn", Text: "parse(x) panics on nil input in internal/y.go when called from handler(req);", Paths: []string{"internal/y.go"}}, false},
+		{claim.Record{Type: "constraint", Source: "remember", Text: "// comments must never appear in testdata/fixtures.json."}, false},
+		{claim.Record{Type: "constraint", Source: "turn", Text: "+page.server.ts must never import from src/lib/client/store.ts.", Paths: []string{"src/lib/client/store.ts"}}, false},
+		{claim.Record{Type: "failed", Source: "turn", Text: "defer f.Close(); // never reached in internal/x.go, so the fd leaks when Open fails", Paths: []string{"internal/x.go"}}, false},
+		{claim.Record{Type: "failed", Source: "import", Text: "The build failed in src/a.go when the cache was cold.\n\n# Repro: run make twice", Paths: []string{"src/a.go"}}, false},
+		{claim.Record{Type: "constraint", Source: "turn", Text: "get(\"Cache-Control\", \"\").startswith(\"no-store\"):  # a route may add to no-store, never loosen it"}, true},
+	}
+	for _, c := range cases {
+		if got := ExtractNoise(c.rec); got != c.want {
+			t.Fatalf("ExtractNoise(%s %q) = %v, want %v", c.rec.Type, c.rec.Text, got, c.want)
+		}
+	}
+}
