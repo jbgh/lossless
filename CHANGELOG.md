@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.35 — 2026-10-06
+
+- **Pasted diffs, code blocks, and JSON no longer turn into constraints.** When a prompt carried a unified diff (an automated code review sends the whole change) or a JSON list of findings, lossless read its lines as things the user said. A code comment such as `// never null` or a finding's `"fix": "Do not log …"` became a standing constraint, and a project reviewed this way could end up with almost nothing else in its constraint list. Lossless now reads a turn without its diff hunks, its fenced blocks that name a source or data language (```` ```go ````, ```` ```diff ````, ```` ```json ````), and JSON that stands on its own lines. What counts as pasted data is decided on the whole turn, so the end of a large diff no longer slips through when a long turn is shortened. The raw tape still keeps the full text.
+- **Lines of code are not stored as memory.** A line that is plainly source rather than a sentence (a diff-marked comment or indented line, a line opening with `// ` or `/*`, a docstring opener, a statement with a trailing comment, a bare call statement) no longer becomes a constraint, decision, or failure, whichever role it came from. A bullet (`- Never push to main`) is not mistaken for a removed line, and names (`-race`, `+page.server.ts`), counts (`+1`), sentences that quote code in backticks, and text in a bare, log, or shell code fence are read as before.
+- **Structured agent reports store only through workflow findings.** A JSON report used to be cut into sentences, and fragments of its string values were stored. Findings from a workflow report (`asked` with `findings`) still store as failures, whole.
+- **Records of those shapes that are already stored stop appearing in asks**, and `inspect --prune` retires them. Records written with `remember` are never affected.
+- Codex transcripts get the same treatment: pasted data is identified on the whole turn before a long one is shortened.
+
 ## 0.1.34 — 2026-09-26
 
 - **Pi: MCP config follows pi-mcp-adapter 3.0.** The adapter now reads `~/.pi/agent/mcp-adapter.json` and ignores `~/.pi/agent/mcp.json`, which is reserved for Pi's own upcoming MCP support. `lossless setup` and `install-mcp` now write the lossless server to `mcp-adapter.json`, so a fresh install gets the lossless tools in Pi again, and remove lossless's old entry from `mcp.json` (other servers in that file are kept) so it cannot start twice once Pi reads that file itself. An adapter older than 3.0 still gets `mcp.json`.
