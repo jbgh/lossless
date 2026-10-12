@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.38 — 2026-10-12
+
+- **Pasted text cannot escape its block.** 0.1.37 removed `<pasted_content>` blocks by matching opening and closing tags in pairs, but pasted text can contain those tags itself, close its own block, and leave the rest of the paste looking like something you typed. Everything from the first opening tag to the last closing tag is now removed, a closing tag with no opening tag takes everything before it, and the check runs on the whole turn rather than on the shortened copy of a long one.
+- **Only editor context is stripped from the front of a turn.** The open-file and selection blocks an IDE adds are removed and your words after them kept. A turn that opens with any other closed tag block (a notification, a reminder, a hook's output) is not stored as something you said.
+- **How a session was started is read from the transcript line's own field,** so the same text inside a message cannot make a program-started session look like one a person typed in.
+
 ## 0.1.37 — 2026-10-12
 
 - **A `said` record is only written for text a person typed.** 0.1.36 stored every user-side turn as something the user said. Three kinds of text are no longer stored that way: the turns of a session a program started (Claude Code's `sdk-…` entrypoints), anything inside a `<pasted_content>` block (the words you typed around a paste are kept), and text lifted out of a `<user_query>` block in the middle of a turn (the wrapper is honoured only when the harness put it at the start). Without this, pasted or machine-written text could come back in a later session labelled as your own words.
