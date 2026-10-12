@@ -1,6 +1,7 @@
 package write
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 	"time"
@@ -71,7 +72,15 @@ func Said(msgs []Message, opts ExtractOpts, so SaidOpts) []claim.Record {
 		if so.Programmatic != nil && so.Programmatic(m) {
 			continue
 		}
-		text := strings.Join(strings.Fields(stripLeadBlocks(stripPasted(userQuery(m.prose())))), " ")
+		src, ok := saidSource(m)
+		if !ok {
+			continue
+		}
+		src, ok = stripLeadBlocks(userQuery(src))
+		if !ok {
+			continue
+		}
+		text := strings.Join(strings.Fields(src), " ")
 		// "[Image #1] make the header sticky like this" is the user's
 		// words after the marker. A file mention stays: it is the
 		// referent, and the path the record is found by.
@@ -178,24 +187,34 @@ func unspacedLetters(s string) int {
 
 var leadBlockOpenRE = regexp.MustCompile(`^\s*<([a-z][\w-]*)(?:\s[^>]*)?>`)
 
-// stripLeadBlocks removes the closed tag blocks a harness puts in front
-// of the user's words: the file open in the IDE, a selection, a hook's
-// output. A tag that is never closed is the user writing about markup
-// ("<div> wrappers should be flex"), and stays.
-func stripLeadBlocks(s string) string {
+// contextBlocks are the tags an IDE integration puts in front of what the
+// user typed: the file open in the editor, the selection.
+var contextBlocks = map[string]bool{"ide_opened_file": true, "ide_selection": true}
+
+// stripLeadBlocks removes the context blocks in front of the user's
+// words. It reports false for a turn that opens with any other closed
+// tag block: that is a harness or a tool speaking in the user's place
+// (a notification, a reminder, a hook's output), and what follows the
+// block is not known to be the user's. A tag that is never closed is the
+// user writing about markup ("<div> wrappers should be flex"), and stays.
+func stripLeadBlocks(s string) (string, bool) {
 	for i := 0; i < 8; i++ {
 		m := leadBlockOpenRE.FindStringSubmatchIndex(s)
 		if m == nil {
 			break
 		}
-		closing := "</" + s[m[2]:m[3]] + ">"
+		name := s[m[2]:m[3]]
+		closing := "</" + name + ">"
 		end := strings.Index(s[m[1]:], closing)
 		if end < 0 {
 			break
 		}
+		if !contextBlocks[name] {
+			return "", false
+		}
 		s = s[m[1]+end+len(closing):]
 	}
-	return s
+	return s, true
 }
 
 // userQueryRE is the one wrapper a harness puts around a message it
@@ -213,13 +232,52 @@ func userQuery(s string) string {
 	return s
 }
 
-var pastedRE = regexp.MustCompile(`(?s)<pasted_content\b[^>]*>.*?(?:</pasted_content>|$)`)
+// saidRawMax bounds the turn a said record is read from. Nobody types
+// more than this; a larger turn is a paste or a dump.
+const saidRawMax = 64 << 10
+
+// saidSource is the turn as the user typed it, without what they pasted
+// and without the data in it (diffs, fenced code, JSON). It reads the
+// whole turn, not the long-turn clip: a paste is cut out by its tags, and
+// past a clip a tag can be missing.
+func saidSource(m Message) (string, bool) {
+	raw := m.Text
+	if m.full != "" {
+		raw = m.full
+	}
+	if len(raw) > saidRawMax {
+		return "", false
+	}
+	return stripNonProse(stripPasted(raw)), true
+}
+
+const (
+	pastedOpen  = "<pasted_content"
+	pastedClose = "</pasted_content>"
+)
 
 // stripPasted removes what the user pasted from elsewhere. A paste is
 // material the user handed over, and may hold instructions they did not
 // write; only their own words around it are theirs.
+//
+// The pasted text can contain the tags themselves, so the tags are not
+// matched in pairs: everything from the first opening tag to the last
+// closing tag goes. A closing tag with no opening tag before it takes
+// everything before it; an opening tag never closed takes the rest.
 func stripPasted(s string) string {
-	return pastedRE.ReplaceAllString(s, " ")
+	open := strings.Index(s, pastedOpen)
+	last := strings.LastIndex(s, pastedClose)
+	if open < 0 && last < 0 {
+		return s
+	}
+	start, end := open, len(s)
+	if first := strings.Index(s, pastedClose); open < 0 || (first >= 0 && first < open) {
+		start = 0
+	}
+	if last >= start {
+		end = last + len(pastedClose)
+	}
+	return s[:start] + " " + s[end:]
 }
 
 // saidLeadRunes is how much of a turn's opening the template check
@@ -283,13 +341,21 @@ func clipSaid(s string) string {
 	return strings.TrimSpace(s[:n]) + "…"
 }
 
-var (
-	lineTimeRE = regexp.MustCompile(`"timestamp"\s*:\s*"([^"]+)"`)
-	// Claude Code stamps each line with how the session was started.
-	// "cli" is a person at a terminal; "sdk-…" is a program.
-	cliEntryRE = regexp.MustCompile(`"entrypoint"\s*:\s*"cli"`)
-	sdkEntryRE = regexp.MustCompile(`"entrypoint"\s*:\s*"sdk-`)
-)
+var lineTimeRE = regexp.MustCompile(`"timestamp"\s*:\s*"([^"]+)"`)
+
+// lineEntrypoint is how the session was started, as Claude Code stamps
+// it on each line: "cli" is a person at a terminal, "sdk-…" a program.
+// It is the line's own top-level field, read as JSON: the same letters
+// inside the message text say nothing.
+func lineEntrypoint(chunk string, rel int64) string {
+	var top struct {
+		Entrypoint string `json:"entrypoint"`
+	}
+	if err := json.Unmarshal([]byte(lineAt(chunk, rel)), &top); err != nil {
+		return ""
+	}
+	return top.Entrypoint
+}
 
 // lineAt is the JSONL line that starts at rel in chunk.
 func lineAt(chunk string, rel int64) string {
@@ -359,10 +425,10 @@ func writeSaid(st *store.Store, msgs []Message, chunk string, base int64, opts E
 		TapeStart: tapeStart,
 		Briefs:    run.briefs,
 		Interactive: func(m Message) bool {
-			return cliEntryRE.MatchString(lineAt(chunk, m.Offset-base))
+			return lineEntrypoint(chunk, m.Offset-base) == "cli"
 		},
 		Programmatic: func(m Message) bool {
-			return sdkEntryRE.MatchString(lineAt(chunk, m.Offset-base))
+			return strings.HasPrefix(lineEntrypoint(chunk, m.Offset-base), "sdk-")
 		},
 		At: func(m Message) time.Time {
 			if t := lineTime(chunk, m.Offset-base); !t.IsZero() {
