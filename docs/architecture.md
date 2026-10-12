@@ -18,7 +18,7 @@ flowchart LR
 
 | Harness | lossless | Agent again |
 |---------|----------|-------------|
-| Grok, Claude, Codex, Pi, OpenCode | No search string as the product | Read `warnings` first |
+| Grok, Claude, Codex, Pi, omp, OpenCode | No search string as the product | Read `warnings` first |
 | Skill: call `ask` before edits | Work context → candidates → score → pack | Failed → do not repeat without evidence |
 | Hooks copy JSONL on compact / stop | Deterministic. Same packet across models | Decision / constraint → do not silently undo |
 | Watcher tails if a hook misses | Empty pack is valid | Optional `GET` / `remember` |

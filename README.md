@@ -34,7 +34,7 @@ The full session file is still on disk the whole time. Only the window forgets.
 
 ```mermaid
 flowchart LR
-  S["Session files<br/>Grok · Claude Code · Codex · Pi · OpenCode"] -- hooks --> T[("Tape<br/>the full log")]
+  S["Session files<br/>Grok · Claude Code · Codex · Pi · omp · OpenCode"] -- hooks --> T[("Tape<br/>the full log")]
   T -- extract --> R[("Records<br/>one line each")]
   A["Agent"] -- "ask(goal, files)" --> R
   R -- "up to 5 records + warnings" --> A
@@ -57,7 +57,7 @@ lossless doctor    # checks that everything is connected
 Then start a new agent session. From there the agent calls `ask` on its own. There is nothing to type.
 
 - Runs on macOS and Linux (amd64, arm64). The binary is installed to `~/.local/bin/lossless`.
-- `setup` covers Grok, Claude Code, Codex, Pi, and OpenCode. It adds a short rule to each one's instructions file, only between `<!-- lossless:start -->` and `<!-- lossless:end -->` markers.
+- `setup` covers Grok, Claude Code, Codex, Pi, omp, and OpenCode. It adds a short rule to each one's instructions file, only between `<!-- lossless:start -->` and `<!-- lossless:end -->` markers.
 - In a Grok session that is already open, reload with `/hooks` then `r`, and `/skills` then `r`.
 - Upgrade with `lossless update`. Check first with `lossless update --check`.
 

@@ -99,6 +99,7 @@ func InstallMCP(cfg MCPConfig) ([]string, error) {
 		func() (string, error) { return WriteClaudeMCP(cfg.Home, cfg.Exe, env) },
 		func() (string, error) { return WriteCodexMCP(cfg.Home, cfg.Exe, env) },
 		func() (string, error) { return WritePiMCP(cfg.Home, cfg.Exe, env) },
+		func() (string, error) { return WriteOmpMCP(cfg.Home, cfg.Exe, env) },
 		func() (string, error) { return WriteOpenCodeMCP(cfg.Home, cfg.Exe, env) },
 	}
 	for _, w := range writers {
@@ -344,6 +345,32 @@ func dropPiLegacyEntry(path string) error {
 		return err
 	}
 	return writeUserConfig(path, append(out, '\n'), 0o600)
+}
+
+// OmpMCPPath is omp's native user-level MCP file. omp reads it with the
+// highest discovery priority (above the Claude and Codex configs it also
+// translates), so the omp server does not depend on another tool's file.
+func OmpMCPPath(home string) string {
+	return filepath.Join(OmpAgentDir(home), "mcp.json")
+}
+
+func WriteOmpMCP(home, exe string, env map[string]string) (string, error) {
+	dest := OmpMCPPath(home)
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return "", err
+	}
+	var existing []byte
+	if b, err := os.ReadFile(dest); err == nil {
+		existing = b
+	}
+	merged, err := MergeJSONMCPServers(existing, exe, env)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", dest, err)
+	}
+	if err := writeUserConfig(dest, merged, 0o600); err != nil {
+		return "", err
+	}
+	return dest, nil
 }
 
 func MergeOpenCodeMCP(existing []byte, exe string, env map[string]string) ([]byte, error) {

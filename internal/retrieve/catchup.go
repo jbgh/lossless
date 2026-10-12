@@ -100,6 +100,13 @@ func locateExact(ws, sid string) (jsonl, sessionID, harn string) {
 		}
 		return loc.JSONL, hid, "pi"
 	}
+	if loc := harness.LocateOmp("", sid, ""); fileRegular(loc.JSONL) {
+		hid := loc.SessionID
+		if hid == "" {
+			hid = sid
+		}
+		return loc.JSONL, hid, "omp"
+	}
 	return "", "", ""
 }
 

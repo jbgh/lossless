@@ -24,6 +24,7 @@ type Options struct {
 	ClaudeRoot string
 	CodexRoot  string
 	PiRoot     string
+	OmpRoot    string
 	OpenCodeDB string
 	Interval   time.Duration
 	IdleSeal   time.Duration // 0 = 24h
@@ -70,6 +71,7 @@ func Defaults() Options {
 		ClaudeRoot: filepath.Join(claude, "projects"),
 		CodexRoot:  filepath.Join(codex, "sessions"),
 		PiRoot:     filepath.Join(pi, "agent", "sessions"),
+		OmpRoot:    harness.OmpSessionsRoot(),
 		OpenCodeDB: harness.OpenCodeDB(),
 		Interval:   time.Second,
 	}
@@ -186,6 +188,23 @@ func Discover(opts Options, known []store.Session) []Target {
 			sid := harness.PiSessionIDFromPath(path)
 			cwd := harness.PeekPiCWD(path)
 			add(Target{JSONL: path, Harness: "pi", SessionID: sid, Workspace: cwd})
+			return nil
+		})
+	}
+	if opts.OmpRoot != "" {
+		_ = filepath.WalkDir(opts.OmpRoot, func(path string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			// Only omp's own session files (<ts>_<uuid>.jsonl). A session's
+			// artifact directory holds subagent transcripts and bash logs,
+			// which are chrome, like Claude's agent-*.jsonl dumps.
+			if !harness.OmpSessionFile(path) {
+				return nil
+			}
+			sid := harness.OmpSessionIDFromPath(path)
+			cwd := harness.PeekOmpCWD(path)
+			add(Target{JSONL: path, Harness: "omp", SessionID: sid, Workspace: cwd})
 			return nil
 		})
 	}

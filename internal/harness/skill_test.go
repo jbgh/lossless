@@ -10,11 +10,12 @@ import (
 func TestInstallSkillsWritesEveryHarness(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("OPENCODE_CONFIG", filepath.Join(home, ".config", "opencode"))
+	clearOmpEnv(t)
 	paths, err := InstallSkills(home)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(paths) != 12 {
+	if len(paths) != 14 {
 		t.Fatalf("wrote %d: %v", len(paths), paths)
 	}
 	body, err := os.ReadFile(filepath.Join(home, ".grok", "skills", "lossless", "SKILL.md"))
@@ -32,12 +33,14 @@ func TestInstallSkillsWritesEveryHarness(t *testing.T) {
 		".agents/skills/lossless/SKILL.md",
 		".codex/skills/lossless/SKILL.md",
 		".pi/agent/skills/lossless/SKILL.md",
+		".omp/agent/skills/lossless/SKILL.md",
 		".config/opencode/skills/lossless/SKILL.md",
 		".grok/rules/lossless.md",
 		".claude/rules/lossless.md",
 		".claude/CLAUDE.md",
 		".codex/AGENTS.md",
 		".pi/agent/AGENTS.md",
+		".omp/agent/RULES.md",
 		".config/opencode/AGENTS.md",
 	} {
 		if _, err := os.Stat(filepath.Join(home, rel)); err != nil {

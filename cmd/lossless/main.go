@@ -87,6 +87,8 @@ func main() {
 		os.Exit(runRestore(args))
 	case "hook-pi":
 		os.Exit(runHookPi())
+	case "hook-omp":
+		os.Exit(runHookOmp())
 	case "hook-opencode":
 		os.Exit(runHookOpenCode())
 	case "bench":
@@ -124,7 +126,7 @@ func usage() {
   lossless update             # replace ~/.local/bin/lossless from GitHub Releases
   lossless version            # printed semver (release channel is GitHub Releases)
   lossless token              # optional: print a random bearer
-  lossless install-hooks      # Grok + Claude + Codex + Pi + OpenCode
+  lossless install-hooks      # Grok + Claude + Codex + Pi + omp + OpenCode
   lossless install-mcp        # MCP for every supported harness (or point any MCP client at /mcp)
   lossless ensure             # replay spool after sidecar was down
   lossless backup init s3://B/P [--endpoint URL] [--region R] [--every 1h] [--keep 5]   # opt-in encrypted copy to a bucket you own
@@ -133,6 +135,7 @@ func usage() {
   lossless embed-backfill     # embed active claims if an on-box model is configured
   lossless backfill [--project KEY] [--dry-run]   # read stored tapes again; add what this version keeps (the user's turns)
   lossless hook-pi            # stdin: Pi extension JSON; fail-open
+  lossless hook-omp           # stdin: omp extension JSON; fail-open
   lossless hook-opencode      # stdin: OpenCode plugin JSON; fail-open
 
 Env: LOSSLESS_HOME (default ~/.lossless)
@@ -261,7 +264,7 @@ func runCatchUp(args []string) int {
 	jsonl := fs.String("jsonl", "", "harness session JSONL")
 	project := fs.String("project", "", "owner/repo")
 	ws := fs.String("workspace", "", "workspace root")
-	harnessName := fs.String("harness", "other", "grok|claude|pi|opencode|codex")
+	harnessName := fs.String("harness", "other", "grok|claude|pi|omp|opencode|codex")
 	session := fs.String("session", "", "session id")
 	source := fs.String("source", "compact", "turn|compact|session_end|import")
 	if err := fs.Parse(args); err != nil {
@@ -868,6 +871,40 @@ func runHookPi() int {
 	source := hookSource(ev.HookEvent, "turn")
 	write.SubmitCatchUp(write.CatchUpRequest{
 		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: "pi",
+		SessionID: loc.SessionID, Source: source,
+	})
+	return 0
+}
+
+func runHookOmp() int {
+	defer func() { _ = recover() }()
+	raw, err := readHookStdin()
+	if err != nil || len(raw) == 0 {
+		return 0
+	}
+	var ev struct {
+		SessionID  string `json:"session_id"`
+		Transcript string `json:"transcript_path"`
+		CWD        string `json:"cwd"`
+		HookEvent  string `json:"hook_event_name"`
+	}
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		return 0
+	}
+	ws := ev.CWD
+	if ws == "" {
+		ws, _ = os.Getwd()
+	}
+	loc := harness.LocateOmp(ev.Transcript, ev.SessionID, ws)
+	if loc.JSONL == "" {
+		return 0
+	}
+	if _, err := os.Stat(loc.JSONL); err != nil {
+		return 0
+	}
+	source := hookSource(ev.HookEvent, "turn")
+	write.SubmitCatchUp(write.CatchUpRequest{
+		JSONL: loc.JSONL, WorkspaceRoot: ws, Harness: "omp",
 		SessionID: loc.SessionID, Source: source,
 	})
 	return 0

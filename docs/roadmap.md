@@ -23,7 +23,7 @@ Shipped in 0.1.0 / 0.1.1: install and update, five harness adapters, doctor / in
 | Age never disqualifies | A year-old constraint still wins. |
 | Hooks fail-open | Compact must never stall. |
 | No Stop-nag, no Stop-inject, no dump of the raw log | Standing decision: setup writes a skill and a marked rule. Stop copies the tape. It does not inject a pack. |
-| Claims keyed by `owner/repo` | Same pack across Grok, Claude, Codex, Pi, OpenCode. |
+| Claims keyed by `owner/repo` | Same pack across Grok, Claude, Codex, Pi, omp, OpenCode. |
 | `WFailedOverlap` 4.0 / `WShippedOverlap` 2.5 | Retune only if the right claim scores and still loses to a weaker row. |
 | Loopback default | This machine. Remote home is documented and manual. |
 | Five records, not the log | Not cass. Not a hosted fact cache. |

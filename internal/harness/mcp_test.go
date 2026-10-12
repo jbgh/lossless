@@ -72,13 +72,14 @@ func TestMergeCodexAndOpenCodeAndPiMCP(t *testing.T) {
 func TestInstallMCPAllHarnesses(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("OPENCODE_CONFIG", filepath.Join(home, ".config", "opencode"))
+	clearOmpEnv(t)
 	paths, err := InstallMCP(MCPConfig{
 		Home: home, Exe: "/bin/am", URL: "https://home.example", Token: "sekrit",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(paths) != 5 {
+	if len(paths) != 6 {
 		t.Fatal(paths)
 	}
 	for _, p := range paths {

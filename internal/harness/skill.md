@@ -15,7 +15,7 @@ when-to-use: >
 
 The chat window is lossy. The session tape is not. lossless is the checkout: a small `context` of past work for **this** goal and files. The user should not have to type `/lossless` or say "ask memory."
 
-The MCP tool is `ask` (Grok may show `lossless__ask`). Hooks already write the tape. Your job is the read.
+The MCP tool is `ask` (Grok may show `lossless__ask`; omp mounts it at the device path `xd://mcp__lossless_ask`). Hooks already write the tape. Your job is the read.
 
 ## When to call ask
 
@@ -50,7 +50,7 @@ ask({
 
 `workspace_root` is this repo's checkout (the one with `origin`), not a sibling clone. `project` is optional then — lossless derives `owner/repo` from origin. Do not invent a search query. Do not rank.
 
-Pass `session_id` when this prompt shows your harness session id; subagents and workflow children pass **their** id, not the parent's. Otherwise omit it: Claude Code, Pi, and OpenCode fill it from the harness. Grok and Codex have no fill, so there send it whenever the prompt shows it. Do not invent one or send a task name. Do not send `default`. Paths are repo-relative files in this checkout, not `/tmp` reports.
+Pass `session_id` when this prompt shows your harness session id; subagents and workflow children pass **their** id, not the parent's. Otherwise omit it: Claude Code, Pi, omp, and OpenCode fill it from the harness. Grok and Codex have no fill, so there send it whenever the prompt shows it. Do not invent one or send a task name. Do not send `default`. Paths are repo-relative files in this checkout, not `/tmp` reports.
 
 Grok `spawn_subagent` inherits MCP when the parent has lossless. Workflow `agent()` children often do not; if `ask` is missing, do not invent a call. If it is present, call it once before the work.
 

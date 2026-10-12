@@ -59,7 +59,7 @@ So:
 
 Holds:
 
-- One catch-up core + thin adapters is right. The five harnesses differ in locate/event/parse only.
+- One catch-up core + thin adapters is right. The six harnesses differ in locate/event/parse only.
 - Owned raw is right. Claude deletes JSONL in 30 days. After 8 Grok compacts the file is 17 MB of originals we would lose if we only trusted the window.
 - PreCompact is a safety net, not the only writer. Turn-level catch-up + a session-dir watcher cover crashed hooks and any compact event we miss.
 - `updates.jsonl` is the wrong Grok file (2.5× larger, ACP). Primary is `chat_history.jsonl`.

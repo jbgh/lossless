@@ -142,7 +142,15 @@ func normalize(o map[string]any, offset int64, ownIDs map[string]bool) (Message,
 		"branch_summary", "custom", "label",
 		"session_info", "custom_message",
 		"last-prompt", "mode", "permission-mode", "attachment",
-		"ai-title", "file-history-snapshot", "file-history-delta":
+		"ai-title", "file-history-snapshot", "file-history-delta",
+		// omp (see docs/harnesses.md): its title slot, usage accounting,
+		// tier/model switches, /clear boundary, rename audits,
+		// always-apply-rule injections, credential pins, subagent revival
+		// headers, and mode changes carry no turn text. The title slot of a
+		// written session is a real first line with no message in it.
+		"title", "title_change", "model_usage", "service_tier_change",
+		"reset_boundary", "ttsr_injection", "credential_pin",
+		"session_init", "mode_change":
 		return Message{Skip: true, Offset: offset}, true
 	}
 	if typ == "system" || typ == "reasoning" || typ == "backend_tool_call" {
@@ -240,6 +248,13 @@ func finishMessage(m Message) (Message, bool) {
 	}
 	switch m.Role {
 	case "system", "developer":
+		m.Skip = true
+		m.Text = ""
+		return m, true
+	case "filemention":
+		// omp/Pi inline the contents of an `@file` mention as its own
+		// message. That is file text in a user slot, not something the
+		// user typed.
 		m.Skip = true
 		m.Text = ""
 		return m, true
@@ -381,7 +396,7 @@ func mapRole(role string) string {
 		return "user"
 	case "assistant", "model":
 		return "assistant"
-	case "tool", "tool_result", "toolresult", "bashexecution":
+	case "tool", "tool_result", "toolresult", "bashexecution", "pythonexecution":
 		return "tool"
 	default:
 		if role == "" {

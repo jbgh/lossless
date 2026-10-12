@@ -69,6 +69,9 @@ func TestWritePiAndOpenCodeInstall(t *testing.T) {
 	if !strings.Contains(string(b), "spawnSync") || !strings.Contains(string(b), "session_before_compact") {
 		t.Fatal("compact must wait: " + string(b))
 	}
+	if !strings.Contains(string(b), "detached: true") {
+		t.Fatal("the turn catch-up must survive Pi exiting right after the event: " + string(b))
+	}
 	o, err := WriteOpenCodePlugin(home)
 	if err != nil {
 		t.Fatal(err)

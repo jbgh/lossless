@@ -203,6 +203,7 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 		"claude":   filepath.Join(userHome, ".claude", "settings.json"),
 		"codex":    filepath.Join(userHome, ".codex", "hooks.json"),
 		"pi":       filepath.Join(userHome, ".pi", "agent", "extensions", "lossless.ts"),
+		"omp":      ompExtensionPath(userHome),
 		"opencode": opencodePluginPath(userHome),
 	}, "hook")
 	if hookOK {
@@ -217,6 +218,7 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 		"claude":   filepath.Join(userHome, ".claude.json"),
 		"codex":    filepath.Join(userHome, ".codex", "config.toml"),
 		"pi":       piMCPDoctorPath(userHome),
+		"omp":      OmpMCPPath(userHome),
 		"opencode": opencodeJSONPath(userHome),
 	}, "lossless")
 	add("mcp", mcpOK, mcpDetail)
@@ -262,7 +264,7 @@ func Doctor(userHome, dataHome, exe, url, token string) Report {
 
 func checkFiles(files map[string]string, needle string) (bool, string) {
 	var ok, missing []string
-	order := []string{"grok", "claude", "codex", "pi", "opencode", "agents"}
+	order := []string{"grok", "claude", "codex", "pi", "omp", "opencode", "agents"}
 	for _, name := range order {
 		p, exists := files[name]
 		if !exists {
@@ -294,6 +296,10 @@ func piMCPDoctorPath(home string) string {
 		}
 	}
 	return PiMCPPath(home)
+}
+
+func ompExtensionPath(home string) string {
+	return filepath.Join(OmpAgentDir(home), "extensions", "lossless.ts")
 }
 
 func opencodePluginPath(home string) string {
@@ -428,6 +434,7 @@ func hookTargetDrift(userHome, exe string) string {
 		{"claude", filepath.Join(userHome, ".claude", "settings.json"), jsonHookTargetRE},
 		{"codex", filepath.Join(userHome, ".codex", "hooks.json"), jsonHookTargetRE},
 		{"pi", filepath.Join(userHome, ".pi", "agent", "extensions", "lossless.ts"), piExeRE},
+		{"omp", ompExtensionPath(userHome), piExeRE},
 	}
 	var drift []string
 	for _, f := range files {

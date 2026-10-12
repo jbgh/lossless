@@ -37,7 +37,7 @@ If we build one global FTS over every tool payload, Rust will not save us. If we
 
 cass is Rust because it *is* a search engine over every session on the machine. We are a catch-up daemon plus a 200-row ranker. Different job.
 
-The expensive work we will keep doing is **parsers and adapters** (Grok vs Claude vs Pi tree vs Codex rollout vs OpenCode). That work churns. Go wins on churn.
+The expensive work we will keep doing is **parsers and adapters** (Grok vs Claude vs Pi tree vs omp tree vs Codex rollout vs OpenCode). That work churns. Go wins on churn.
 
 ---
 

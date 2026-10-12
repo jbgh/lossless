@@ -45,7 +45,7 @@ flowchart LR
   A -.->|later catch-up, minus our own ask I/O| H
 ```
 
-Claims are `owner/repo` across Grok, Claude, Codex. Served / dwell / continue is only the asking session.
+Claims are `owner/repo` across Grok, Claude, Codex, Pi, omp, OpenCode. Served / dwell / continue is only the asking session.
 
 The model does not write a search query. It sends current work. lossless compiles lookups.
 

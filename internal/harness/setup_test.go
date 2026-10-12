@@ -14,6 +14,7 @@ func TestSetupWritesHooksAndMCP(t *testing.T) {
 	user := t.TempDir()
 	data := t.TempDir()
 	t.Setenv("OPENCODE_CONFIG", filepath.Join(user, ".config", "opencode"))
+	clearOmpEnv(t)
 	res, err := Setup(SetupOpts{
 		UserHome: user, DataHome: data, Exe: "/bin/am",
 		Service: false, Start: false,
@@ -29,21 +30,25 @@ func TestSetupWritesHooksAndMCP(t *testing.T) {
 		".claude/settings.json",
 		".codex/hooks.json",
 		".pi/agent/extensions/lossless.ts",
+		".omp/agent/extensions/lossless.ts",
 		".grok/config.toml",
 		".claude.json",
 		".codex/config.toml",
 		".pi/agent/mcp-adapter.json",
+		".omp/agent/mcp.json",
 		".grok/skills/lossless/SKILL.md",
 		".claude/skills/lossless/SKILL.md",
 		".agents/skills/lossless/SKILL.md",
 		".codex/skills/lossless/SKILL.md",
 		".pi/agent/skills/lossless/SKILL.md",
+		".omp/agent/skills/lossless/SKILL.md",
 		".config/opencode/skills/lossless/SKILL.md",
 		".grok/rules/lossless.md",
 		".claude/rules/lossless.md",
 		".claude/CLAUDE.md",
 		".codex/AGENTS.md",
 		".pi/agent/AGENTS.md",
+		".omp/agent/RULES.md",
 		".config/opencode/AGENTS.md",
 	} {
 		if _, err := os.Stat(filepath.Join(user, rel)); err != nil {

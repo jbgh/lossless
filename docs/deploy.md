@@ -9,7 +9,7 @@ lossless is a process with two surfaces:
 | **REST** | `/v1/ask`, `/v1/remember`, `/v1/catch-up`, `/v1/append`, `/v1/records/:id` | The store |
 | **MCP** | `/mcp` (HTTP) or `lossless mcp` (stdio client of that daemon) | How an agent calls the store |
 
-Any agent harness that can call an authenticated HTTP MCP server or those REST endpoints can use lossless. Grok, Claude, Codex, Pi, and OpenCode get a one-command installer. Everything else is the same URL and the same token.
+Any agent harness that can call an authenticated HTTP MCP server or those REST endpoints can use lossless. Grok, Claude, Codex, Pi, omp, and OpenCode get a one-command installer. Everything else is the same URL and the same token.
 
 We do not provision AWS, GCP, Hetzner, Tailscale, systemd on a VPS, or TLS. Those are yours. The binary is OS-agnostic: run `lossless serve` wherever Go runs.
 
@@ -126,7 +126,7 @@ export LOSSLESS_TOKEN=...
 lossless install-mcp --url "$LOSSLESS_URL"
 ```
 
-That writes the five configs we know (`~/.grok/config.toml`, `~/.claude.json`, `~/.codex/config.toml`, `~/.pi/agent/mcp-adapter.json`, `~/.config/opencode/opencode.json`). Restart the harness so MCP attaches.
+That writes the six configs we know (`~/.grok/config.toml`, `~/.claude.json`, `~/.codex/config.toml`, `~/.pi/agent/mcp-adapter.json`, `~/.omp/agent/mcp.json`, `~/.config/opencode/opencode.json`). Restart the harness so MCP attaches.
 
 **Any other harness:** add an MCP server named `lossless` with one of the two shapes above, or call REST directly. The skill and home rule are markdown; copy `internal/harness/skill.md` and `internal/harness/rule.md` into whatever always-on / skill directory that harness loads.
 

@@ -45,16 +45,21 @@ func SkillDests(home string) map[string]string {
 		"agents":   filepath.Join(home, ".agents", "skills", "lossless", "SKILL.md"),
 		"codex":    filepath.Join(home, ".codex", "skills", "lossless", "SKILL.md"),
 		"pi":       filepath.Join(home, ".pi", "agent", "skills", "lossless", "SKILL.md"),
+		"omp":      filepath.Join(OmpAgentDir(home), "skills", "lossless", "SKILL.md"),
 		"opencode": filepath.Join(openCodeUserDir(home), "skills", "lossless", "SKILL.md"),
 	}
 }
 
 func RuleDests(home string) map[string]string {
 	return map[string]string{
-		"grok":     filepath.Join(home, ".grok", "rules", "lossless.md"),
-		"claude":   filepath.Join(home, ".claude", "CLAUDE.md"),
-		"codex":    CodexAgentsPath(home),
-		"pi":       filepath.Join(home, ".pi", "agent", "AGENTS.md"),
+		"grok":   filepath.Join(home, ".grok", "rules", "lossless.md"),
+		"claude": filepath.Join(home, ".claude", "CLAUDE.md"),
+		"codex":  CodexAgentsPath(home),
+		"pi":     filepath.Join(home, ".pi", "agent", "AGENTS.md"),
+		// omp's RULES.md is the always-apply user rule. Its AGENTS.md is the
+		// highest-priority user *context* file, which would shadow (not sit
+		// beside) the user's ~/.claude/CLAUDE.md, so we do not claim it.
+		"omp":      filepath.Join(OmpAgentDir(home), "RULES.md"),
 		"opencode": filepath.Join(openCodeUserDir(home), "AGENTS.md"),
 	}
 }
@@ -63,7 +68,7 @@ func InstallSkills(home string) ([]string, error) {
 	if home == "" {
 		return nil, os.ErrInvalid
 	}
-	order := []string{"grok", "claude", "agents", "codex", "pi", "opencode"}
+	order := []string{"grok", "claude", "agents", "codex", "pi", "omp", "opencode"}
 	dests := SkillDests(home)
 	var out []string
 	for _, name := range order {
@@ -101,6 +106,7 @@ func InstallRules(home string) ([]string, error) {
 		filepath.Join(home, ".claude", "CLAUDE.md"),
 		CodexAgentsPath(home),
 		filepath.Join(home, ".pi", "agent", "AGENTS.md"),
+		filepath.Join(OmpAgentDir(home), "RULES.md"),
 		filepath.Join(openCodeUserDir(home), "AGENTS.md"),
 	} {
 		if err := upsertMarkedFile(dest, ruleMarkdown); err != nil {

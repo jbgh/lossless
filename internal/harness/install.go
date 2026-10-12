@@ -148,6 +148,7 @@ func InstallHooks(home, exe string) ([]string, error) {
 		func() (string, error) { return WriteCodexHooks(home, exe) },
 		func() (string, error) { return WriteCodexFeatures(home) },
 		func() (string, error) { return WritePiExtension(home, exe) },
+		func() (string, error) { return WriteOmpExtension(home, exe) },
 		func() (string, error) { return WriteOpenCodePlugin(home) },
 	}
 	for _, w := range writers {
@@ -270,7 +271,7 @@ function fire(ctx: { cwd: string; sessionManager: { getSessionFile(): string | u
       });
       return;
     }
-    const child = spawn(exe, ["hook-pi"], { stdio: ["pipe", "ignore", "ignore"] });
+    const child = spawn(exe, ["hook-pi"], { stdio: ["pipe", "ignore", "ignore"], detached: true });
     child.stdin?.end(payload);
     child.unref();
   } catch {
@@ -305,6 +306,107 @@ func WritePiExtension(home, exe string) (string, error) {
 		return "", err
 	}
 	if err := writeUserConfig(dest, []byte(PiExtensionSource(exe)), 0o644); err != nil {
+		return "", err
+	}
+	return dest, nil
+}
+
+// stampOmpDeviceJS sets session_id on a lossless call omp exposes as an
+// `xd://` device path: the model calls `write` with a JSON `content`
+// string, e.g. {path: "xd://mcp__lossless_ask", content: "{\"goal\":…}"}.
+const stampOmpDeviceJS = `function stampOmpDevice(input, sid) {
+  if (!sid || !input || typeof input !== "object") return false;
+  const path = String(input.path || "");
+  if (!/^xd:\/\/(?:mcp__)?lossless[_.:\/-]+(?:ask|remember|get_record)$/.test(path)) return false;
+  if (typeof input.content !== "string") return false;
+  let args;
+  try {
+    args = JSON.parse(input.content || "{}");
+  } catch {
+    return false;
+  }
+  if (!args || typeof args !== "object") return false;
+  args.session_id = sid;
+  input.content = JSON.stringify(args);
+  return true;
+}
+`
+
+// OmpExtensionSource is omp's in-process extension: the same three jobs as
+// the Pi one (catch-up events, session id on lossless calls) written
+// against omp's ExtensionAPI.
+func OmpExtensionSource(exe string) string {
+	return `import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import { spawn, spawnSync } from "node:child_process";
+
+const exe = ` + jsonQuote(exe) + `;
+
+` + stampLosslessJS + `
+` + stampOmpDeviceJS + `
+function fire(ctx: { cwd: string; sessionManager: { getSessionFile(): string | undefined; getSessionId(): string } }, source: string) {
+  const file = ctx.sessionManager.getSessionFile();
+  if (!file) return;
+  const payload = JSON.stringify({
+    session_id: ctx.sessionManager.getSessionId(),
+    transcript_path: file,
+    cwd: ctx.cwd,
+    hook_event_name: source,
+  });
+  try {
+    if (source === "compact") {
+      // Awaited by omp before the window shrinks, so the tape is copied first.
+      spawnSync(exe, ["hook-omp"], {
+        input: payload,
+        timeout: 5000,
+        stdio: ["pipe", "ignore", "ignore"],
+      });
+      return;
+    }
+    // Detached so a print-mode session that exits right after this event
+    // cannot kill the catch-up before it writes.
+    const child = spawn(exe, ["hook-omp"], { stdio: ["pipe", "ignore", "ignore"], detached: true });
+    child.stdin?.end(payload);
+    child.unref();
+  } catch {
+    // fail-open
+  }
+}
+
+export default function (pi: ExtensionAPI) {
+  // Fire-and-forget: a handler that returned the child process result would
+  // look like a compaction override to omp's session_before_compact.
+  pi.on("turn_end", (_event, ctx) => {
+    fire(ctx, "turn");
+  });
+  pi.on("session_before_compact", (_event, ctx) => {
+    fire(ctx, "compact");
+  });
+  pi.on("session_compact", (_event, ctx) => {
+    fire(ctx, "compacted");
+  });
+  pi.on("session_shutdown", (_event, ctx) => {
+    fire(ctx, "session_end");
+  });
+  pi.on("tool_call", (event, ctx) => {
+    try {
+      const sid = ctx.sessionManager.getSessionId();
+      // The harness's own id wins over whatever the model sent.
+      if (!stampLossless(event.toolName, event.input, sid) && !stampOmpDevice(event.input, sid)) return;
+      return { input: event.input };
+    } catch {
+      // fail-open: a throw here would block the tool
+    }
+  });
+}
+`
+}
+
+func WriteOmpExtension(home, exe string) (string, error) {
+	dest := filepath.Join(OmpAgentDir(home), "extensions", "lossless.ts")
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return "", err
+	}
+	if err := writeUserConfig(dest, []byte(OmpExtensionSource(exe)), 0o644); err != nil {
 		return "", err
 	}
 	return dest, nil

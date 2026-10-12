@@ -35,6 +35,13 @@ func TestMultiHarnessConcurrentReconcile(t *testing.T) {
 			`{"type":"assistant","content":"Never log Authorization headers in src/middleware/auth.ts."}` + "\n"},
 		{"pi.jsonl", "pi", "other/shop", "sess-pi",
 			`{"type":"assistant","content":"Stripe invoice webhook failed in src/billing/export.ts."}` + "\n"},
+		// omp writes a fixed-width title slot before its session header.
+		{"omp.jsonl", "omp", "acme/web", "01a1ffff-0000-7000-8000-000000000001",
+			`{"type":"title","v":1,"title":"t","pad":"   "}` + "\n" +
+				`{"type":"session","version":3,"id":"01a1ffff-0000-7000-8000-000000000001","cwd":"/Users/jay/dev/web"}` + "\n" +
+				`{"type":"model_change","id":"e1","model":"openrouter/x"}` + "\n" +
+				`{"type":"message","id":"c1","message":{"role":"user","content":[{"type":"text","text":"Add a rate limit to src/api/export.ts."}]}}` + "\n" +
+				`{"type":"message","id":"c2","message":{"role":"assistant","content":[{"type":"text","text":"The export timeout failed in src/api/export.ts staging."}]}}` + "\n"},
 	}
 
 	var wg sync.WaitGroup
@@ -91,6 +98,12 @@ func TestMultiHarnessConcurrentReconcile(t *testing.T) {
 			project: "other/shop", sid: "sess-pi",
 			goal: "fix invoice webhook", path: "src/billing/export.ts",
 			want: []string{"Stripe"}, never: []string{"jose", "Redis"},
+		},
+		{
+			name:    "omp session sees its own project",
+			project: "acme/web", sid: "01a1ffff-0000-7000-8000-000000000001",
+			goal: "fix export timeout", path: "src/api/export.ts",
+			want: []string{"export timeout"}, never: []string{"jose", "Stripe"},
 		},
 	}
 

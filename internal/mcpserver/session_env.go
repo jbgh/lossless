@@ -13,7 +13,7 @@ import (
 )
 
 // harnessID matches the session ids harnesses actually issue: a UUID
-// (Claude, Codex, Grok, Pi), OpenCode's ses_…, and a Claude subagent's
+// (Claude, Codex, Grok, Pi, omp), OpenCode's ses_…, and a Claude subagent's
 // agent-<hex>. A UUID with a suffix glued on (a Pi task pid, a tape
 // .partN) keeps the UUID.
 var (
