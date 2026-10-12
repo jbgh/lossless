@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.39 — 2026-10-12
+
+- **A turn with a paste or tool output in it is not stored as something you said.** 0.1.37 and 0.1.38 tried to cut pasted and tool-written blocks out of a turn and keep the rest. Text inside a block can contain the block's own closing tag, so no cut is reliable. The rule is now the other way round: after an editor's open-file and selection blocks at the front, and the wrapper around a message delivered mid-turn, any block markup left anywhere in the turn means the turn is not stored as `said` at all. Typing about markup ("`<div>` wrappers should be flex", "set it to `<your_key>`") is still kept. Sentence-level extraction is unchanged.
+
 ## 0.1.38 — 2026-10-12
 
 - **Pasted text cannot escape its block.** 0.1.37 removed `<pasted_content>` blocks by matching opening and closing tags in pairs, but pasted text can contain those tags itself, close its own block, and leave the rest of the paste looking like something you typed. Everything from the first opening tag to the last closing tag is now removed, a closing tag with no opening tag takes everything before it, and the check runs on the whole turn rather than on the shortened copy of a long one.
