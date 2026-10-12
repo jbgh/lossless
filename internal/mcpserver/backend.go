@@ -81,6 +81,11 @@ func (h HTTP) Remember(rec claim.Record) (write.CatchUpResult, error) {
 		"type": rec.Type, "text": rec.Text, "project": rec.ProjectKey,
 		"project_key": rec.ProjectKey, "workspace_root": rec.WorkspaceRoot,
 		"paths": rec.Paths, "why": rec.Why,
+		// Without these two the daemon books the record to "manual"/"other",
+		// so a remember from any stdio MCP client (the install shape for
+		// Claude, Pi, omp, Codex, and OpenCode) lost the session the harness
+		// stamped on the call.
+		"session_id": rec.SessionID, "harness": rec.Harness,
 	}
 	if err := h.roundTrip(http.MethodPost, "/v1/remember", body, &out); err != nil {
 		return write.CatchUpResult{}, err

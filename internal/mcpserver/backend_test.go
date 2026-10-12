@@ -69,6 +69,23 @@ func TestHTTPBackendAgainstDaemon(t *testing.T) {
 	if err != nil || res.Extracted != 1 {
 		t.Fatal(res, err)
 	}
+	// The stdio MCP path is an HTTP client, so the record's session and
+	// harness have to survive the round trip. Dropping them made every
+	// remember from a harness-stamped call land as session "manual".
+	stamped, err := b.Remember(claim.Record{
+		Type: "failed", Text: "The stamped remember kept its session.", ProjectKey: "acme/api",
+		Harness: "omp", SessionID: "01a130f8-96e7-749d-bc95-9abfa64d6dea",
+	})
+	if err != nil || len(stamped.IDs) != 1 {
+		t.Fatal(stamped, err)
+	}
+	got, ok := st.Get(stamped.IDs[0])
+	if !ok {
+		t.Fatal("record missing")
+	}
+	if got.SessionID != "01a130f8-96e7-749d-bc95-9abfa64d6dea" || got.Harness != "omp" {
+		t.Fatalf("session/harness dropped over HTTP: %+v", got)
+	}
 	rec, ok, err := b.Get(res.IDs[0], "", "")
 	if err != nil || !ok || rec.Type != "failed" {
 		t.Fatal(rec, ok, err)
