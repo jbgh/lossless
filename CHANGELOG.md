@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.40 — 2026-10-12
+
+- **The rule for what counts as your typing is stricter and is applied when records are read, too.** A turn is stored as `said` only if it carries no block markup: any closing tag, any tag shaped like the ones tools write (a hyphen, underscore, or colon in the name), and any comment or declaration turn the whole turn away. The two wrappers that are still accepted (an editor's open-file or selection block at the front, and the wrapper around a message delivered mid-turn) must be in their exact form with no markup inside. `ask` runs the same check on stored records, so one written by 0.1.36 to 0.1.39 under a looser rule stops appearing.
+
 ## 0.1.39 — 2026-10-12
 
 - **A turn with a paste or tool output in it is not stored as something you said.** 0.1.37 and 0.1.38 tried to cut pasted and tool-written blocks out of a turn and keep the rest. Text inside a block can contain the block's own closing tag, so no cut is reliable. The rule is now the other way round: after an editor's open-file and selection blocks at the front, and the wrapper around a message delivered mid-turn, any block markup left anywhere in the turn means the turn is not stored as `said` at all. Typing about markup ("`<div>` wrappers should be flex", "set it to `<your_key>`") is still kept. Sentence-level extraction is unchanged.
