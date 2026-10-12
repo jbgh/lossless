@@ -3,6 +3,7 @@ package retrieve
 import (
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 
 	"lossless/internal/claim"
@@ -61,6 +62,7 @@ type query struct {
 	Continue       bool
 	Cold           bool
 	Head           bool
+	CompactAt      time.Time // the asking session's last compact; zero if none known
 	WorkspaceRoot  string
 	LimitTokens    int
 }
@@ -260,6 +262,48 @@ func ftsMatch(tokens []string) string {
 	return strings.Join(parts, " OR ")
 }
 
+// ftsStemMatch is ftsMatch as prefix queries on stems, so the lexical
+// route finds "languages" for "language". A stem under four letters is
+// too short to be a prefix ("set*" is half the dictionary), so that word
+// is asked for as itself, as its stem, as the stem's plural, and by its
+// own first four letters: the forms stemOverlap accepts (sameWord). The
+// floor judges the match.
+func ftsStemMatch(tokens []string) string {
+	var parts []string
+	seen := map[string]bool{}
+	add := func(q string) {
+		if !seen[q] {
+			seen[q] = true
+			parts = append(parts, q)
+		}
+	}
+	for _, t := range tokens {
+		t = strings.ToLower(strings.Map(func(r rune) rune {
+			if r == '"' {
+				return -1
+			}
+			return r
+		}, strings.TrimSpace(t)))
+		if t == "" {
+			continue
+		}
+		st := stem(t)
+		if len(st) >= 4 {
+			add(`"` + st + `"*`)
+			continue
+		}
+		add(`"` + t + `"`)
+		if st != "" && st != t {
+			add(`"` + st + `"`)
+			add(`"` + st + `s"`)
+		}
+		if len(t) > 4 {
+			add(`"` + t[:4] + `"*`)
+		}
+	}
+	return strings.Join(parts, " OR ")
+}
+
 func jaccard(a, b []string) float64 {
 	if len(a) == 0 || len(b) == 0 {
 		return 0
@@ -337,6 +381,96 @@ func contentOverlap(queryTokens []string, text string) int {
 	return n
 }
 
+// stem folds the endings that separate a goal's word from the same word
+// in a sentence someone typed: plurals, -ing, -ed, a final e. It is not
+// linguistics ("speed" gives "spe"). What matters is that every form of a
+// word lands on one stem: "embeddings", "embedding", "embedded" and
+// "embed" all give "emb".
+func stem(t string) string {
+	t = strings.ToLower(t)
+	switch {
+	case len(t) > 4 && strings.HasSuffix(t, "ies"):
+		t = t[:len(t)-3] + "y"
+	case len(t) > 3 && strings.HasSuffix(t, "s") && !strings.HasSuffix(t, "ss"):
+		t = t[:len(t)-1]
+	}
+	for i := 0; i < 3; i++ {
+		cut := 0
+		switch {
+		case len(t) > 5 && strings.HasSuffix(t, "ing"):
+			cut = 3
+		case len(t) > 4 && strings.HasSuffix(t, "ed"):
+			cut = 2
+		}
+		if cut == 0 {
+			break
+		}
+		t = t[:len(t)-cut]
+		// "embedd" from embedded, "runn" from running
+		if n := len(t); n > 3 && t[n-1] == t[n-2] && !strings.ContainsRune("aeiouls", rune(t[n-1])) {
+			t = t[:n-1]
+		}
+	}
+	if len(t) > 3 && strings.HasSuffix(t, "e") {
+		t = t[:len(t)-1]
+	}
+	return t
+}
+
+// stemOverlap is contentOverlap on stems, with adjacent words of the text
+// also read joined ("back ups" meets "backups"). Two words that share a
+// stem must also share their first four letters, or all of the shorter
+// one: "cors" and "core" both stem to "cor" and are not the same word.
+func stemOverlap(queryTokens []string, text string) int {
+	words := map[string][]string{} // stem -> the words that gave it
+	add := func(w string) {
+		st := stem(w)
+		words[st] = append(words[st], w)
+	}
+	prev := ""
+	for _, t := range claim.Tokens(topicText(text)) {
+		t = strings.ToLower(t)
+		if isContentToken(t) {
+			add(t)
+		}
+		if prev != "" {
+			add(prev + t)
+		}
+		prev = t
+	}
+	seen := map[string]bool{}
+	n := 0
+	for _, t := range queryTokens {
+		t = strings.ToLower(strings.TrimSpace(t))
+		if !isContentToken(t) {
+			continue
+		}
+		st := stem(t)
+		if seen[st] {
+			continue
+		}
+		for _, w := range words[st] {
+			if sameWord(t, w) {
+				seen[st] = true
+				n++
+				break
+			}
+		}
+	}
+	return n
+}
+
+func sameWord(a, b string) bool {
+	need := 4
+	if len(a) < need {
+		need = len(a)
+	}
+	if len(b) < need {
+		need = len(b)
+	}
+	return a[:need] == b[:need]
+}
+
 // jobOverlapText strips claim-type jargon so "classified as failed"
 // does not count as a job-1 overlap with an ask about retrieve.
 func jobOverlapText(s string) string {
@@ -352,9 +486,15 @@ func jobOverlapText(s string) string {
 			b.WriteRune(r)
 		}
 	}
-	out := b.String()
+	return topicText(b.String())
+}
+
+// topicText drops the claim-type jargon and keeps code spans: a shared
+// `identifier` is the most specific word a record has.
+func topicText(s string) string {
+	out := strings.ToLower(s)
 	for _, w := range jobOverlapStop {
-		out = strings.ReplaceAll(strings.ToLower(out), w, " ")
+		out = strings.ReplaceAll(out, w, " ")
 	}
 	return out
 }
@@ -370,12 +510,18 @@ func extractNoise(rec claim.Record) bool {
 	if t == "" {
 		return true
 	}
-	// remember is deliberate memory: no read-time gate applies, whatever
-	// the sentence looks like. import and empty-source rows (bench seeds,
+	// remember is deliberate memory: no shape gate applies, whatever the
+	// sentence looks like. (Whether it is about this ask is the relevance
+	// floor's question, belowFloor, and that one is asked of every source.) import and empty-source rows (bench seeds,
 	// fixtures, legacy) keep the shape gates and only skip the grounding
 	// gates below (claim.ExplicitMemory).
 	if rec.Source == "remember" {
 		return false
+	}
+	// A said record is a user turn kept whole: the sentence shapes below
+	// judge extracted claims, not this.
+	if rec.Type == "said" {
+		return gate.MachineTurn(t)
 	}
 	if gate.SkipProse(t) || gate.ListChrome(t, true) {
 		return true
@@ -476,6 +622,131 @@ func overlapNeed(contentTokens int) int {
 		need = OverlapStrongMin
 	}
 	return need
+}
+
+// topicNeed is how many of the ask's content words a record must share to
+// pack on words alone: one for a goal of up to sixteen, one more for every
+// sixteen after that (half the strong bar, overlapNeed). A thirty-word goal
+// shares one ordinary word with almost any record in the project.
+func topicNeed(contentTokens int) int {
+	need := (contentTokens + 15) / 16
+	if need < 1 {
+		need = 1
+	}
+	return need
+}
+
+// belowFloor is the pack's relevance floor: a record that shares no file,
+// no identifier, and too few of the goal's words with this ask is filler,
+// whatever its type and age score. Five slots are a cap, not a quota.
+// A record the agent opened stays while the ask is the same work. An ask
+// with no content words of its own (a bare continue, paths only) has no
+// vocabulary to judge by, so the floor does not apply. The path hop is
+// judged afterwards, across the pool (groundHops).
+func belowFloor(q query, ov []string, strong bool, rec claim.Record) bool {
+	if len(ov) == 0 || strong {
+		return false
+	}
+	if q.Dwell[rec.ID] && q.Continue {
+		return false
+	}
+	// Stems, so "rate limits" is on topic for a goal about rate limiting.
+	// And the names of the record's files: "change pack ordering" is about
+	// a decision filed on pack.go whatever words the decision uses.
+	text := topicText(rec.Text) + " " + fileNames(rec.Paths)
+	return contentOverlap(ov, text) < topicNeed(len(ov)) && stemOverlap(ov, text) < topicNeed(len(ov))
+}
+
+// fileNames is the base name of each path without its extension.
+func fileNames(paths []string) string {
+	var b strings.Builder
+	for _, p := range paths {
+		p = strings.ReplaceAll(p, "\\", "/")
+		if i := strings.LastIndex(p, "/"); i >= 0 {
+			p = p[i+1:]
+		}
+		if i := strings.Index(p, "."); i > 0 {
+			p = p[:i]
+		}
+		b.WriteString(p)
+		b.WriteByte(' ')
+	}
+	return b.String()
+}
+
+// groundHops lets a record in on the path hop when the record it hopped
+// from is itself on topic: "add rate limiting" finds the limiter decision,
+// and the Redis failure on that same file shares no word with the ask. A
+// file named only by filler is no tie.
+func groundHops(cand []scored) {
+	seeds := map[string]bool{}
+	for _, c := range cand {
+		if c.ungrounded {
+			continue
+		}
+		for _, p := range c.rec.Paths {
+			if p != "" {
+				seeds[p] = true
+			}
+		}
+	}
+	if len(seeds) == 0 {
+		return
+	}
+	for i := range cand {
+		if !cand[i].ungrounded || cand[i].hop == 0 {
+			continue
+		}
+		// Path keys, as the hop feature compares them.
+		for _, p := range claim.PathKeys(cand[i].rec.Paths) {
+			if seeds[p] {
+				cand[i].ungrounded = false
+				break
+			}
+		}
+	}
+}
+
+// dropSaidTwins takes a said record out of the pack when a typed record
+// packed beside it is a sentence of that same turn. Same session and
+// offset is not enough: a later part of a sealed tape counts from zero
+// again, so the sentence must also be in the turn's text.
+func dropSaidTwins(packed []scored) (kept, dropped []scored) {
+	fold := func(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
+	for _, c := range packed {
+		twin := false
+		if c.rec.Type == "said" && c.rec.TranscriptRef != nil {
+			turn := fold(c.rec.Text)
+			for _, p := range packed {
+				r := p.rec.TranscriptRef
+				if p.rec.Type == "said" || r == nil {
+					continue
+				}
+				if r.SessionID == c.rec.TranscriptRef.SessionID && r.StartOffset == c.rec.TranscriptRef.StartOffset &&
+					strings.Contains(turn, fold(p.rec.Text)) {
+					twin = true
+					break
+				}
+			}
+		}
+		// A one-sentence turn and the record typed from it say the same
+		// thing in the same words, whichever turn it was.
+		if !twin && c.rec.Type == "said" {
+			toks := claim.Tokens(c.rec.Text)
+			for _, p := range packed {
+				if p.rec.Type != "said" && jaccard(toks, claim.Tokens(p.rec.Text)) >= DiversityJac {
+					twin = true
+					break
+				}
+			}
+		}
+		if twin {
+			dropped = append(dropped, c)
+		} else {
+			kept = append(kept, c)
+		}
+	}
+	return kept, dropped
 }
 
 // overlapTokens are the ask's distinct content tokens without the

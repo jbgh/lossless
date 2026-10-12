@@ -93,6 +93,8 @@ func main() {
 		os.Exit(runBench(args))
 	case "embed-backfill":
 		os.Exit(runEmbedBackfill(args))
+	case "backfill":
+		os.Exit(runBackfill(args))
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -129,6 +131,7 @@ func usage() {
   lossless backup [--dry-run] [--verbose] [--take-over]   # one incremental run; serve --watch runs it on the schedule
   lossless restore [--force] [--at GEN] [--list]   # pull a generation back into an empty store
   lossless embed-backfill     # embed active claims if an on-box model is configured
+  lossless backfill [--project KEY] [--dry-run]   # read stored tapes again; add what this version keeps (the user's turns)
   lossless hook-pi            # stdin: Pi extension JSON; fail-open
   lossless hook-opencode      # stdin: OpenCode plugin JSON; fail-open
 
@@ -803,6 +806,36 @@ func runEmbedBackfill(args []string) int {
 		return 1
 	}
 	fmt.Printf("embedded %d claims with %s\n", n, st.EmbedderName())
+	return 0
+}
+
+func runBackfill(args []string) int {
+	fs := flag.NewFlagSet("backfill", flag.ContinueOnError)
+	home := homeFlag(fs)
+	project := fs.String("project", "", "owner/repo (omit for all projects)")
+	dry := fs.Bool("dry-run", false, "count what would be added, write nothing")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	st, err := openStore(*home)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer st.Close()
+	res, err := write.Backfill(st, *project, *dry)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	verb := "added"
+	if *dry {
+		verb = "would add"
+	}
+	fmt.Printf("read %d tapes, %d user turns kept, %s %d\n", res.Tapes, res.Turns, verb, res.Added)
+	if res.Skipped > 0 {
+		fmt.Printf("left %d tapes alone: no session on record (removed by prune, or a test fixture)\n", res.Skipped)
+	}
 	return 0
 }
 

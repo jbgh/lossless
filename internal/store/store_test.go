@@ -741,3 +741,67 @@ func TestActionTapeRoundTrip(t *testing.T) {
 		t.Fatalf("dwell %+v %v", got, err)
 	}
 }
+
+// A said record is dated when the turn was typed, which can be months
+// before the tape was ingested and its excerpt filed.
+func TestExcerptCoveringFindsAnExcerptFiledAfterTheRecordsDate(t *testing.T) {
+	st, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Now().UTC()
+	if err := st.WriteExcerpts(now.Format("2006-01"), []Excerpt{{
+		SessionID: "old-session", ProjectKey: "acme/api", StartOffset: 0, EndOffset: 400, Text: "user: an old turn\n",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	ref := &claim.TranscriptRef{SessionID: "old-session", StartOffset: 10, EndOffset: 50}
+	if _, ok := st.ExcerptCovering(ref, now.AddDate(0, -3, 0)); !ok {
+		t.Fatal("excerpt filed this month not found for a record dated three months ago")
+	}
+}
+
+// Said records live in their own full-text table: a typed query neither
+// returns them nor ranks against them, and the claim count is typed.
+func TestSaidHasItsOwnSearchTableAndCount(t *testing.T) {
+	st, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for _, rec := range []claim.Record{
+		{ID: "01JDEC", Type: "decision", ProjectKey: "acme/api", Harness: "grok", SessionID: "s", Source: "remember",
+			Text: "Chose the fixed-window limiter for login.", CreatedAt: "2026-08-01T09:00:00Z"},
+		{ID: "01JSAID", Type: "said", ProjectKey: "acme/api", Harness: "grok", SessionID: "s", Source: "turn",
+			Text: "the limiter for login should log every rejection", CreatedAt: "2026-08-02T09:00:00Z"},
+	} {
+		if _, err := st.WriteClaim(rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	typed, err := st.SearchFTS("acme/api", `"limiter"`, 10)
+	if err != nil || len(typed) != 1 || typed[0].ID != "01JDEC" {
+		t.Fatalf("typed search = %+v %v", typed, err)
+	}
+	said, err := st.SearchSaid("acme/api", `"limiter"`, 10)
+	if err != nil || len(said) != 1 || said[0].ID != "01JSAID" {
+		t.Fatalf("said search = %+v %v", said, err)
+	}
+	stats, err := st.ListProjectStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range stats {
+		if p.Key == "acme/api" && (p.Active != 1 || p.ByType["said"] != 1) {
+			t.Fatalf("stats: active=%d by type=%v", p.Active, p.ByType)
+		}
+	}
+	// Retiring a said record takes it out of its table too.
+	if _, err := st.DB.Exec(`UPDATE records SET status = 'superseded' WHERE id = '01JSAID'`); err != nil {
+		t.Fatal(err)
+	}
+	if said, _ := st.SearchSaid("acme/api", `"limiter"`, 10); len(said) != 0 {
+		t.Fatalf("a retired said record is still found: %+v", said)
+	}
+}

@@ -113,6 +113,11 @@ CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(
   record_id UNINDEXED,
   tokenize = 'unicode61'
 );
+CREATE VIRTUAL TABLE IF NOT EXISTS said_fts USING fts5(
+  body,
+  record_id UNINDEXED,
+  tokenize = 'unicode61'
+);
 `)
 	if err != nil {
 		return err
@@ -241,7 +246,8 @@ func (s *Store) WriteClaim(rec claim.Record) (superseded string, err error) {
 	if err := s.writeFile(rec); err != nil {
 		return superseded, err
 	}
-	if rec.Status == "active" {
+	if rec.Status == "active" && rec.Type != "said" {
+		// Vectors are for claims; a said record has its own lexical route.
 		s.embedClaim(rec.ID, rec.ProjectKey, rec.Text, rec.Symbols)
 	} else {
 		_ = s.DeleteVector(rec.ID)

@@ -196,8 +196,8 @@ Compute only on the candidate set. Every feature is in `[0, 1]` except `type_ran
 
 | Feature | Formula | Notes |
 |---------|---------|--------|
-| `type_rank` | `failed=5, decision=4, constraint=3, state=2, thread=1, excerpt=0` | Same as schema |
-| `recency` | `0.5 ** (age_days / half_life)` | Type-aware. Clock = request time. `failed` 14d, `state`/`thread` 7d, `decision` 180d, `constraint` = 1 (does not fade). |
+| `type_rank` | `failed=5, decision=4, constraint=3, said=3, state=2, thread=1, excerpt=0` | Same as schema |
+| `recency` | `0.5 ** (age_days / half_life)` | Type-aware. Clock = request time. `failed` 14d, `state`/`thread` 7d, `decision` 180d, `constraint` and `said` = 1 (do not fade). |
 | `path` | Jaccard of query `path_keys` vs record paths (basename counts as a hit) | 0 if either side empty |
 | `symbol` | Jaccard of query symbols vs record `symbols` | 0 if either side empty |
 | `bm25` | min-max normalize BM25 over **this candidate set** | 0 if record was not an FTS hit |
@@ -275,6 +275,17 @@ No learned ranker in v1.
 ## 5. Pack
 
 Sort candidates by `score` desc, then `created_at` desc, then `id`.
+
+**Relevance floor.** Five is a cap, not a quota. Before the walk, a candidate is left out when it ties to this ask by nothing but its type and age. It stays if any of these hold:
+
+- strong overlap (§3: a shared file, a shared code identifier, enough shared content tokens, or a vector hit at the gate);
+- it shares at least `ceil(n / 16)` of the ask's `n` content words, and at least one. Function words and the project's own name do not count; words inside a code span do. A thirty-word goal shares one ordinary word with almost any record, so that goal needs two;
+- the path hop reached it from a record that is itself above the floor;
+- the agent opened it (`get_record` / `remember`) and this ask continues the same work.
+
+**Said records** (the user's turns, write.md) have a stricter floor: strong overlap only. Their word route compares stems and reads adjacent words joined, because people write "languages" and "back ups" where a goal says "language" and "backup". On topic a said record gets 0.8 of the shipped-overlap weight, so it ranks with typed records and below one that carries a warning; it never warns itself. It is left out when a typed record from the same turn is on topic, and when it comes from the asking session's last 30 minutes (still in the window). At most two pack (the type cap).
+
+An ask with no content words of its own (a bare continue, paths only) and a HEAD ask are not floored. The constraint rescue's bm25 route obeys the floor: bm25 counts function words. `inspect --ask` lists these drops as `off-topic`. An empty pack is a valid answer.
 
 Walk with **coverage, then score**:
 

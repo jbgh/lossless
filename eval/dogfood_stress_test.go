@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"lossless/internal/claim"
 	"lossless/internal/retrieve"
 	"lossless/internal/store"
 	"lossless/internal/write"
@@ -131,6 +132,23 @@ func TestDogfoodStress(t *testing.T) {
 	t.Run("illRefactorIsPlanning", testIllRefactor)
 	t.Run("emptyObjectSkipped", testEmptyObject)
 	t.Run("nonJSONLineThenGold", testNonJSONLine)
+}
+
+// typedActive is what extract typed. These cases are about extraction: the
+// said record of a user turn holds the same words verbatim, and would
+// satisfy (or trip) any substring check on its own.
+func typedActive(st *store.Store, project string) ([]claim.Record, error) {
+	all, err := st.ListActive(project)
+	if err != nil {
+		return nil, err
+	}
+	out := all[:0:0]
+	for _, r := range all {
+		if r.Type != "said" {
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }
 
 func dogfoodStore(t *testing.T) *store.Store {

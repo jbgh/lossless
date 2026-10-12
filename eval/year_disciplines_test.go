@@ -200,7 +200,7 @@ func TestYearDisciplinesCatchUpAndAsk(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, w := range worlds {
-		recs, _ := st.ListActive(w.project)
+		recs, _ := typedActive(st, w.project)
 		noise := 0
 		var found []string
 		for _, c := range recs {

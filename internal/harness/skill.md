@@ -60,10 +60,23 @@ Send current work. lossless returns ≤5 records in `context`.
 
 The pack is a bibliography of at most five cites, not the tape. Packed `text` is the cite sentence. `has_excerpt` means `get_record` can open the source turn.
 
+A record of type `said` is something the user typed in an earlier session, word for word. Read it as the user telling you again. It may be older than a later change of mind, so check its date, and open it with `get_record` when you need the turn around it.
+
 - Treat `warnings` as blocking unless the user overrides.
 - Do not repeat a `failed` without new evidence.
 - Do not undo a `decision` or violate a `constraint`.
 - If a warning says a decision may already cover, or the packed sentence is not enough to act, call `get_record` on **that one** id when `has_excerpt` is true. Do not GET all five.
-- `remember` only for a durable fact the tape will miss. It does not replace catch-up.
+
+## When to call remember
+
+The tape keeps everything, but only what is written down as a record comes back on its own. You are the one who knows what mattered. Call `remember` when:
+
+- the user states a rule or preference that should outlive this session ("use the small model for subagents", "ask me with multiple choice", "never deploy on Friday") → `constraint`
+- a decision is made that later work must not undo → `decision`, with the files
+- an approach failed for a reason someone would hit again → `failed`, with the cause
+
+Write one sentence that stands alone for an agent that never saw this session: name the thing, say the rule, give the reason if there is one. Add `paths` when it is about files.
+
+Do not remember progress, plans, or what the repo already shows. A fact that only matters when a certain file or topic comes up belongs here rather than in an always-loaded instructions file: those are read whole every session and stop being read as they grow, and a record comes back when the work touches it.
 
 You are not searching memory. You are telling lossless what you are doing so it can keep the window honest.

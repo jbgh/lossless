@@ -124,10 +124,17 @@ func (s *Store) ExcerptCovering(ref *claim.TranscriptRef, hint time.Time) (Excer
 	if ref == nil || ref.SessionID == "" {
 		return Excerpt{}, false
 	}
-	months := excerptMonths(hint)
-	for _, month := range months {
-		ex, ok := s.lookupExcerpt(month, ref)
-		if ok {
+	tried := map[string]bool{}
+	// The record's own month and the year before it; then, for a record
+	// dated before it was ingested (a said record carries the time the
+	// turn was typed, and an old session can be read months later), the
+	// months since.
+	for _, month := range append(excerptMonths(hint), excerptMonths(time.Time{})...) {
+		if tried[month] {
+			continue
+		}
+		tried[month] = true
+		if ex, ok := s.lookupExcerpt(month, ref); ok {
 			return ex, true
 		}
 	}

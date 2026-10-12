@@ -208,6 +208,10 @@ func Append(st *store.Store, req AppendRequest) (AppendResult, error) {
 		}
 		out.Extracted++
 	}
+	writeSaid(st, msgs, clean.String(), rawBase, ExtractOpts{
+		ProjectKey: req.Project, WorkspaceRoot: req.Workspace, Harness: req.Harness,
+		SessionID: req.SessionID, Source: req.Source,
+	}, time.Time{}, current == 0, nil)
 	_ = st.UpsertSession(store.Session{
 		JSONL:     key,
 		SessionID: req.SessionID,

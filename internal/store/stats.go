@@ -45,7 +45,11 @@ WHERE status = 'active' GROUP BY project_key, type`)
 			p = &ProjectStats{Key: key, ByType: map[string]int{}}
 			by[key] = p
 		}
-		p.Active += n
+		// Active is the claim count inspect reports and judges yield by.
+		// A said record is a turn kept whole, counted under its type only.
+		if typ != "said" {
+			p.Active += n
+		}
 		p.ByType[typ] = n
 	}
 	if err := rows.Err(); err != nil {
@@ -122,7 +126,7 @@ func (s *Store) ListRecentActive(project string, limit int) ([]claim.Record, err
 		return nil, nil
 	}
 	rows, err := s.DB.Query(`SELECT `+claimCols+` FROM records
-WHERE project_key = ? AND status = 'active'
+WHERE project_key = ? AND status = 'active' AND type != 'said'
 ORDER BY created_at DESC, id DESC LIMIT ?`, project, limit)
 	if err != nil {
 		return nil, err

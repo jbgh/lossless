@@ -45,10 +45,12 @@ type AskExpect struct {
 	MustIncludeTypes         []string         `json:"must_include_types"`
 	MustIncludeSubstrings    []string         `json:"must_include_substrings"`
 	MustNotIncludeSubstrings []string         `json:"must_not_include_substrings"`
-	MustWarn                 string           `json:"must_warn"`
-	MustNotWarn              bool             `json:"must_not_warn"`
-	MustBeEmpty              bool             `json:"must_be_empty"`
-	FirstMustNotContain      string           `json:"first_must_not_contain"`
+	// MustNotIncludeTypes: no packed hit may have one of these types.
+	MustNotIncludeTypes []string `json:"must_not_include_types"`
+	MustWarn            string   `json:"must_warn"`
+	MustNotWarn         bool     `json:"must_not_warn"`
+	MustBeEmpty         bool     `json:"must_be_empty"`
+	FirstMustNotContain string   `json:"first_must_not_contain"`
 }
 
 type Case struct {
@@ -217,7 +219,9 @@ func RunCase(root, home string, c Case) (CaseScore, error) {
 	}
 	out.Extracted = extracted
 
-	active, err := st.ListActive(project)
+	// What extract typed. The said records of the same turns hold the same
+	// words verbatim and would satisfy any substring on their own.
+	active, err := typedActive(st, project)
 	if err != nil {
 		return out, err
 	}
@@ -326,6 +330,11 @@ func scoreAsk(exp AskExpect, pkt retrieve.Response) AskScore {
 			as.Errors = append(as.Errors, fmt.Sprintf("unexpected %q", s))
 		}
 	}
+	for _, typ := range exp.MustNotIncludeTypes {
+		if types[typ] {
+			as.Errors = append(as.Errors, "unexpected type "+typ)
+		}
+	}
 	if exp.FirstMustNotContain != "" && len(pkt.Context) > 0 && strings.Contains(pkt.Context[0].Text, exp.FirstMustNotContain) {
 		as.Errors = append(as.Errors, "first hit contains "+exp.FirstMustNotContain)
 	}
@@ -376,4 +385,18 @@ func FormatReport(rep Report) string {
 	fmt.Fprintf(&b, "\ncases %d/%d  asks %d/%d  mean recall %.2f\n",
 		rep.CasePass, rep.CaseTotal, rep.AskPass, rep.AskTotal, rep.MeanRecall)
 	return b.String()
+}
+
+func typedActive(st *store.Store, project string) ([]claim.Record, error) {
+	all, err := st.ListActive(project)
+	if err != nil {
+		return nil, err
+	}
+	out := all[:0:0]
+	for _, r := range all {
+		if r.Type != "said" {
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }

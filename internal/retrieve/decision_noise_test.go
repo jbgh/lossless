@@ -8,7 +8,9 @@ import (
 )
 
 // Legacy turn-extracted decisions with no referent must stop packing;
-// remember-sourced claims are explicit memory and stay regardless.
+// remember-sourced claims are explicit memory and pass every shape gate.
+// They still have to be about the ask: the relevance floor applies to
+// every source, so the remembered record here shares a word with it.
 func TestAskDropsUngroundedTurnDecisionKeepsRemember(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{
@@ -18,7 +20,7 @@ func TestAskDropsUngroundedTurnDecisionKeepsRemember(t *testing.T) {
 	})
 	writeRec(t, st, claim.Record{
 		ID: "01JREMEM", Type: "decision", Source: "remember",
-		Text:      "Keep the daemon loopback only and manual for remote homes.",
+		Text:      "Keep the daemon loopback only in production and manual for remote homes.",
 		CreatedAt: "2026-08-12T00:00:00Z",
 	})
 	writeRec(t, st, claim.Record{

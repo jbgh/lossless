@@ -69,8 +69,8 @@ How records are chosen: [retrieval.md](retrieval.md).
 
 | Field | Meaning |
 |-------|---------|
-| `context[].type` | `decision` \| `failed` \| `constraint` \| `state` \| `thread` |
-| `context[].text` | Bibliography sentence. Tape is `get_record`. |
+| `context[].type` | `decision` \| `failed` \| `constraint` \| `state` \| `thread` \| `said` |
+| `context[].text` | Bibliography sentence. Tape is `get_record`. For `said`, the user's turn word for word, from an earlier session or from this one before the last half hour. It never carries a warning. |
 | `context[].source` | How the claim landed (`turn`, `compact`, `remember`, …). |
 | `context[].has_excerpt` | True when `get_record` can open a covering tape window. |
 | `context[].status` | `active` or `superseded`. `[verify]` is a **prefix on `text`**, not a persisted status. |
@@ -96,7 +96,7 @@ Stale files: ephemeral `[verify]` prefix. Do not persist stale.
 | `400` | Missing `project` and `workspace_root`, or invalid JSON |
 | `200` | Always for a valid ask, including empty `context` |
 
-Empty context is not an error. It means the store has nothing relevant.
+Empty context is not an error. It means the store has nothing relevant. Fewer than five records means the same thing for the missing slots: a record that shares no file, no identifier, and too few words with the ask is left out rather than used as filler.
 
 ## Skill rule (every harness)
 

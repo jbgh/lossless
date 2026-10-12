@@ -218,6 +218,10 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 			out.Superseded = append(out.Superseded, sup)
 		}
 	}
+	writeSaid(st, msgs, clean.String(), rawBase, ExtractOpts{
+		ProjectKey: project, WorkspaceRoot: req.WorkspaceRoot, Harness: req.Harness,
+		SessionID: session, Source: req.Source,
+	}, time.Time{}, srcOff == 0, nil)
 	if err := st.UpsertSession(store.Session{
 		JSONL: req.JSONL, SessionID: session, Harness: req.Harness,
 		Workspace: req.WorkspaceRoot, Project: project,

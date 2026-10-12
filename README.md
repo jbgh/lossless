@@ -1,6 +1,7 @@
+<h1 align="center">lossless</h1>
+
 <p align="center">
-  <strong>lossless</strong><br>
-  Agent memory for coding sessions
+  Memory for coding agents that survives compaction, new sessions, and a change of tool.
 </p>
 
 <p align="center">
@@ -19,44 +20,72 @@
 
 The session log is the memory. Compact is lossy. lossless is not.
 
-# The problem
+## The problem
 
-Coding agents forget. Not because the model is weak, but because the harness keeps only a small *window* of the session in front of the model at each turn. When that window fills up, the harness **compacts**: early turns are replaced by a short summary so the next call fits the context limit. Over a long project this happens again and again.
+A coding agent only sees a small window of its session. When the window fills up, the harness **compacts** it: early turns are replaced by a short summary. On a long project this happens again and again.
 
-Say an agent tries a Redis token bucket for rate limiting, fails in staging on connection-pool exhaustion, and ships a fixed-window counter instead. Four compacts later the window holds one clause — *"tried Redis, switched to fixed window."* A new session asks "why not Redis?" and gets nothing back. The token bucket is tried again, burns another afternoon, and fails the same way.
+Say an agent tries a Redis token bucket for rate limiting, watches it exhaust the connection pool in staging, and ships a fixed-window counter instead. A few compacts later all that is left is *"tried Redis, switched to fixed window."* A new session asks "why not Redis?", finds nothing, and spends another afternoon failing the same way.
 
-The same erosion hits every kind of past. A shipped decision gets re-litigated. A constraint the user stated once gets violated. A dead end becomes indistinguishable from a fresh idea. And none of it survives a new session, a new model, or a different tool.
+Decisions get re-argued, rules the user stated once get broken, and dead ends look like fresh ideas. None of it carries over to a new session, a new model, or a different tool.
 
-The irony: the session *file* on disk is already append-only. The full record exists. Only the window forgets.
+The full session file is still on disk the whole time. Only the window forgets.
 
-# What lossless is
+## How it works
 
-lossless is a small local service that keeps the whole record and checks out what must not be forgotten.
-
-- **A daemon watches the session files.** Grok, Claude Code, Codex, Pi, and OpenCode all write session logs to disk. Hooks copy each one onto an append-only **tape** in `~/.lossless/raw` — full JSONL, kept even if the harness deletes its own copy.
-- **From the tape, lossless distills claims.** One-line records of failed work, decisions, constraints, states, and threads, each pointing back to the tape excerpt it came from. The index is rebuildable; the tape is the corpus.
-- **The agent calls one tool, `ask`,** with what it is about to do and which files it will touch. It gets back at most five records plus warnings. The agent writes the next reply. lossless does not.
-
-```
-ask({ question, project, paths, goal })
-  → context + warnings
+```mermaid
+flowchart LR
+  S["Session files<br/>Grok · Claude Code · Codex · Pi · OpenCode"] -- hooks --> T[("Tape<br/>the full log")]
+  T -- extract --> R[("Records<br/>one line each")]
+  A["Agent"] -- "ask(goal, files)" --> R
+  R -- "up to 5 records + warnings" --> A
 ```
 
-Failed work packs first, then what already shipped. Warnings call out prior attempts at this goal, standing constraints, and recurring traps — including traps that share no vocabulary with the ask.
+1. **Record.** Hooks copy every session file onto an append-only tape in `~/.lossless/raw`. The tape is kept even if the harness deletes its own copy.
+2. **Index.** lossless reads the tape and writes one-line records: what failed, what was decided, what rules were set, where work stopped. It also keeps everything you typed, word for word. The agent can add records of its own with `remember`. Each record points back to the part of the tape it came from.
+3. **Ask.** Before it changes anything, the agent calls `ask` with its goal and the files it is about to touch. It gets back the records that apply, at most five, plus warnings. Failed work comes first.
 
-Memory is keyed by `owner/repo`, not by model or harness. Switch tools mid-project and `ask` returns the same faileds and decisions.
+Memory belongs to the repository (`owner/repo`), not to a model or a tool. Start in Claude Code, continue in Codex, and `ask` returns the same history.
 
-## What an ask looks like
+## Install
+
+```bash
+curl -fsSL https://github.com/jbgh/lossless/releases/latest/download/install.sh | sh
+lossless setup     # hooks, MCP server, skill, and a background service
+lossless doctor    # checks that everything is connected
+```
+
+Then start a new agent session. From there the agent calls `ask` on its own. There is nothing to type.
+
+- Runs on macOS and Linux (amd64, arm64). The binary is installed to `~/.local/bin/lossless`.
+- `setup` covers Grok, Claude Code, Codex, Pi, and OpenCode. It adds a short rule to each one's instructions file, only between `<!-- lossless:start -->` and `<!-- lossless:end -->` markers.
+- In a Grok session that is already open, reload with `/hooks` then `r`, and `/skills` then `r`.
+- Upgrade with `lossless update`. Check first with `lossless update --check`.
+
+<details>
+<summary>Build from source</summary>
+
+```bash
+go test ./...
+go build -o lossless ./cmd/lossless
+./lossless setup
+./lossless doctor
+```
+
+</details>
+
+## What the agent gets
+
+The agent sends what it is about to do:
 
 ```json
 {
-  "question": "what's already known about rate limiting on auth?",
-  "project": "acme/api",
   "workspace_root": "/Users/you/dev/api",
   "goal": "add rate limiting",
   "paths": ["src/middleware/auth.ts"]
 }
 ```
+
+lossless answers with the records that bear on it:
 
 ```json
 {
@@ -79,206 +108,69 @@ Memory is keyed by `owner/repo`, not by model or harness. Switch tools mid-proje
 }
 ```
 
-Each record is one of five types:
+There are six kinds of record:
 
-| `type` | What it holds |
-|--------|---------------|
-| `failed` | An approach that did not work, and why. Packed first — this is the expensive past. |
-| `decision` | Something that shipped: a library, a shape, a settled tradeoff. |
-| `constraint` | A rule stated once that must keep holding ("never touch `.woodpecker/**`"). |
+| Type | What it holds |
+|------|---------------|
+| `failed` | An approach that did not work, and why. Returned first. |
+| `decision` | Something that shipped: a library, a design, a settled tradeoff. |
+| `constraint` | A rule that must keep holding ("never touch `.woodpecker/**`"). |
 | `state` | Where work stopped: a pending migration, a half-done refactor. |
-| `thread` | An open question to return to. |
+| `thread` | An open question to come back to. |
+| `said` | Something you typed in an earlier session, in your words. Never a warning. |
 
-`id` is a citation. `get_record` opens the tape excerpt behind any record, so a one-line claim is never the whole story.
+A record is a one-line summary, never the whole story. `get_record` opens the tape excerpt behind any `id`.
 
-# Install
+Warnings flag four things: an earlier attempt at this goal that failed, shipped work that may already cover the goal, a standing rule the goal touches, and a failure that keeps recurring in the project. A record only comes back if it shares a file, an identifier, or enough of the goal's words with the ask. When nothing applies, the answer is empty.
 
-```bash
-curl -fsSL https://github.com/jbgh/lossless/releases/latest/download/install.sh | sh
-lossless setup
-lossless doctor
-```
+## Using it yourself
 
-That writes a real binary to `~/.local/bin/lossless` (a dest symlink is replaced, not followed), then hooks, MCP, a skill, and a user service — home rules only inside `<!-- lossless:start -->` … `<!-- lossless:end -->` markers. Start a new agent session so the MCP tools appear (Grok: `/hooks` then `r`; `/skills` then `r` if the session is already open). Everything stays on this machine.
-
-Binaries: macOS and Linux, amd64 and arm64.
+The agent's tools are also a CLI:
 
 ```bash
-lossless update          # later
-lossless update --check
-lossless version
+lossless ask --project owner/repo --goal "add rate limiting" --path src/middleware/auth.ts
+lossless remember --type decision --text "Use jose, not jsonwebtoken, on Edge." --project owner/repo
+lossless inspect --project owner/repo --ask    # why each record was returned or dropped
+lossless supersede <id> "no longer true"       # retire a record; nothing is deleted
+lossless backfill                              # after an upgrade: read old tapes with the new version
 ```
 
-`update` is the only command that calls GitHub. A token is only needed if `LOSSLESS_UPDATE_REPO` points at a private fork.
+The same JSON is served over MCP (`ask`, `remember`, `get_record`) and REST (`POST /v1/ask`), so any agent that can call either one can share the store. `lossless help` lists every command.
 
-### From source
+## Private by default
 
-```bash
-go test ./...
-go build -o lossless ./cmd/lossless
-./lossless setup
-./lossless doctor
-```
+- **Local.** Everything lives in `~/.lossless`. The service listens on `127.0.0.1`. Nothing is uploaded.
+- **No model in the loop.** Retrieval is fixed code: no LLM, no hosted embeddings. The agent writes the reply; lossless only supplies records.
+- **No network.** Out of the box, `lossless update` is the only command that goes online, and only to GitHub Releases.
+- **Backup is optional and yours.** `lossless backup` copies the store, encrypted with a key you hold, to an S3-compatible bucket you own (AWS, R2, B2, MinIO). `lossless restore` brings it back. See [docs/deploy.md](docs/deploy.md), which also covers running the store on another machine.
 
-### Where it runs
-
-| | Local (default) | From source | Remote home |
-|---|-----------------|-------------|-------------|
-| **Best for** | This machine | Contributors | A box lossless already runs on |
-| **Setup** | `install.sh` then `lossless setup` | `go build` then `./lossless setup` | TLS + `LOSSLESS_URL` + `LOSSLESS_TOKEN` |
-| **Store** | `~/.lossless` | same | copy `raw/` or start empty |
-| **Network** | none, except `update` | none, except `update` | client to home only |
-
-A remote home is documented and manual. lossless does not provision a cloud or ship the store. See [docs/deploy.md](docs/deploy.md).
-
-### Basic usage
-
-After the new session starts, the agent calls `ask` on its own — no typing required. The same JSON is available three ways: MCP tools (`ask`, `remember`, `get_record`), `POST /v1/ask`, or the CLI:
-
-```bash
-lossless ask --project owner/repo --goal "what the agent is about to do" --path src/app.ts
-lossless remember --type decision --text "..." --project owner/repo
-lossless inspect --project owner/repo --ask
-```
-
-# How it works
-
-### Compact only
+What is on disk:
 
 ```
-turns --> compact --> thinner window --+
-              ^                       |
-              +-----------------------+
-                                      |
-                                      v
-                            new session or model
-                                      |
-                                      v
-                              early record gone
+~/.lossless/raw/<owner>__<repo>/…/<session>.jsonl   the tape (kept forever)
+~/.lossless/export/<owner>__<repo>/<id>.md          records, as readable files
+~/.lossless/index/                                  SQLite index, rebuildable from the tape
 ```
 
-### Compact plus lossless
+`LOSSLESS_HOME` moves the directory.
 
-Compact still thins the window. Hooks copy the session file onto the tape. `ask` checks out at most five records and warnings for this goal and these files.
+## What it is not
 
-```
-turns --+--> compact --> thinner window
-        |
-        v
-      tape -----------------------+
-                                  v
-              thinner window --> ask --> five records
-                                            |
-                                            v
-                                        agent acts
-```
+- **Not a summarizer.** A summary throws the transcript away, and the failed path with it. lossless keeps the transcript.
+- **Not a dump.** An ask returns at most five records, not the log.
+- **Not automatic injection.** Nothing is pushed into the prompt. The agent has to call `ask`; `setup` installs the rule and the skill that tell it to.
+- **Not a hosted service.** There is no account and no cloud.
+- **Not a general knowledge base.** It is memory for coding sessions on a repository.
 
-### Another harness, same repo
+## Documentation
 
-One store per project. A pack written by one harness is visible to the next.
+- [Architecture](docs/architecture.md): the whole system on one page
+- [How ask picks records](docs/algorithm.md), and the full [retrieval spec](docs/retrieval.md)
+- [The `ask` / `remember` / `get_record` contract](docs/ask.md)
+- [How the tape and records are written](docs/write.md)
+- [Harness adapters](docs/harnesses.md) · [Deploy and backup](docs/deploy.md) · [Retiring records](docs/supersede.md)
+- [Evaluation](docs/eval.md) · [Roadmap](docs/roadmap.md) · [All docs](docs/README.md)
 
-```
-Grok   --+
-Claude --+--> project store --> ask
-Codex  --+
-```
-
-Write is push (hooks on compact, stop, prompt submit, session end). Read is pull (`ask`). Hooks copy the tape. They do not inject a pack.
-
-# Why not just a summary?
-
-| | The harness | lossless |
-|---|---|---|
-| Keeps | a summary that shrinks each compact | the full session file, forever |
-| Knows what **failed** | usually gone | failed work packs first |
-| Survives a new session | no — starts from the latest summary | yes |
-| Survives a new model or tool | no | yes — memory is keyed by `owner/repo`, not by model or harness |
-
-# Key features
-
-- **Tape.** Full session JSONL, append-only, in `~/.lossless/raw`. Kept even if the harness deletes its own copy.
-- **Claims.** A rebuildable index of failed, decision, constraint, state, and thread records. Not a substitute for the tape — a lossless re-derivable view of it.
-- **`ask`.** At most five records plus warnings, sized to a token budget (default 1200). Warnings include prior attempts at this goal, shipped decisions to check first, standing constraints, and recurrence traps — a trap is detected in the store, not in the wording, so an ask that shares no vocabulary with a standing failure can still be warned.
-- **Across models and harnesses.** Grok, Claude Code, Codex, Pi, and OpenCode write to one store. Switch tools on the same repo and `ask` still returns the same faileds and decisions.
-- **Local by default.** `127.0.0.1`, no token, nothing uploaded. No LLM on retrieve, no hosted embeddings. `doctor` does not phone home. `update` is the only command that calls GitHub.
-- **Backup is yours.** Optional `lossless backup` copies the store to an S3-compatible bucket you own (AWS, R2, B2, MinIO) — encrypted with a key you hold, on a schedule, generations restorable with `lossless restore`. `ask` still reads local files. See [docs/deploy.md](docs/deploy.md).
-
-# Commands
-
-```bash
-lossless setup              # hooks + MCP + skill + user service
-lossless doctor             # daemon, hooks, MCP, service, backup
-lossless inspect            # tape vs claims vs last packs; --project --ask --jsonl --prune
-
-lossless ask --project KEY [--question "..."] [--goal "..."] [--path FILE] [--session ID] [--workspace DIR]
-lossless remember --type decision --text "..."
-lossless catch-up --jsonl FILE --workspace DIR --harness grok
-
-lossless serve [--listen 127.0.0.1:7432] [--token TOKEN]  # REST + /mcp; watches session files (--watch=false to only serve)
-lossless mcp                # stdio MCP (talks to the daemon)
-lossless watch              # poll harness session files
-lossless ensure             # replay the spool after the daemon was down
-
-lossless backup init s3://BUCKET/PREFIX [--endpoint URL] [--region R] [--every 1h] [--keep 5]
-lossless backup [--dry-run] [--verbose] [--take-over]  # one incremental run
-lossless restore [--at GEN] [--list] [--force]  # pull a generation into an empty store
-
-lossless embed-backfill     # embed active claims if a local embedder is configured
-lossless bench --root testdata/bench
-lossless update
-lossless version
-lossless token              # print a random bearer (for non-loopback serve)
-```
-
-Hooks (`hook-grok`, `hook-claude`, `hook-codex`, `hook-pi`, `hook-opencode`) and `install-hooks` / `install-mcp` exist for setup and debugging; `setup` wires them.
-
-# Integrations
-
-`lossless setup` writes hooks, MCP, a skill, and a short always-on rule for:
-
-| Harness | Hooks | MCP |
-|---------|-------|-----|
-| Grok | yes | yes |
-| Claude Code | yes | yes |
-| Codex | yes | yes |
-| Pi | yes | yes |
-| OpenCode | yes | yes |
-
-Any other agent that can call authenticated `/mcp` or `POST /v1/ask` can use the same store. Claims stay on `owner/repo`, so a pack from one harness is visible to the next.
-
-# What it isn't
-
-- **Not a hosted fact cache.** Extracting facts with an LLM and throwing the transcript away loses the failed path.
-- **Not a second brain.** No LLM on retrieve. No hosted embeddings. Ranking is a fixed packer.
-- **Not a dump.** Five records, not the whole log.
-- **Not auto-injection.** If the skill is ignored, the store is a diary.
-- **Not a cloud.** Default install does not upload transcripts.
-- **Not company RAG.** Memory for coding sessions on a repo.
-
-# Documentation
-
-- [docs/README.md](docs/README.md): index
-- [docs/architecture.md](docs/architecture.md): loop and store
-- [docs/algorithm.md](docs/algorithm.md): how retrieve picks five records
-- [docs/pipeline.md](docs/pipeline.md): who asks, what happens after
-- [docs/write.md](docs/write.md) · [docs/ask.md](docs/ask.md) · [docs/retrieval.md](docs/retrieval.md)
-- [docs/harnesses.md](docs/harnesses.md) · [docs/deploy.md](docs/deploy.md) · [docs/stack.md](docs/stack.md)
-- [docs/eval.md](docs/eval.md) · [docs/roadmap.md](docs/roadmap.md)
-
-# Data
-
-```
-~/.lossless/raw/<owner>__<repo>/2026-08/<session>.jsonl   # owned corpus (forever)
-~/.lossless/export/<owner>__<repo>/{id}.md                # claims
-~/.lossless/active/<owner>__<repo>.md                     # checkout left at compact
-~/.lossless/index/claims.sqlite                           # rebuildable index only
-~/.lossless/index/excerpts-YYYY-MM.sqlite                 # monthly excerpt windows
-~/.lossless/spool                                         # hook writes while the daemon is down
-~/.lossless/backup.env · backup.key                       # backup config + encryption key (if enabled)
-```
-
-`LOSSLESS_HOME` overrides the data dir. SQLite is not the corpus. Default config makes no outbound network calls.
-
-# License
+## License
 
 Apache-2.0. See [LICENSE](LICENSE).

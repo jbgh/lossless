@@ -130,6 +130,7 @@ func pack(cs []scored, limit int, head bool) []scored {
 	}
 	remaining := append([]scored(nil), cs...)
 	if !head {
+		remaining = dropUngrounded(remaining)
 		remaining = dropOonState(remaining)
 		remaining = dropUngroundedFailed(remaining)
 	}
@@ -185,7 +186,7 @@ func pack(cs []scored, limit int, head bool) []scored {
 			if diverseSkip(c, out, packedText) {
 				continue
 			}
-			if typeCount(out, c.rec.Type) >= PackTypeCap && hasOtherType(remaining, out, c.rec.Type) {
+			if typeCount(out, c.rec.Type) >= PackTypeCap && (c.rec.Type == "said" || hasOtherType(remaining, out, c.rec.Type)) {
 				continue
 			}
 			sim := 0.0
@@ -212,6 +213,19 @@ func pack(cs []scored, limit int, head bool) []scored {
 		}
 	}
 	return out
+}
+
+// dropUngrounded applies the relevance floor (belowFloor). Unlike the two
+// drops below it can empty the pool: an empty pack is the honest answer
+// when the store has nothing on this goal.
+func dropUngrounded(cs []scored) []scored {
+	var rest []scored
+	for _, c := range cs {
+		if !c.ungrounded {
+			rest = append(rest, c)
+		}
+	}
+	return rest
 }
 
 // dropUngroundedFailed removes faileds with no path, symbol, or
@@ -254,7 +268,13 @@ func diverseSkip(c scored, packed []scored, packedText [][]string) bool {
 		}
 	}
 	toks := claim.Tokens(c.rec.Text)
-	for _, prev := range packedText {
+	for i, prev := range packedText {
+		// A packed said record never keeps out the typed record that says
+		// the same thing: the typed one can warn, and dropSaidTwins takes
+		// the said one out afterwards.
+		if c.rec.Type != "said" && i < len(packed) && packed[i].rec.Type == "said" {
+			continue
+		}
 		if jaccard(toks, prev) >= DiversityJac {
 			return true
 		}
@@ -382,7 +402,9 @@ func evictConstraint(packed, all []scored, limit, ftsN int) []scored {
 		if c.rec.Type != "constraint" || in[c.rec.ID] {
 			continue
 		}
-		ftsStrong := c.isFTS && ftsN >= 2 && c.bm25 >= ConstraintFTSStrong
+		// bm25 counts function words too; top-of-FTS on those alone is
+		// not a match (the relevance floor, belowFloor).
+		ftsStrong := c.isFTS && ftsN >= 2 && c.bm25 >= ConstraintFTSStrong && !c.ungrounded
 		strong := c.shippedOverlap == 1 || c.vector >= VectorGate || ftsStrong
 		if !strong {
 			continue

@@ -15,7 +15,8 @@
         "question": "should we use mongo",
         "paths": ["src/db/client.ts"]
       },
-      "must_not_include_substrings": ["don't think"]
+      "must_not_include_types": ["constraint"],
+      "must_not_warn": true
     }
   ]
 }

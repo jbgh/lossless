@@ -149,7 +149,7 @@ func testGitURLPath(t *testing.T) {
 	b.WriteString(grokLine("assistant", "Who-reacted failed in preview in ios/LightboxView.swift."))
 	dogfoodCatch(t, st, "acme/app", "giturl", b.String())
 
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		for _, p := range c.Paths {
 			if strings.Contains(p, ".git") || strings.Contains(p, "memora.pics") {
@@ -177,7 +177,7 @@ func testStrippedAbs(t *testing.T) {
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "abs", b.String())
 
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		got := redact.FilterPaths(c.Paths)
 		for _, p := range got {
@@ -558,7 +558,7 @@ func testSameSessionConcurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	n := 0
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "jose") {
 			n++
@@ -821,7 +821,7 @@ func testDotGitPath(t *testing.T) {
 	b.WriteString(grokLine("assistant", "The pre-commit hook failed in .git/hooks/pre-commit.sh so rebase stopped."))
 	b.WriteString(grokLine("assistant", "Who-reacted failed in preview in ios/LightboxView.swift."))
 	dogfoodCatch(t, st, "acme/app", "dotgit", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		for _, p := range c.Paths {
 			if strings.Contains(p, ".git/") || strings.HasPrefix(p, ".git") {
@@ -872,7 +872,7 @@ func testNumberedList(t *testing.T) {
 	b.WriteString(grokLine("assistant", "1. Redis limiter **failed** (twice) + warning: do not repeat"))
 	b.WriteString(grokLine("assistant", "2. The live pack returned five `failed`s from extract noise"))
 	dogfoodCatch(t, st, "acme/app", "num", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "Redis limiter") || strings.Contains(c.Text, "five `failed`") {
 			t.Fatalf("numbered list extracted: %+v", c)
@@ -929,7 +929,7 @@ func testPlanningGoWith(t *testing.T) {
 	b.WriteString(grokLine("assistant", "I'll go with postgres instead of mysql in src/db/client.ts."))
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "gowith", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "postgres") || strings.Contains(c.Text, "I'll go with") {
 			t.Fatalf("planning go-with extracted: %+v", c)
@@ -1022,7 +1022,7 @@ func testAssistantQuoteDecision(t *testing.T) {
 	b.WriteString(grokLine("assistant", `The previous session said: "We decided to use mongo, not postgres, in src/db/client.ts."`))
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "qdec", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "mongo") {
 			t.Fatalf("quoted old decision extracted: %+v", c)
@@ -1042,7 +1042,7 @@ func testNodeModulesPath(t *testing.T) {
 	b.WriteString(grokLine("assistant", "The lodash suite failed in node_modules/lodash/index.js during install."))
 	b.WriteString(grokLine("assistant", "Who-reacted failed in preview in ios/LightboxView.swift."))
 	dogfoodCatch(t, st, "acme/app", "nm", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		for _, p := range c.Paths {
 			if strings.Contains(p, "node_modules") {
@@ -1071,7 +1071,7 @@ func testRememberProse(t *testing.T) {
 	b.WriteString(grokLine("assistant", "Remembered: Redis token bucket failed in src/middleware/auth.ts staging."))
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "remp", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.HasPrefix(c.Text, "Remembered:") || strings.Contains(c.Text, "Redis token bucket") {
 			t.Fatalf("remember prose extracted: %+v", c)
@@ -1115,7 +1115,7 @@ func testDontWait(t *testing.T) {
 	b.WriteString(grokLine("user", "Always never log Authorization headers in src/middleware/auth.ts."))
 	b.WriteString(grokLine("user", "Don't wait for me, just keep going on src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "dwait", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "Don't wait") || strings.Contains(strings.ToLower(c.Text), "just keep going") {
 			t.Fatalf("session-op extracted: %+v", c)
@@ -1179,7 +1179,7 @@ func testIllImplement(t *testing.T) {
 	b.WriteString(grokLine("assistant", "I'll implement postgres instead of mysql in src/db/client.ts."))
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "impl", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "postgres") || strings.Contains(c.Text, "I'll implement") {
 			t.Fatalf("planning implement extracted: %+v", c)
@@ -1199,7 +1199,7 @@ func testDistPath(t *testing.T) {
 	b.WriteString(grokLine("assistant", "The bundle step failed in dist/assets/index.js after minify."))
 	b.WriteString(grokLine("assistant", "Who-reacted failed in preview in ios/LightboxView.swift."))
 	dogfoodCatch(t, st, "acme/app", "dist", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		for _, p := range c.Paths {
 			if strings.HasPrefix(p, "dist/") || strings.Contains(p, "/dist/") {
@@ -1272,7 +1272,7 @@ func testSameMessagePathBleed(t *testing.T) {
 	st := dogfoodStore(t)
 	dogfoodCatch(t, st, "acme/app", "bleedc",
 		grokLine("user", "Always never log Authorization headers in src/middleware/auth.ts. Always never bikeshed the font in the settings panel."))
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "bikeshed") {
 			for _, p := range c.Paths {
@@ -1298,7 +1298,7 @@ func testSameMessageFailedBleed(t *testing.T) {
 	st := dogfoodStore(t)
 	dogfoodCatch(t, st, "acme/app", "bleedf",
 		grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts. Helper decoy failed during compile."))
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if !strings.Contains(c.Text, "Helper decoy") {
 			continue
@@ -1375,7 +1375,7 @@ func testWindowsSepPath(t *testing.T) {
 	st := dogfoodStore(t)
 	dogfoodCatch(t, st, "acme/app", "winsep",
 		grokLine("assistant", `We decided to use jose, not jsonwebtoken, for Edge in src\middleware\auth.ts.`))
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	found := false
 	for _, c := range claims {
 		if !strings.Contains(c.Text, "jose") {
@@ -1401,7 +1401,7 @@ func testDotSlashPath(t *testing.T) {
 	st := dogfoodStore(t)
 	dogfoodCatch(t, st, "acme/app", "dotsl",
 		grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in ./src/middleware/auth.ts."))
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		for _, p := range c.Paths {
 			if strings.HasPrefix(p, "./") {
@@ -1459,7 +1459,7 @@ func testIllRewrite(t *testing.T) {
 	b.WriteString(grokLine("assistant", "I'll rewrite the limiter instead of Redis in src/middleware/auth.ts."))
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "rewr", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "I'll rewrite") {
 			t.Fatalf("planning rewrite extracted: %+v", c)
@@ -1479,7 +1479,7 @@ func testWeDontHaveTime(t *testing.T) {
 	b.WriteString(grokLine("user", "Always never log Authorization headers in src/middleware/auth.ts."))
 	b.WriteString(grokLine("user", "We don't have time to bikeshed src/middleware/auth.ts today."))
 	dogfoodCatch(t, st, "acme/app", "wdht", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "have time") {
 			t.Fatalf("session chatter extracted: %+v", c)
@@ -1534,7 +1534,7 @@ func testSystemRole(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "mongo") {
 			t.Fatalf("system role extracted: %+v", c)
@@ -1554,7 +1554,7 @@ func testHTMLComment(t *testing.T) {
 	b.WriteString(grokLine("assistant", "<!-- We decided to use mongo, not postgres, in src/db/client.ts. -->"))
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "htmlc", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "mongo") {
 			t.Fatalf("html comment extracted: %+v", c)
@@ -1614,7 +1614,7 @@ func testIllMigrate(t *testing.T) {
 	b.WriteString(grokLine("assistant", "I'll migrate the limiter instead of Redis in src/middleware/auth.ts."))
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "mig", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "I'll migrate") {
 			t.Fatalf("planning migrate extracted: %+v", c)
@@ -1657,7 +1657,7 @@ func testChoseWrong(t *testing.T) {
 	b.WriteString(grokLine("assistant", "I chose the wrong approach in src/middleware/auth.ts last night."))
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "chose", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "wrong approach") {
 			t.Fatalf("narrative chose extracted: %+v", c)
@@ -1694,7 +1694,7 @@ func testMustBeABug(t *testing.T) {
 	b.WriteString(grokLine("user", "Always never log Authorization headers in src/middleware/auth.ts."))
 	b.WriteString(grokLine("user", "Must be a bug in src/middleware/auth.ts then."))
 	dogfoodCatch(t, st, "acme/app", "mustbug", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "Must be a bug") {
 			t.Fatalf("must-be-a-bug extracted: %+v", c)
@@ -1718,7 +1718,7 @@ func testDeveloperRole(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "mongo") {
 			t.Fatalf("developer role extracted: %+v", c)
@@ -1761,7 +1761,7 @@ func testAlmostPicked(t *testing.T) {
 	b.WriteString(grokLine("assistant", "I almost picked mongo over postgres in src/db/client.ts."))
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "almost", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "mongo") {
 			t.Fatalf("almost-picked extracted: %+v", c)
@@ -1829,7 +1829,7 @@ func testCustomMessage(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "mongo") {
 			t.Fatalf("custom/last-prompt extracted: %+v", c)
@@ -1902,7 +1902,7 @@ func testGitConflict(t *testing.T) {
 	var b strings.Builder
 	b.WriteString(grokLine("assistant", "<<<<<<< HEAD\nWe decided to use mongo, not postgres, in src/db/client.ts.\n=======\nWe decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts.\n>>>>>>> main"))
 	dogfoodCatch(t, st, "acme/app", "cflt", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "mongo") || strings.HasPrefix(strings.TrimSpace(c.Text), "<<<<<<") {
 			t.Fatalf("conflict marker extracted: %+v", c)
@@ -1974,7 +1974,7 @@ func testWeWillUseHour(t *testing.T) {
 	b.WriteString(grokLine("assistant", "We will use the next hour to inspect src/middleware/auth.ts."))
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "hour", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "next hour") {
 			t.Fatalf("we-will-use-hour extracted: %+v", c)
@@ -2011,7 +2011,7 @@ func testCurlyDontWait(t *testing.T) {
 	b.WriteString(grokLine("user", "Always never log Authorization headers in src/middleware/auth.ts."))
 	b.WriteString(grokLine("user", "Don’t wait for me, just keep going on src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "cdw", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "wait for me") {
 			t.Fatalf("curly don't-wait extracted: %+v", c)
@@ -2088,7 +2088,7 @@ func testIllRefactor(t *testing.T) {
 	b.WriteString(grokLine("assistant", "I'll refactor the limiter instead of Redis in src/middleware/auth.ts."))
 	b.WriteString(grokLine("assistant", "We decided to use jose, not jsonwebtoken, for Edge in src/middleware/auth.ts."))
 	dogfoodCatch(t, st, "acme/app", "ref", b.String())
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "I'll refactor") {
 			t.Fatalf("planning refactor extracted: %+v", c)
@@ -2137,7 +2137,7 @@ func TestDogfoodRetryJoseStillPacks(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	claims, _ := st.ListActive("acme/api")
+	claims, _ := typedActive(st, "acme/api")
 	var texts []string
 	for _, c := range claims {
 		texts = append(texts, c.Type+":"+c.Text)
@@ -2193,7 +2193,7 @@ func TestDogfoodClaimHashFloodDoesNotDuplicate(t *testing.T) {
 	}
 	dogfoodCatch(t, st, "acme/app", "dup", b.String())
 	n := 0
-	claims, _ := st.ListActive("acme/app")
+	claims, _ := typedActive(st, "acme/app")
 	for _, c := range claims {
 		if strings.Contains(c.Text, "jose") {
 			n++

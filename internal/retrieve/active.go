@@ -1,9 +1,12 @@
 package retrieve
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -39,6 +42,13 @@ func RefreshActive(st *store.Store, home string, req write.CatchUpRequest, rawPa
 	if home == "" {
 		home = st.Root
 	}
+	// Before the ask: what this session said before the compact is no
+	// longer in its window, so it is memory again (SaidEchoMinutes).
+	// The session is named by its tape, as catch-up named it: the hook may
+	// have sent no session id at all.
+	if key, err := resolveProject(Request{Project: req.Project, WorkspaceRoot: req.WorkspaceRoot}); err == nil {
+		markCompact(st, key, tapeSession(rawPath, req.SessionID))
+	}
 	askReq := Request{
 		Project:       req.Project,
 		WorkspaceRoot: req.WorkspaceRoot,
@@ -67,6 +77,56 @@ func ownedTape(rawPath string) string {
 		return ""
 	}
 	return rawPath
+}
+
+var tapePartRE = regexp.MustCompile(`\.part\d+$`)
+
+// tapeSession is the session a raw tape belongs to, from its file name;
+// fallback when there is no tape path.
+func tapeSession(rawPath, fallback string) string {
+	if rawPath == "" {
+		return fallback
+	}
+	name := strings.TrimSuffix(strings.TrimSuffix(filepath.Base(rawPath), ".zst"), ".jsonl")
+	if name = tapePartRE.ReplaceAllString(name, ""); name == "" {
+		return fallback
+	}
+	return name
+}
+
+// compactMarker is one small file per compacted session: a compact in
+// one session says nothing about what another still has in its window.
+// Sessions are keyed the way their tapes are named, so the id a hook
+// sent, the one catch-up derived, and the one an ask sends all meet.
+func compactMarker(st *store.Store, project, session string) string {
+	key := strings.TrimSuffix(filepath.Base(st.RawPath(project, session, time.Time{})), ".jsonl")
+	sum := sha256.Sum256([]byte(key))
+	return filepath.Join(st.Root, "active", "compacted", projectkey.Encode(project)+"."+hex.EncodeToString(sum[:8]))
+}
+
+// markCompact records that session was just compacted.
+func markCompact(st *store.Store, project, session string) {
+	if st == nil || project == "" || CleanSessionID(session) == "" {
+		return
+	}
+	p := compactMarker(st, project, session)
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return
+	}
+	_ = os.WriteFile(p, []byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o600)
+}
+
+// compactedAt is when session was last compacted; zero if never, or if
+// the harness sent no session id.
+func compactedAt(st *store.Store, project, session string) time.Time {
+	if st == nil || project == "" || CleanSessionID(session) == "" {
+		return time.Time{}
+	}
+	fi, err := os.Stat(compactMarker(st, project, session))
+	if err != nil {
+		return time.Time{}
+	}
+	return fi.ModTime()
 }
 
 func WriteActive(home string, out Response, now time.Time) error {

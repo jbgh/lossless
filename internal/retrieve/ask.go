@@ -99,10 +99,14 @@ func (e Engine) prepare(req Request) (prep, error) {
 	prof := selectProfile(q)
 	empty := Response{Context: []Hit{}, Warnings: []string{}, Project: q.ProjectKey}
 	p := prep{q: q, seed: seedPaths, out: empty}
-	ids, ftsBM25, knn, inferred, err := e.candidates(q)
+	if e.Store != nil {
+		q.CompactAt = compactedAt(e.Store, q.ProjectKey, q.SessionID)
+	}
+	pl, err := e.candidates(q)
 	if err != nil {
 		return prep{}, err
 	}
+	ids, ftsBM25, saidBM25, knn, inferred := pl.ids, pl.fts, pl.said, pl.knn, pl.hop
 	if len(ids) == 0 {
 		return p, nil
 	}
@@ -130,14 +134,38 @@ func (e Engine) prepare(req Request) (prep, error) {
 			old := cand[prev]
 			if rec.CreatedAt >= old.rec.CreatedAt {
 				p.drops = append(p.drops, traceDrop{rec: old.rec, reason: "duplicate", sc: old, scored: true})
-				cand[prev] = e.features(rec, q, ftsBM25, knn, inferred)
+				cand[prev] = e.features(rec, q, ftsBM25, saidBM25, knn, inferred)
 			} else {
 				p.drops = append(p.drops, traceDrop{rec: rec, reason: "duplicate"})
 			}
 			continue
 		}
 		seenHash[rec.ClaimHash] = len(cand)
-		cand = append(cand, e.features(rec, q, ftsBM25, knn, inferred))
+		cand = append(cand, e.features(rec, q, ftsBM25, saidBM25, knn, inferred))
+	}
+	// A said record that is off the goal, or is this session's own fresh
+	// turn, leaves the pool here: nothing later (the hop, a HEAD pack)
+	// may bring it back.
+	kept := cand[:0:0]
+	for _, c := range cand {
+		if c.rec.Type == "said" && (!c.strong || c.echo) {
+			reason := "off-topic"
+			if c.strong {
+				reason = "said-echo"
+			}
+			p.drops = append(p.drops, traceDrop{rec: c.rec, reason: reason, sc: c, scored: true})
+			continue
+		}
+		kept = append(kept, c)
+	}
+	cand = kept
+	groundHops(cand)
+	// The recent-failed net is what ask offers when nothing in the store
+	// matched at all. It is not a match, and the floor does not judge it.
+	for i := range cand {
+		if pl.net[cand[i].rec.ID] {
+			cand[i].ungrounded = false
+		}
 	}
 	before := cand
 	cand = dropOlderConflicts(cand)
@@ -169,6 +197,16 @@ func (e Engine) prepare(req Request) (prep, error) {
 	}
 	preCon := packed
 	packed = evictConstraint(packed, cand, q.LimitTokens, ftsN)
+	// Last, on the pack that will ship: the sentence extract typed and the
+	// turn it came from are one memory, and the typed one can warn.
+	packed, twins := dropSaidTwins(packed)
+	for _, c := range twins {
+		p.drops = append(p.drops, traceDrop{rec: c.rec, reason: "said-twin", sc: c, scored: true})
+	}
+	twin := map[string]bool{}
+	for _, c := range twins {
+		twin[c.rec.ID] = true
+	}
 	in := map[string]bool{}
 	for _, c := range packed {
 		in[c.rec.ID] = true
@@ -178,12 +216,12 @@ func (e Engine) prepare(req Request) (prep, error) {
 		preIn[c.rec.ID] = true
 	}
 	for _, c := range preEvict {
-		if !in[c.rec.ID] {
+		if !in[c.rec.ID] && !twin[c.rec.ID] {
 			p.drops = append(p.drops, traceDrop{rec: c.rec, reason: "evicted-for-failed", sc: c, scored: true})
 		}
 	}
 	for _, c := range preCon {
-		if !in[c.rec.ID] {
+		if !in[c.rec.ID] && !twin[c.rec.ID] {
 			p.drops = append(p.drops, traceDrop{rec: c.rec, reason: "evicted-for-constraint", sc: c, scored: true})
 		}
 	}
@@ -195,7 +233,7 @@ func (e Engine) prepare(req Request) (prep, error) {
 		if in[c.rec.ID] {
 			continue
 		}
-		if preIn[c.rec.ID] {
+		if preIn[c.rec.ID] || twin[c.rec.ID] {
 			continue
 		}
 		p.drops = append(p.drops, traceDrop{rec: c.rec, reason: packSkipReason(c, packed, packedText), sc: c, scored: true})
@@ -239,6 +277,9 @@ func droppedAs(before, after []scored, reason string) []traceDrop {
 }
 
 func packSkipReason(c scored, packed []scored, packedText [][]string) string {
+	if c.ungrounded {
+		return "off-topic"
+	}
 	if diverseSkip(c, packed, packedText) {
 		return "diversity"
 	}
@@ -274,7 +315,16 @@ type scored struct {
 	score          float64
 	ftsRaw         float64
 	isFTS          bool
-	hop            float64
+	// saidFTS: found by SearchSaid. Its bm25 is normalized among said
+	// hits only; the two lexical routes run different queries.
+	saidFTS bool
+	// strong overlap with this ask, whatever the type; echo: a said
+	// record of the asking session's last minutes.
+	strong, echo bool
+	hop          float64
+	// ungrounded: the record ties to this ask by nothing but its type and
+	// age. pack leaves it out (see belowFloor).
+	ungrounded bool
 }
 
 func (s scored) pFail() float64 {
@@ -312,8 +362,19 @@ func (s scored) preStale(p Profile) float64 {
 		WServed*s.served
 }
 
-func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]float64, []string, error) {
+// pool is one ask's candidates and how each route found them.
+type pool struct {
+	ids  []string
+	fts  map[string]float64 // typed records, raw bm25
+	said map[string]float64 // said records, raw bm25 of their own query
+	knn  map[string]float64
+	hop  []string        // paths inferred from the first hits
+	net  map[string]bool // no typed record matched: the recent-failed net
+}
+
+func (e Engine) candidates(q query) (pool, error) {
 	fts := map[string]float64{}
+	said := map[string]float64{}
 	knn := map[string]float64{}
 	seen := map[string]bool{}
 	var ids, hop []string
@@ -329,23 +390,23 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]fl
 	if q.Head {
 		pri, err := e.Store.HeadPriorityIDs(q.ProjectKey, HeadFailedCap, HeadDecisionCap, HeadConstraintCap)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return pool{}, err
 		}
 		add(pri)
 		if len(q.PathKeys) > 0 {
 			p, err := e.Store.IDsByPath(q.ProjectKey, q.PathKeys, PathPerCap, ColdPathCap)
 			if err != nil {
-				return nil, nil, nil, nil, err
+				return pool{}, err
 			}
 			add(p)
 		} else if len(ids) < ColdPriorityCap {
 			st, err := e.Store.IDsByType(q.ProjectKey, "state", "", ColdStateCap)
 			if err != nil {
-				return nil, nil, nil, nil, err
+				return pool{}, err
 			}
 			add(st)
 		}
-		return ids, fts, knn, hop, nil
+		return pool{ids: ids, fts: fts, said: said, knn: knn, hop: hop}, nil
 	}
 
 	if match := ftsMatch(q.LookupTokens); match != "" {
@@ -361,11 +422,32 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]fl
 		}
 		add(ftsIDs)
 	}
+	// What the user typed, matched on the ask's content words only: a
+	// whole turn shares function words with any goal.
+	// It has its own routes and caps, by word and by file, so it cannot
+	// crowd typed records out of theirs.
+	beforeSaid := len(ids)
+	if match := ftsStemMatch(q.OverlapTokens); match != "" {
+		if hits, err := e.Store.SearchSaid(q.ProjectKey, match, SaidCap); err == nil {
+			var saidIDs []string
+			for _, h := range hits {
+				said[h.ID] = h.BM25
+				saidIDs = append(saidIDs, h.ID)
+			}
+			add(saidIDs)
+		}
+	}
+	if len(q.PathKeys) > 0 {
+		if p, err := e.Store.SaidIDsByPath(q.ProjectKey, q.PathKeys, SaidCap, SaidCap); err == nil {
+			add(p)
+		}
+	}
+	nSaid := len(ids) - beforeSaid
 	pathFound := false
 	if len(q.PathKeys) > 0 {
 		p, err := e.Store.IDsByPath(q.ProjectKey, q.PathKeys, PathPerCap, PathTotalCap)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return pool{}, err
 		}
 		if len(p) > 0 {
 			pathFound = true
@@ -375,23 +457,23 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]fl
 	if len(q.Symbols) > 0 {
 		sy, err := e.Store.IDsBySymbol(q.ProjectKey, q.Symbols, SymbolPerCap, SymbolTotalCap)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return pool{}, err
 		}
 		add(sy)
 	}
 	failedOv, err := e.Store.TypeIDsOverlapping(q.ProjectKey, "failed", q.PathKeys, q.Symbols, FailedCap)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return pool{}, err
 	}
 	add(failedOv)
 	dec, err := e.Store.DecisionIDsOverlapping(q.ProjectKey, q.PathKeys, q.Symbols, DecisionCap)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return pool{}, err
 	}
 	add(dec)
 	con, err := e.Store.ConstraintIDsOverlapping(q.ProjectKey, q.PathKeys, q.Symbols, ConstraintCap)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return pool{}, err
 	}
 	add(con)
 	// Vector kNN: paraphrase that shares no token/path/symbol.
@@ -409,13 +491,13 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]fl
 	if !pathFound && len(ids) > 0 {
 		inferred, err := e.inferredPaths(ids)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return pool{}, err
 		}
 		if len(inferred) > 0 {
 			for _, typ := range []string{"failed", "decision", "constraint"} {
 				extra, err := e.Store.TypeIDsOverlapping(q.ProjectKey, typ, inferred, nil, InferTypeCap)
 				if err != nil {
-					return nil, nil, nil, nil, err
+					return pool{}, err
 				}
 				add(extra)
 			}
@@ -423,14 +505,22 @@ func (e Engine) candidates(q query) ([]string, map[string]float64, map[string]fl
 		}
 	}
 	// Recent faileds only when structure found nothing. Safety net, not default.
-	if len(ids) == 0 {
+	// Judged on typed records: a user turn that shares a word with the
+	// ask is not what the net is for.
+	net := map[string]bool{}
+	if len(ids) == nSaid {
 		failedRecent, err := e.Store.IDsByType(q.ProjectKey, "failed", "", FailedRecentCap)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return pool{}, err
+		}
+		for _, id := range failedRecent {
+			if !seen[id] {
+				net[id] = true
+			}
 		}
 		add(failedRecent)
 	}
-	return ids, fts, knn, hop, nil
+	return pool{ids: ids, fts: fts, said: said, knn: knn, hop: hop, net: net}, nil
 }
 
 func (e Engine) vectorHits(q query, knn map[string]float64) []string {
@@ -493,7 +583,7 @@ func (e Engine) inferredPaths(ids []string) ([]string, error) {
 	return out, nil
 }
 
-func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64, hop []string) scored {
+func (e Engine) features(rec claim.Record, q query, fts, said, knn map[string]float64, hop []string) scored {
 	s := scored{rec: rec}
 	s.typeRank = float64(typeRank[rec.Type])
 	created, err := time.Parse(time.RFC3339, rec.CreatedAt)
@@ -518,6 +608,9 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64,
 	if v, ok := fts[rec.ID]; ok {
 		s.isFTS = true
 		s.ftsRaw = v
+	} else if v, ok := said[rec.ID]; ok {
+		s.saidFTS = true
+		s.ftsRaw = v
 	}
 	if v, ok := knn[rec.ID]; ok && v > 0 {
 		if v > 1 {
@@ -526,7 +619,7 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64,
 		s.vector = v
 	}
 	nAgree := 0
-	if s.isFTS {
+	if s.isFTS || s.saidFTS {
 		nAgree++
 	}
 	if s.path > 0 {
@@ -550,7 +643,29 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64,
 	strong := s.path > 0 || sharedCodeIdent(ownSym, rec.Symbols, q.Targeted) ||
 		(jaccard(ownSym, rSym) >= OverlapSymbolMin && sharedCount(ownSym, rSym) >= 2) ||
 		hits >= overlapNeed(len(ov)) || s.vector >= VectorGate
+	// A said record is a whole turn in the user's own spelling, kept
+	// without judging it. People write "back ups" and "languages" where
+	// the agent's goal says "backup" and "language", so its word route
+	// compares stems. It packs only on strong overlap: one shared word
+	// with a verbatim turn is not a reason to quote the user back.
+	if rec.Type == "said" {
+		// A typed claim about index.ts in one directory is worth a look
+		// when the ask names index.ts in another. A whole turn that
+		// happens to name a same-named file is not: for said, a file
+		// match is the same file.
+		sameFile := jaccard(primaryPaths(q.PathKeys), primaryPaths(claim.PathKeys(rec.Paths))) > 0
+		strong = sameFile || sharedCodeIdent(ownSym, rec.Symbols, q.Targeted) ||
+			(jaccard(ownSym, rSym) >= OverlapSymbolMin && sharedCount(ownSym, rSym) >= 2) ||
+			hits >= overlapNeed(len(ov)) || s.vector >= VectorGate ||
+			stemOverlap(ov, rec.Text) >= overlapNeed(len(ov))
+	}
 	weak := !strong && hits >= 1
+	s.strong = strong
+	s.ungrounded = belowFloor(q, ov, strong, rec)
+	if rec.Type == "said" {
+		s.ungrounded = false // prepare removes an off-goal said record outright
+		s.echo = saidEcho(rec, q, ov, created, ageDays*24*60)
+	}
 	switch rec.Type {
 	case "failed":
 		if strong {
@@ -564,7 +679,12 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64,
 		} else if weak {
 			s.shippedWeak = 1
 		}
+	case "said":
+		if strong {
+			s.shippedOverlap = SaidOverlap
+		}
 	}
+
 	callerToks := append(append([]string{}, q.QuestionTokens...), q.GoalTokens...)
 	onTopic := s.path > 0 || s.symbol > 0 || contentOverlap(callerToks, rec.Text) > 0
 	if q.Dwell[rec.ID] && (q.Continue || onTopic) {
@@ -579,10 +699,42 @@ func (e Engine) features(rec claim.Record, q query, fts, knn map[string]float64,
 	return s
 }
 
+// saidEcho is a said record the asking agent can still see: typed in the
+// last SaidEchoMinutes, with no compact since, by this session — or, for
+// a harness that sends no session id, a turn that reads like the ask
+// itself (a thin ask is compiled from the last user turn). Quoting it
+// back is noise. After a compact the same turn is exactly what was lost.
+func saidEcho(rec claim.Record, q query, ov []string, created time.Time, ageMinutes float64) bool {
+	if ageMinutes >= SaidEchoMinutes || !created.After(q.CompactAt) {
+		return false
+	}
+	if q.SessionID != "" && q.SessionID != "default" {
+		return rec.SessionID == q.SessionID
+	}
+	var words []string
+	for _, t := range claim.Tokens(rec.Text) {
+		if isContentToken(t) {
+			words = append(words, t)
+		}
+	}
+	return jaccard(words, ov) >= DiversityJac
+}
+
+// normBM25 scales raw bm25 to 0..1 within each lexical route. Typed
+// records and said records come from different MATCH queries, and their
+// raw scores do not compare.
 func normBM25(cs []scored) {
+	for i := range cs {
+		cs[i].bm25 = 0
+	}
+	normRoute(cs, func(c scored) bool { return c.isFTS })
+	normRoute(cs, func(c scored) bool { return c.saidFTS })
+}
+
+func normRoute(cs []scored, in func(scored) bool) {
 	var vals []float64
 	for _, c := range cs {
-		if c.isFTS {
+		if in(c) {
 			vals = append(vals, -c.ftsRaw)
 		}
 	}
@@ -599,8 +751,7 @@ func normBM25(cs []scored) {
 		}
 	}
 	for i := range cs {
-		if !cs[i].isFTS {
-			cs[i].bm25 = 0
+		if !in(cs[i]) {
 			continue
 		}
 		if max == min {
@@ -670,7 +821,7 @@ func sortScored(cs []scored) {
 func typeRecency(typ string, ageDays float64) float64 {
 	var hl float64
 	switch typ {
-	case "constraint":
+	case "constraint", "said":
 		return 1
 	case "decision":
 		hl = DecisionHalfLifeDays

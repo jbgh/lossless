@@ -250,6 +250,23 @@ An automated review prompt carries the whole change, and its comment lines (`// 
 
 **Sentence split:** a terminator inside a code span is code (`` `.woodpecker/**` `` is one token, not a sentence end), and the dot that opens a dotfile or relative path (`.env`, `./scripts`) does not end a sentence. A newline closes an unbalanced tick.
 
+### Said: what the user typed
+
+Extract keeps a user sentence only when a cue word marks it (`never`, `always`, `don't`, `must`). Most of what a person asks for carries none: "use the smaller model for subagents", "the export should keep the column order people rely on". On a store checked by hand, almost none of the lasting instructions a user had typed in recent sessions had a record at all.
+
+So every turn a person typed is also kept whole, as one record of type `said`: the text word for word (whitespace folded, clipped at 600 bytes), the paths it names, and a cite to the turn. The user types little and all of it is theirs; `ask` decides relevance (retrieval.md §5), not extract. A said record is dated from the harness timestamp on its line when there is one.
+
+Not kept as `said`:
+
+- turns no person typed (`gate.MachineTurn`): slash commands, harness notices, tag-wrapped turns, a prompt passed whole in quotes, an agent's scheduled wake-up, and briefs one agent writes for another. A brief shows at least two of four marks: an absolute path into a checkout or scratch directory, directives in capitals, markdown structure, and what to hand back. A child session opens with its parent's brief, so for the first user turn of a tape one mark, or more than 600 bytes, is enough;
+- an opening already stored from two other sessions of the project (a template);
+- turns under 25 or over 1500 bytes, under four words, or with fewer than two words longer than three letters;
+- turns that only ask a question or only steer this session ("don't push yet", "never mind"). A request worded as a question ("can you give me the choices as a list?") is kept.
+
+A message the harness delivered mid-turn is unwrapped from its `<user_query>` first. Sentence-level extract is unchanged and still runs on the same turn; when both a typed record and the said record of one turn are on topic, `ask` returns the typed one.
+
+`lossless backfill [--project KEY] [--dry-run]` reads the stored tapes again, sealed or not, and adds the said records an older version did not keep. A turn the store already holds is left alone, so it is safe to run twice and beside the daemon. The tape is the corpus: what a later release learns to keep is not lost for the sessions before it.
+
 `remember` bypasses heuristics: the payload *is* the claim. Still redacted. Still gets a raw line in a `manual/<date>.jsonl` so it is part of "everything."
 
 After a claim is written, embed `text` (+ symbols) into `claim_vectors` if `Store.Embedder` is set. Missing embedder is fine (degraded retrieve). Do not embed raw lines or tool bodies. A write never fails because embed failed. `lossless embed-backfill` fills gaps after you attach a model (`LOSSLESS_EMBED_CMD` or `LOSSLESS_EMBED_MODEL`).

@@ -39,7 +39,7 @@ Always on. No query. Catch-up is idempotent by byte cursor. Own ask/remember/get
 
 1. **Copy the session file.** Harness JSONL → owned `raw/project/yyyy-mm/*.jsonl`. Redact on the way in. Seal + zstd after session end.
 2. **Excerpts.** Monthly `excerpts-YYYY-MM.sqlite`. ~800–1600 chars. Tool bodies clipped. For GET, not for ask.
-3. **Extract claims.** Heuristics only: failed / decision / constraint / state / thread. Hash supersede. Symbols from text + path stems. `jwt` ↔ `jsonwebtoken`.
+3. **Extract claims.** Heuristics only: failed / decision / constraint / state / thread. Every turn a person typed is also kept whole (`said`). Hash supersede. Symbols from text + path stems. `jwt` ↔ `jsonwebtoken`.
 4. **Index.** FTS5 body, path postings, symbol postings. Optional claim vector if an on-box embedder is attached. Markdown export is source of truth.
 5. **remember.** Bypasses heuristics. Still redacted, still on the raw tape under `manual/`. Writes a `remember` action.
 

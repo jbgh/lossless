@@ -37,9 +37,15 @@ type TranscriptRef struct {
 }
 
 func NewID() string {
+	return NewIDAt(time.Now())
+}
+
+// NewIDAt is NewID for a record dated t: a turn read from an old tape
+// sorts with its day, not with the day it was read.
+func NewIDAt(t time.Time) string {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
-	return strings.ToUpper(time.Now().UTC().Format("20060102150405")) + hex.EncodeToString(b[:])
+	return strings.ToUpper(t.UTC().Format("20060102150405")) + hex.EncodeToString(b[:])
 }
 
 func Hash(projectKey, typ, text string) string {

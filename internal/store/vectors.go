@@ -48,7 +48,7 @@ func (s *Store) SearchKNN(project, model string, query []float32, limit int) ([]
 SELECT v.record_id, v.vec
 FROM claim_vectors v
 JOIN records r ON r.id = v.record_id
-WHERE v.project_key = ? AND v.model = ? AND v.dim = ? AND r.status = 'active'`,
+WHERE v.project_key = ? AND v.model = ? AND v.dim = ? AND r.status = 'active' AND r.type != 'said'`,
 		project, model, len(query))
 	if err != nil {
 		return nil, err
@@ -122,7 +122,8 @@ func (s *Store) BackfillVectors() (int, error) {
 	if s.Embedder == nil {
 		return 0, nil
 	}
-	rows, err := s.DB.Query(`SELECT ` + claimCols + ` FROM records WHERE status = 'active'`)
+	// Said records have their own lexical route; WriteClaim does not embed them either.
+	rows, err := s.DB.Query(`SELECT ` + claimCols + ` FROM records WHERE status = 'active' AND type != 'said'`)
 	if err != nil {
 		return 0, err
 	}

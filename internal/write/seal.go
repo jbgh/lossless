@@ -167,14 +167,24 @@ func fsyncDir(dir string) error {
 	return d.Sync()
 }
 
-func ReadRaw(path string) ([]byte, error) {
-	if _, err := os.Stat(path); err == nil {
-		f, err := os.Open(path)
-		if err != nil {
-			return nil, err
-		}
-		defer f.Close()
-		return io.ReadAll(io.LimitReader(f, maxCatchUpBytes))
+// rawReader streams a tape, plain or sealed, with no size limit.
+type rawReader struct {
+	io.Reader
+	f   *os.File
+	dec *zstd.Decoder
+}
+
+func (r *rawReader) Close() error {
+	if r.dec != nil {
+		r.dec.Close()
+	}
+	return r.f.Close()
+}
+
+// openRaw opens the plain tape at path, or the sealed one beside it.
+func openRaw(path string) (*rawReader, error) {
+	if f, err := os.Open(path); err == nil {
+		return &rawReader{Reader: f, f: f}, nil
 	}
 	zst := path
 	if !strings.HasSuffix(path, ".zst") {
@@ -184,11 +194,20 @@ func ReadRaw(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 	dec, err := zstd.NewReader(f)
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return &rawReader{Reader: dec, f: f, dec: dec}, nil
+}
+
+// ReadRaw reads a tape, plain or sealed, up to the catch-up size limit.
+func ReadRaw(path string) ([]byte, error) {
+	r, err := openRaw(path)
 	if err != nil {
 		return nil, err
 	}
-	defer dec.Close()
-	return io.ReadAll(io.LimitReader(dec, maxCatchUpBytes))
+	defer r.Close()
+	return io.ReadAll(io.LimitReader(r, maxCatchUpBytes))
 }

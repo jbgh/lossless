@@ -6,6 +6,7 @@ package retrieve
 const (
 	CandidateCap         = 400
 	FTSCap               = 80
+	SaidCap              = 24
 	PathPerCap           = 40
 	PathTotalCap         = 80
 	SymbolPerCap         = 40
@@ -67,6 +68,14 @@ const (
 	WHotRecency      = 0.2
 	WStale           = 0.7
 	WCoverage        = 0.8
+	// SaidOverlap is a said record's share of the shipped-overlap weight:
+	// on topic it ranks with typed records, and never ahead of one that
+	// carries a warning.
+	SaidOverlap = 0.8
+	// SaidEchoMinutes: the asking session's own turns of the last few
+	// minutes are still in its window. Kept short: a compact that no hook
+	// reported must not cost the turns it removed for long.
+	SaidEchoMinutes = 10
 
 	WColdType    = 2.0
 	WColdPath    = 1.2
@@ -77,7 +86,9 @@ var typeRank = map[string]int{
 	"failed":     5,
 	"decision":   4,
 	"constraint": 3,
-	"state":      2,
-	"thread":     1,
-	"excerpt":    0,
+	// The user's own words rank with their rules, and never warn.
+	"said":    3,
+	"state":   2,
+	"thread":  1,
+	"excerpt": 0,
 }

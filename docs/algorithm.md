@@ -68,7 +68,7 @@ One MCP/REST call. Target p50 < 500ms, p95 < 2s at 10k claims. Never scan the fu
 4. **candidates · union · cap 400** — FTS ∪ path ∪ symbol ∪ failed/decision/constraint. Pathless asks hop through files the first hits named. Empty union: last 8 faileds. Optional kNN if an embedder is attached.
 5. **drop** — extract-noise, fixture sessions, older same-path conflicts, decisions invalidated by a newer same-file failed on topic tokens (paths stripped).
 6. **features + score** — no LLM. Sacred 4.0 failed-overlap + 2.5 shipped-overlap, then a path/ident/prose/HEAD mix.
-7. **pack 5 · type-cap 2 · warnings** — force the best job-1 failed first. Then coverage, then score. Blocking warnings on the packed hits.
+7. **pack 5 · type-cap 2 · warnings** — first drop what is off the goal: no shared file, no shared identifier, and fewer shared content words than one per sixteen in the ask. Then force the best job-1 failed, then coverage, then score. Five is a cap, not a quota. Blocking warnings on the packed hits. What the user typed in earlier sessions (`said`) packs on strong overlap only, and never warns.
 
 ## 6. Candidate generation
 

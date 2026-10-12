@@ -59,17 +59,31 @@ func (s *Store) GetMany(ids []string) (map[string]claim.Record, error) {
 	return out, nil
 }
 
+// SearchFTS is the lexical route for typed records. Said records (the
+// user's turns, whole) live in their own FTS table with their own route
+// and cap, SearchSaid: they are longer and more numerous, and in one
+// table they would be matched and ranked by every typed query and would
+// move its bm25 statistics.
 func (s *Store) SearchFTS(project, match string, limit int) ([]FTSHit, error) {
+	return s.searchFTS("records_fts", project, match, limit)
+}
+
+// SearchSaid is the lexical route for said records.
+func (s *Store) SearchSaid(project, match string, limit int) ([]FTSHit, error) {
+	return s.searchFTS("said_fts", project, match, limit)
+}
+
+func (s *Store) searchFTS(table, project, match string, limit int) ([]FTSHit, error) {
 	if match == "" || limit <= 0 {
 		return nil, nil
 	}
 	project = projectkey.Normalize(project)
 	rows, err := s.DB.Query(`
-SELECT f.record_id, bm25(records_fts)
-FROM records_fts f
+SELECT f.record_id, bm25(`+table+`)
+FROM `+table+` f
 JOIN records r ON r.id = f.record_id
-WHERE records_fts MATCH ? AND r.project_key = ? AND r.status = 'active'
-ORDER BY bm25(records_fts)
+WHERE `+table+` MATCH ? AND r.project_key = ? AND r.status = 'active'
+ORDER BY bm25(`+table+`)
 LIMIT ?`, match, project, limit)
 	if err != nil {
 		return nil, err
@@ -95,6 +109,17 @@ func (s *Store) IDsByPath(project string, keys []string, per, total int) ([]stri
 	return s.idsByPosting(`path_postings`, `path_key`, project, keys, per, total)
 }
 
+// SaidIDsByPath is the path route for said records. The shared posting
+// routes take the newest ids per key and leave said out: a user turn
+// names files and posts as often as typed records do, and would push the
+// older ones out of the candidates.
+func (s *Store) SaidIDsByPath(project string, keys []string, per, total int) ([]string, error) {
+	if per <= 0 || total <= 0 {
+		return nil, nil
+	}
+	return s.idsByPostingType(`path_postings`, `path_key`, projectkey.Normalize(project), "said", keys, per, total)
+}
+
 func (s *Store) IDsBySymbol(project string, keys []string, per, total int) ([]string, error) {
 	return s.idsByPosting(`symbol_postings`, `symbol`, project, keys, per, total)
 }
@@ -109,7 +134,7 @@ func (s *Store) idsByPosting(table, col, project string, keys []string, per, tot
 	q := fmt.Sprintf(`
 SELECT p.record_id FROM %s p
 JOIN records r ON r.id = p.record_id
-WHERE p.project_key = ? AND p.%s = ? AND r.status = 'active'
+WHERE p.project_key = ? AND p.%s = ? AND r.status = 'active' AND r.type != 'said'
 ORDER BY p.record_id DESC
 LIMIT ?`, table, col)
 	for _, k := range keys {
@@ -338,7 +363,7 @@ func (s *Store) RecentPaths(project string, limit int) ([]string, error) {
 	}
 	rows, err := s.DB.Query(`
 SELECT paths_json FROM records
-WHERE project_key = ? AND status = 'active'
+WHERE project_key = ? AND status = 'active' AND type != 'said'
 ORDER BY created_at DESC
 LIMIT ?`, project, limit)
 	if err != nil {
@@ -371,6 +396,9 @@ func (s *Store) reindex(rec claim.Record) error {
 	if _, err := s.DB.Exec(`DELETE FROM records_fts WHERE record_id = ?`, rec.ID); err != nil {
 		return err
 	}
+	if _, err := s.DB.Exec(`DELETE FROM said_fts WHERE record_id = ?`, rec.ID); err != nil {
+		return err
+	}
 	if _, err := s.DB.Exec(`DELETE FROM path_postings WHERE record_id = ?`, rec.ID); err != nil {
 		return err
 	}
@@ -395,7 +423,11 @@ func (s *Store) reindex(rec claim.Record) error {
 			body.WriteString(st)
 		}
 	}
-	if _, err := s.DB.Exec(`INSERT INTO records_fts(body, record_id) VALUES(?, ?)`, body.String(), rec.ID); err != nil {
+	fts := "records_fts"
+	if rec.Type == "said" {
+		fts = "said_fts"
+	}
+	if _, err := s.DB.Exec(`INSERT INTO `+fts+`(body, record_id) VALUES(?, ?)`, body.String(), rec.ID); err != nil {
 		return err
 	}
 	for _, k := range claim.PathKeys(rec.Paths) {
@@ -405,6 +437,12 @@ func (s *Store) reindex(rec claim.Record) error {
 		); err != nil {
 			return err
 		}
+	}
+	// A said record is found by its words (SearchSaid) and its paths.
+	// Every word of a whole turn in the symbol postings would bury the
+	// typed records that share them.
+	if rec.Type == "said" {
+		return nil
 	}
 	for _, sy := range rec.Symbols {
 		key := strings.ToLower(sy)

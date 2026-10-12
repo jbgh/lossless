@@ -361,8 +361,8 @@ func Format(w io.Writer, r Report) {
 	}
 	d := r.Detail
 	fmt.Fprintf(w, "\nproject %s\n", d.Key)
-	fmt.Fprintf(w, "  types  failed=%d decision=%d constraint=%d state=%d\n",
-		d.ByType["failed"], d.ByType["decision"], d.ByType["constraint"], d.ByType["state"])
+	fmt.Fprintf(w, "  types  failed=%d decision=%d constraint=%d state=%d said=%d\n",
+		d.ByType["failed"], d.ByType["decision"], d.ByType["constraint"], d.ByType["state"], d.ByType["said"])
 	if len(d.LastAsks) > 0 {
 		fmt.Fprintf(w, "  ask    last %s\n", d.LastAsks[0].At)
 	} else if r.Records > 0 {

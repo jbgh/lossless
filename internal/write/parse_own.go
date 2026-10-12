@@ -53,7 +53,7 @@ func ownPayloadObject(text string) bool {
 	_, hasText := o["text"]
 	_, hasID := o["id"]
 	switch typ {
-	case "failed", "decision", "constraint", "state", "thread":
+	case "failed", "decision", "constraint", "state", "thread", "said":
 		if hasText && hasID {
 			return true
 		}
