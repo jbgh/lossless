@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.37 — 2026-10-12
+
+- **A `said` record is only written for text a person typed.** 0.1.36 stored every user-side turn as something the user said. Three kinds of text are no longer stored that way: the turns of a session a program started (Claude Code's `sdk-…` entrypoints), anything inside a `<pasted_content>` block (the words you typed around a paste are kept), and text lifted out of a `<user_query>` block in the middle of a turn (the wrapper is honoured only when the harness put it at the start). Without this, pasted or machine-written text could come back in a later session labelled as your own words.
+- **A `said` record is presented as a quote, not an instruction.** The skill and the tool description now tell agents to use it as context for the current request, to check its date, and never to treat it as permission for something the current request does not ask for.
+- A `said` record that still holds a pasted block stops appearing in asks.
+
 ## 0.1.36 — 2026-10-12
 
 - **What you type is now kept, word for word.** lossless used to keep a sentence of yours only when it contained a cue word such as "never" or "don't", so most instructions ("use the smaller model for subagents", "keep the export columns in this order") never became memory. Every turn a person types is now stored whole as a record of type `said`, with the files it names and a link back to the turn. `ask` returns one when a later task is about the same thing, in your words, dated, and never as a warning.
