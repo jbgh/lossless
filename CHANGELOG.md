@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A store that is not there is no longer backed up as an empty one.** A run that found nothing while the bucket held files used to publish an empty generation as the newest one, so the next restore had nothing to restore — an unmounted volume or a home that moved looked exactly like a store whose files were all deleted. If a root the backup reads (`raw/`, `export/`, `index/`) is missing, the run now fails with that reason and the previous generation stays the newest; `lossless backup --allow-empty` publishes the empty state on purpose.
+
 ## 0.1.41 — 2026-10-12
 
 - **omp (oh-my-pi) is a supported harness.** `lossless setup` now writes omp's pieces too: `~/.omp/agent/extensions/lossless.ts` (catch-up on `turn_end`, `session_before_compact`, `session_compact`, `session_shutdown`), MCP in omp's native `~/.omp/agent/mcp.json`, the skill in `~/.omp/agent/skills/lossless/SKILL.md`, and the always-on rule in `~/.omp/agent/RULES.md`. `RULES.md` is omp's always-apply rule file; its `AGENTS.md` is deliberately left alone because that is the single user *context* file omp keeps, so a lossless block there would shadow the user's other global instructions (`~/.claude/CLAUDE.md` included). `lossless doctor` checks all four, and `~/.omp` relocations are honored (`OMP_HOME`, `PI_CONFIG_DIR`, `PI_CODING_AGENT_DIR`). New `lossless hook-omp`.

@@ -25,11 +25,12 @@ const parallel = 4
 var sleepHook func(time.Duration)
 
 type RunOptions struct {
-	DryRun   bool
-	Verbose  bool
-	TakeOver bool
-	Out      io.Writer
-	Now      func() time.Time
+	DryRun     bool
+	Verbose    bool
+	TakeOver   bool
+	AllowEmpty bool // publish an empty generation when the store's roots are gone
+	Out        io.Writer
+	Now        func() time.Time
 }
 
 type Summary struct {
@@ -48,6 +49,14 @@ type Summary struct {
 // in the bucket. Not a successful backup: last_ok stays unset so doctor
 // keeps saying "never backed up" instead of "ok" over an empty bucket.
 var ErrEmptyStore = errors.New("nothing to back up: the store is empty")
+
+// ErrStoreMissing: a root the walk reads (raw/, export/, index/) is not
+// there while the bucket holds files. A walk that finds nothing normally
+// means everything was removed, but a store that is not there — an
+// unmounted volume, a home that moved — looks the same, and publishing the
+// empty result would make the newest restorable generation empty. The
+// previous generation stays the latest instead. --allow-empty overrides it.
+var ErrStoreMissing = errors.New("nothing to back up: raw/, export/, or index/ is missing; refusing to replace the bucket's newest generation with an empty one (check that the store is mounted, or pass --allow-empty)")
 
 // OtherWriterError: the pointer was last written by an install this one
 // has not adopted.
@@ -155,13 +164,20 @@ func run(ctx context.Context, home string, cfg *Config, rm *remote, state *State
 	}
 	defer os.RemoveAll(tmp)
 
-	items, err := walk(home, tmp, rm.keys, state, pointer)
+	items, missing, err := walk(home, tmp, rm.keys, state, pointer)
 	if err != nil {
 		return err
 	}
 	sum.Scanned = len(items)
 	if len(items) == 0 && pointer.Generation == "" {
 		return ErrEmptyStore
+	}
+	// A walk that found nothing while the pointer holds files is normally
+	// "everything was removed". A root that is gone means a store that is
+	// not there, and the empty result must not become the newest
+	// generation: the bucket's last good copy stays the latest.
+	if len(items) == 0 && !o.AllowEmpty && len(missing) > 0 && len(pointer.Files) > 0 {
+		return ErrStoreMissing
 	}
 	gen := NewGeneration(start)
 	p := makePlan(items, pointer, cfg.Keep, gen)

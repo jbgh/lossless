@@ -472,6 +472,50 @@ func TestEmptyStoreIsNotABackup(t *testing.T) {
 	}
 }
 
+// A store that is not there (an unmounted volume, a home that moved) must
+// not read as a store whose files were all deleted: the bucket keeps the
+// previous generation as its newest, and the run says why.
+func TestRunRefusesWhenAStoreRootIsGone(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	home := setupBackup(t, srv, 5)
+	first := runOK(t, home, RunOptions{})
+	before := pointerOf(t, home, srv)
+
+	for _, root := range roots {
+		must(t, os.RemoveAll(filepath.Join(home, root)))
+	}
+	if _, err := Run(context.Background(), home, RunOptions{}); !errors.Is(err, ErrStoreMissing) {
+		t.Fatalf("want ErrStoreMissing, got %v", err)
+	}
+	after := pointerOf(t, home, srv)
+	if after.Generation != before.Generation || len(after.Files) != len(before.Files) {
+		t.Fatalf("the newest generation changed: %+v -> %+v", before, after)
+	}
+	if st := LoadState(home); st.LastOK == "" || st.LastError == "" {
+		t.Fatalf("a refused run must keep the old success and stamp the error: %+v", st)
+	}
+
+	// One root back is still a store that is not there: raw/ exists and is
+	// empty, export/ and index/ do not.
+	must(t, os.MkdirAll(filepath.Join(home, "raw"), 0o700))
+	if _, err := Run(context.Background(), home, RunOptions{}); !errors.Is(err, ErrStoreMissing) {
+		t.Fatalf("want ErrStoreMissing with two roots gone, got %v", err)
+	}
+
+	// --allow-empty publishes the empty state on purpose.
+	sum := runOK(t, home, RunOptions{AllowEmpty: true})
+	if sum.NoChange || sum.Scanned != 0 || sum.Uploaded != 0 || sum.Generation == "" {
+		t.Fatalf("%+v", sum)
+	}
+	if m := pointerOf(t, home, srv); m.Generation != sum.Generation || len(m.Files) != 0 {
+		t.Fatalf("%+v", m)
+	}
+	if m := pointerOf(t, home, srv); !slices.Contains(m.Generations, first.Generation) {
+		t.Fatalf("the previous generation must stay restorable: %+v", m)
+	}
+}
+
 // export/*.md and sealed parts are read in place; a supersede or a project
 // removal can delete one between the walk and the upload.
 func TestUploadOneSkipsVanishedDirectItem(t *testing.T) {

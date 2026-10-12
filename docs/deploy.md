@@ -199,10 +199,12 @@ Nothing else in the home is read. `spool/`, `active/`, `serve.log`,
 `service.env`, and the backup files themselves stay on this machine.
 
 Every object is chunked AES-256-GCM under a per-object key derived from
-`backup.key`. Object names are an HMAC of the path. The bucket shows no
-project names, session ids, or paths. Someone with bucket read access sees no
-paths, names, or content; someone with write access can delete or roll back,
-and a rollback shows in `restore --list`.
+`backup.key`. Object names are an HMAC of the path plus the file's
+plaintext SHA-256, which is content addressing: the bucket shows no project
+names, session ids, or paths, and nothing in it reveals content, but a
+reader who already holds a file's bytes can confirm that the file is in the
+bucket. Someone with write access can delete or roll back, and a rollback
+shows in `restore --list`.
 
 ### Generations
 
@@ -211,6 +213,13 @@ pointer. The last five generations are kept (`--keep`), and an object is
 deleted only when no kept generation references it. A run with no changes
 writes nothing. Bucket versioning is not assumed; Cloudflare R2 does not
 implement it.
+
+A run that finds nothing normally means everything was removed, and the
+empty result becomes the newest generation. If a root the backup reads
+(`raw/`, `export/`, `index/`) is missing, that is a store that is not there
+— an unmounted volume, a home that moved — and the run fails instead,
+leaving the previous generation the newest one. `lossless backup
+--allow-empty` publishes the empty state on purpose.
 
 ```bash
 lossless restore --list
@@ -293,8 +302,10 @@ over in turn.
   virtual-host URL for a dotted bucket name breaks TLS certificate
   matching.
 
-Any other S3-compatible store works the same way with its endpoint. AWS
-needs no `--endpoint` (unless the bucket name has dots; see above).
+Any other S3-compatible store (MinIO, Backblaze B2) works the same way with
+its endpoint. AWS needs no `--endpoint` (unless the bucket name has dots; see
+above). An endpoint that is not loopback must be `https`; plain `http` is
+allowed only for `127.0.0.1`, so a MinIO on another box needs TLS.
 
 ---
 

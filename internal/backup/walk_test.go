@@ -88,7 +88,7 @@ func rels(items []Item) []string {
 func TestWalkSelectsExactlyTheStore(t *testing.T) {
 	home, _ := seedHome(t)
 	tmp := filepath.Join(home, "backup-tmp")
-	items, err := walk(home, tmp, testKeys(t), LoadState(home), emptyManifest())
+	items, _, err := walk(home, tmp, testKeys(t), LoadState(home), emptyManifest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestWalkReusesCachedHashWhenStatUnchanged(t *testing.T) {
 	tmp := filepath.Join(home, "backup-tmp")
 	k := testKeys(t)
 	cache := LoadState(home)
-	items, err := walk(home, tmp, k, cache, emptyManifest())
+	items, _, err := walk(home, tmp, k, cache, emptyManifest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestWalkReusesCachedHashWhenStatUnchanged(t *testing.T) {
 	b[len(b)-1] ^= 0xff // same size, different bytes
 	must(t, os.WriteFile(sealed, b, 0o600))
 	must(t, os.Chtimes(sealed, st.ModTime(), st.ModTime()))
-	again, err := walk(home, tmp, k, cache, pointer)
+	again, _, err := walk(home, tmp, k, cache, pointer)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestWalkReusesCachedHashWhenStatUnchanged(t *testing.T) {
 		}
 	}
 	must(t, os.Chtimes(sealed, time.Now(), time.Now()))
-	third, _ := walk(home, tmp, k, cache, pointer)
+	third, _, _ := walk(home, tmp, k, cache, pointer)
 	for _, it := range third {
 		if it.Rel == "raw/acme__api/2026-09/sealed.jsonl.zst" && it.SHA256 == cache.Files[it.Rel].SHA256 {
 			t.Fatal("a new mtime must re-hash")

@@ -133,16 +133,18 @@ lossless remember --type decision --text "Use jose, not jsonwebtoken, on Edge." 
 lossless inspect --project owner/repo --ask    # why each record was returned or dropped
 lossless supersede <id> "no longer true"       # retire a record; nothing is deleted
 lossless backfill                              # after an upgrade: read old tapes with the new version
+lossless backup init s3://bucket/prefix        # opt in; then `lossless backup`, and serve repeats it hourly
+lossless restore --list                        # kept generations; `restore` brings the latest back
 ```
 
 The same JSON is served over MCP (`ask`, `remember`, `get_record`) and REST (`POST /v1/ask`), so any agent that can call either one can share the store. `lossless help` lists every command.
 
 ## Private by default
 
-- **Local.** Everything lives in `~/.lossless`. The service listens on `127.0.0.1`. Nothing is uploaded.
+- **Local.** Everything lives in `~/.lossless`. The service listens on `127.0.0.1`. Nothing is uploaded unless you turn on backup below.
 - **No model in the loop.** Retrieval is fixed code: no LLM, no hosted embeddings. The agent writes the reply; lossless only supplies records.
-- **No network.** Out of the box, `lossless update` is the only command that goes online, and only to GitHub Releases.
-- **Backup is optional and yours.** `lossless backup` copies the store, encrypted with a key you hold, to an S3-compatible bucket you own (AWS, R2, B2, MinIO). `lossless restore` brings it back. See [docs/deploy.md](docs/deploy.md), which also covers running the store on another machine.
+- **No network.** A default install is offline: `lossless update` is the only command that goes online, and only to GitHub Releases. Configure a backup bucket and `backup`, `restore`, and the scheduled run inside `serve` talk to that bucket — nothing else leaves the machine.
+- **Backup is optional and yours.** `lossless backup init s3://…` copies the store, encrypted with a key you hold, to an S3-compatible bucket you own (AWS, R2, B2, MinIO); `serve --watch` then repeats it hourly, and `lossless restore` brings it back. `init` writes `~/.lossless/backup.key` — copy it somewhere that is not this machine, restore is impossible without it. See [docs/deploy.md](docs/deploy.md), which also covers running the store on another machine.
 
 What is on disk:
 
@@ -150,6 +152,7 @@ What is on disk:
 ~/.lossless/raw/<owner>__<repo>/…/<session>.jsonl   the tape (kept forever)
 ~/.lossless/export/<owner>__<repo>/<id>.md          records, as readable files
 ~/.lossless/index/                                  SQLite index, rebuildable from the tape
+~/.lossless/backup.env, backup.key                  only after backup init: the bucket and its key
 ```
 
 `LOSSLESS_HOME` moves the directory.
@@ -159,7 +162,7 @@ What is on disk:
 - **Not a summarizer.** A summary throws the transcript away, and the failed path with it. lossless keeps the transcript.
 - **Not a dump.** An ask returns at most five records, not the log.
 - **Not automatic injection.** Nothing is pushed into the prompt. The agent has to call `ask`; `setup` installs the rule and the skill that tell it to.
-- **Not a hosted service.** There is no account and no cloud.
+- **Not a hosted service.** There is no account and no cloud service of ours; a backup bucket is one you own.
 - **Not a general knowledge base.** It is memory for coding sessions on a repository.
 
 ## Documentation

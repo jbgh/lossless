@@ -72,14 +72,23 @@ func skipName(name string) bool {
 // and mtime match, but for live and sqlite files only when pointer already
 // holds that hash: otherwise anything about to be uploaded must be a fresh
 // locked copy or snapshot, never the live original (see uploadOne).
-func walk(home, tmp string, keys *crypt.Keys, cache *State, pointer *Manifest) ([]Item, error) {
+//
+// missing names the roots that are not there at all, which is not the same
+// as an empty store: run refuses to publish a generation over one when the
+// bucket already holds a generation (an unmounted volume must not look like
+// a store whose files were all deleted).
+func walk(home, tmp string, keys *crypt.Keys, cache *State, pointer *Manifest) ([]Item, []string, error) {
 	if err := os.MkdirAll(tmp, 0o700); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var items []Item
+	var (
+		items   []Item
+		missing []string
+	)
 	for _, root := range roots {
 		dir := filepath.Join(home, root)
 		if _, err := os.Stat(dir); err != nil {
+			missing = append(missing, root)
 			continue
 		}
 		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
@@ -117,10 +126,10 @@ func walk(home, tmp string, keys *crypt.Keys, cache *State, pointer *Manifest) (
 			return nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return dedupeItems(items), nil
+	return dedupeItems(items), missing, nil
 }
 
 // skipVanished forgives a file that disappeared between the directory read
