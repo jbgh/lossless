@@ -76,10 +76,6 @@ func Said(msgs []Message, opts ExtractOpts, so SaidOpts) []claim.Record {
 		if !ok {
 			continue
 		}
-		src, ok = stripLeadBlocks(userQuery(src))
-		if !ok {
-			continue
-		}
 		text := strings.Join(strings.Fields(src), " ")
 		// "[Image #1] make the header sticky like this" is the user's
 		// words after the marker. A file mention stays: it is the
@@ -185,36 +181,68 @@ func unspacedLetters(s string) int {
 	return n
 }
 
-var leadBlockOpenRE = regexp.MustCompile(`^\s*<([a-z][\w-]*)(?:\s[^>]*)?>`)
+// saidRawMax bounds the turn a said record is read from. Nobody types
+// more than this; a larger turn is a paste or a dump.
+const saidRawMax = 64 << 10
 
-// contextBlocks are the tags an IDE integration puts in front of what the
-// user typed: the file open in the editor, the selection.
-var contextBlocks = map[string]bool{"ide_opened_file": true, "ide_selection": true}
-
-// stripLeadBlocks removes the context blocks in front of the user's
-// words. It reports false for a turn that opens with any other closed
-// tag block: that is a harness or a tool speaking in the user's place
-// (a notification, a reminder, a hook's output), and what follows the
-// block is not known to be the user's. A tag that is never closed is the
-// user writing about markup ("<div> wrappers should be flex"), and stays.
-func stripLeadBlocks(s string) (string, bool) {
-	for i := 0; i < 8; i++ {
-		m := leadBlockOpenRE.FindStringSubmatchIndex(s)
-		if m == nil {
-			break
-		}
-		name := s[m[2]:m[3]]
-		closing := "</" + name + ">"
-		end := strings.Index(s[m[1]:], closing)
-		if end < 0 {
-			break
-		}
-		if !contextBlocks[name] {
-			return "", false
-		}
-		s = s[m[1]+end+len(closing):]
+// saidSource is the turn as the user typed it, or false when part of it
+// may not be theirs.
+//
+// A said record tells a later agent "the user typed this", so the rule is
+// deny by default: after the two things a harness is known to wrap the
+// user's own words in (an editor's context blocks in front, the mid-turn
+// delivery wrapper), any markup left anywhere in the turn means a tool, a
+// hook, or a paste is in it, and the turn is not stored as said. Nothing
+// is cut out of the middle of a turn: text inside a block can contain the
+// block's own closing tag, so no cut is safe. It reads the whole turn,
+// not the long-turn clip, where a tag can be missing.
+func saidSource(m Message) (string, bool) {
+	raw := m.Text
+	if m.full != "" {
+		raw = m.full
 	}
-	return s, true
+	if len(raw) > saidRawMax {
+		return "", false
+	}
+	raw = stripContextLead(userQuery(raw))
+	if markedUp(raw) {
+		return "", false
+	}
+	return stripNonProse(raw), true
+}
+
+var (
+	// closingTagRE is any closing tag. A closed block of any name is not
+	// typing, and a closing tag whose opening tag is gone still ends one.
+	closingTagRE = regexp.MustCompile(`</[a-z][\w-]*\s*>`)
+	// harnessOpenRE is the opening tag of a block a harness or tool
+	// writes, closed or not.
+	harnessOpenRE = regexp.MustCompile(`<(?:pasted_content|system-reminder|task-notification|user_query|agent-message|agent-reminder|user-prompt-submit-hook|claude-user-context|user_info|ide_[a-z_]+|local-command-[a-z-]+|command-[a-z-]+|skills?)\b`)
+	// contextLeadRE is one editor context block at the very front.
+	contextLeadRE = regexp.MustCompile(`(?s)^\s*<(ide_opened_file|ide_selection)\b[^>]*>.*?</(ide_opened_file|ide_selection)\s*>`)
+)
+
+// markedUp reports markup that is not the user's typing. "<div> wrappers
+// should be flex" and "set it to <your_key>" are typing: no block is
+// closed and no harness tag is opened.
+func markedUp(s string) bool {
+	low := strings.ToLower(s)
+	return closingTagRE.MatchString(low) || harnessOpenRE.MatchString(low)
+}
+
+// stripContextLead removes the context blocks an IDE integration puts in
+// front of what the user typed: the open file, the selection. Each block
+// ends at its first closing tag; if the block's text held a closing tag
+// of its own, what is left still has one, and markedUp turns the turn
+// away.
+func stripContextLead(s string) string {
+	for {
+		m := contextLeadRE.FindStringSubmatchIndex(s)
+		if m == nil || s[m[2]:m[3]] != s[m[4]:m[5]] {
+			return s
+		}
+		s = s[m[1]:]
+	}
 }
 
 // userQueryRE is the one wrapper a harness puts around a message it
@@ -230,54 +258,6 @@ func userQuery(s string) string {
 		return m[1]
 	}
 	return s
-}
-
-// saidRawMax bounds the turn a said record is read from. Nobody types
-// more than this; a larger turn is a paste or a dump.
-const saidRawMax = 64 << 10
-
-// saidSource is the turn as the user typed it, without what they pasted
-// and without the data in it (diffs, fenced code, JSON). It reads the
-// whole turn, not the long-turn clip: a paste is cut out by its tags, and
-// past a clip a tag can be missing.
-func saidSource(m Message) (string, bool) {
-	raw := m.Text
-	if m.full != "" {
-		raw = m.full
-	}
-	if len(raw) > saidRawMax {
-		return "", false
-	}
-	return stripNonProse(stripPasted(raw)), true
-}
-
-const (
-	pastedOpen  = "<pasted_content"
-	pastedClose = "</pasted_content>"
-)
-
-// stripPasted removes what the user pasted from elsewhere. A paste is
-// material the user handed over, and may hold instructions they did not
-// write; only their own words around it are theirs.
-//
-// The pasted text can contain the tags themselves, so the tags are not
-// matched in pairs: everything from the first opening tag to the last
-// closing tag goes. A closing tag with no opening tag before it takes
-// everything before it; an opening tag never closed takes the rest.
-func stripPasted(s string) string {
-	open := strings.Index(s, pastedOpen)
-	last := strings.LastIndex(s, pastedClose)
-	if open < 0 && last < 0 {
-		return s
-	}
-	start, end := open, len(s)
-	if first := strings.Index(s, pastedClose); open < 0 || (first >= 0 && first < open) {
-		start = 0
-	}
-	if last >= start {
-		end = last + len(pastedClose)
-	}
-	return s[:start] + " " + s[end:]
 }
 
 // saidLeadRunes is how much of a turn's opening the template check
