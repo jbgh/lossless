@@ -18,6 +18,7 @@ import (
 
 	"lossless/internal/backup"
 	"lossless/internal/claim"
+	"lossless/internal/env"
 	"lossless/internal/mcpserver"
 	"lossless/internal/retrieve"
 	"lossless/internal/store"
@@ -77,7 +78,7 @@ func Handler(st *store.Store, token string) http.Handler {
 		if emb == "" {
 			emb = "none"
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "records": st.CountActive(), "embedder": emb, "version": version.Version})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "records": st.CountActive(), "embedder": emb, "version": version.Version, "home": env.HomeTag(st.Root)})
 	})
 	mux.HandleFunc("/v1/ask", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

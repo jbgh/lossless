@@ -17,10 +17,11 @@ import (
 
 	"lossless/internal/backup/s3"
 	"lossless/internal/backup/s3/s3test"
+	"lossless/internal/env"
 	"lossless/internal/store"
 )
 
-func noDaemon(string) bool { return false }
+func noDaemon(string) Daemon { return Daemon{} }
 
 // freshTarget imitates a new machine after `lossless setup`: an empty store
 // whose index exists, plus the copied backup.env and backup.key.
@@ -102,8 +103,20 @@ func TestRestoreGuards(t *testing.T) {
 	src := setupBackup(t, srv, 5)
 	runOK(t, src, RunOptions{})
 	dst := freshTarget(t, src)
-	if _, err := Restore(context.Background(), dst, RestoreOptions{Health: func(string) bool { return true }}); !errors.Is(err, ErrDaemonRunning) {
-		t.Fatalf("want ErrDaemonRunning, got %v", err)
+	// A daemon that serves this home blocks the restore, and so does one
+	// too old to say which home it serves.
+	ours := func(string) Daemon { return Daemon{Running: true, Home: env.HomeTag(dst)} }
+	if _, err := Restore(context.Background(), dst, RestoreOptions{Health: ours}); !errors.Is(err, ErrDaemonRunning) {
+		t.Fatalf("want ErrDaemonRunning for the daemon holding this home, got %v", err)
+	}
+	if _, err := Restore(context.Background(), dst, RestoreOptions{Health: func(string) Daemon { return Daemon{Running: true} }}); !errors.Is(err, ErrDaemonRunning) {
+		t.Fatalf("want ErrDaemonRunning for a daemon that does not name its home, got %v", err)
+	}
+	// A daemon for another home does not: the scratch-home drill runs while
+	// the normal daemon stays up.
+	elsewhere := func(string) Daemon { return Daemon{Running: true, Home: env.HomeTag(t.TempDir())} }
+	if _, err := Restore(context.Background(), dst, RestoreOptions{Health: elsewhere}); err != nil {
+		t.Fatalf("a daemon for another home must not block a restore: %v", err)
 	}
 	// A seeded store is not empty.
 	busy, _ := seedHome(t)
@@ -261,19 +274,29 @@ func TestRestoreNothingToRestore(t *testing.T) {
 func TestProbeHealthRequiresLosslessJSON(t *testing.T) {
 	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "ok") }))
 	defer plain.Close()
-	if probeHealth(plain.URL) {
+	if d := probeHealth(plain.URL); d.Running {
 		t.Fatal("a plain 200 is not a lossless daemon")
 	}
-	ours := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `{"ok":true,"records":3}`) }))
+	// The tag /health carries says which home the daemon serves; a daemon
+	// too old to send it is still counted as ours.
+	ours := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"ok":true,"records":3,"home":"abc123"}`)
+	}))
 	defer ours.Close()
-	if !probeHealth(ours.URL) {
-		t.Fatal("our /health JSON must count")
+	if d := probeHealth(ours.URL); !d.Running || d.Home != "abc123" {
+		t.Fatalf("our /health JSON must count and name its home: %+v", d)
+	}
+	if !(Daemon{Running: true}).serves(env.Home()) {
+		t.Fatal("a daemon that does not name its home is taken to hold the one being restored")
+	}
+	if (Daemon{Running: true, Home: "abc123"}).serves(env.Home()) {
+		t.Fatal("a daemon naming another home does not hold this one")
 	}
 	redir := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, ours.URL+"/health", http.StatusFound)
 	}))
 	defer redir.Close()
-	if probeHealth(redir.URL) {
+	if d := probeHealth(redir.URL); d.Running {
 		t.Fatal("a redirect is never ours")
 	}
 }

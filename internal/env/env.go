@@ -2,12 +2,26 @@ package env
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// HomeTag identifies a store without publishing its path: serve's /health
+// answers with it, so a client can tell whether the daemon it can reach
+// serves the home it is about to write (restore refuses to write under a
+// daemon holding that home, and under no other). The path is made absolute
+// and clean first, so two spellings of one directory agree.
+func HomeTag(home string) string {
+	if abs, err := filepath.Abs(home); err == nil {
+		home = abs
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(home)))
+	return hex.EncodeToString(sum[:8])
+}
 
 func Home() string {
 	if h := os.Getenv("LOSSLESS_HOME"); h != "" {

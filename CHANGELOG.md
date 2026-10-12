@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **A store that is not there is no longer backed up as an empty one.** A run that found nothing while the bucket held files used to publish an empty generation as the newest one, so the next restore had nothing to restore — an unmounted volume or a home that moved looked exactly like a store whose files were all deleted. If a root the backup reads (`raw/`, `export/`, `index/`) is missing, the run now fails with that reason and the previous generation stays the newest; `lossless backup --allow-empty` publishes the empty state on purpose.
+- **`restore` refuses only the daemon holding the home it is restoring into.** The check used to block on any lossless daemon on the configured sidecar URL, so the restore drill into a scratch home failed while the real daemon was up. `/health` now names the home it serves by a tag (a hash of the path, not the path), and a daemon for another home no longer blocks the restore. A daemon too old to send the tag is still taken to hold the home.
 
 ## 0.1.41 — 2026-10-12
 

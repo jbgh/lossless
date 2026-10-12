@@ -31,7 +31,22 @@ type RestoreOptions struct {
 	Force  bool
 	At     string
 	Out    io.Writer
-	Health func(url string) bool // nil = real probe
+	Health func(url string) Daemon // nil = real probe
+}
+
+// Daemon is what a reachable lossless daemon answers on /health: whether it
+// is one, and which home it serves (env.HomeTag), so a restore can tell the
+// daemon holding this store from an unrelated daemon on the default port.
+type Daemon struct {
+	Running bool
+	Home    string
+}
+
+// serves reports whether this daemon holds home open. A daemon that does
+// not say which home it serves (an older build) is taken to be ours: the
+// check errs toward refusing rather than writing under a live daemon.
+func (d Daemon) serves(home string) bool {
+	return d.Home == "" || d.Home == env.HomeTag(home)
 }
 
 type RestoreSummary struct {
@@ -45,8 +60,9 @@ type RestoreSummary struct {
 
 // probeHealth is true only for lossless's own /health JSON, the rule
 // serve.alreadyServing and harness.ProbeHealth apply: a plain 200 or a
-// redirect from some other local service must not block a restore.
-func probeHealth(url string) bool {
+// redirect from some other local service must not block a restore. It also
+// returns the home tag that JSON carries.
+func probeHealth(url string) Daemon {
 	c := &http.Client{
 		Timeout: 2 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
@@ -55,21 +71,25 @@ func probeHealth(url string) bool {
 	}
 	res, err := c.Get(strings.TrimRight(url, "/") + "/health")
 	if err != nil {
-		return false
+		return Daemon{}
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return false
+		return Daemon{}
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, 4096))
 	if err != nil {
-		return false
+		return Daemon{}
 	}
 	var body struct {
-		OK      *bool `json:"ok"`
-		Records *int  `json:"records"`
+		OK      *bool  `json:"ok"`
+		Records *int   `json:"records"`
+		Home    string `json:"home"`
 	}
-	return json.Unmarshal(raw, &body) == nil && body.OK != nil && *body.OK && body.Records != nil
+	if json.Unmarshal(raw, &body) != nil || body.OK == nil || !*body.OK || body.Records == nil {
+		return Daemon{}
+	}
+	return Daemon{Running: true, Home: body.Home}
 }
 
 func hasRegularFile(dir string) bool {
@@ -98,8 +118,14 @@ func Restore(ctx context.Context, home string, o RestoreOptions) (RestoreSummary
 	}
 	if url := env.Sidecar(); url == "" {
 		fmt.Fprintln(o.Out, "warning: LOSSLESS_SIDECAR is off, cannot check for a running daemon; stop lossless serve before restoring")
-	} else if o.Health(url) {
-		return sum, ErrDaemonRunning
+	} else if d := o.Health(url); d.Running {
+		if d.serves(home) {
+			return sum, ErrDaemonRunning
+		}
+		// A daemon for another home must not block a restore into this one:
+		// the drill in the design docs restores into a scratch home while
+		// the normal daemon keeps running.
+		fmt.Fprintln(o.Out, "note: a lossless daemon is running for a different home; restoring this one anyway")
 	}
 	if !o.Force && (hasRegularFile(filepath.Join(home, "raw")) || hasRegularFile(filepath.Join(home, "export"))) {
 		return sum, ErrStoreNotEmpty
