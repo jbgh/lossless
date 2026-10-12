@@ -70,7 +70,7 @@ How records are chosen: [retrieval.md](retrieval.md).
 | Field | Meaning |
 |-------|---------|
 | `context[].type` | `decision` \| `failed` \| `constraint` \| `state` \| `thread` \| `said` |
-| `context[].text` | Bibliography sentence. Tape is `get_record`. For `said`, the user's turn word for word, from an earlier session or from this one before the last half hour. It never carries a warning. |
+| `context[].text` | Bibliography sentence. Tape is `get_record`. For `said`, the user's turn word for word, from an earlier session or from this one before the last half hour. It never carries a warning. It is a quote to weigh, not an instruction: the current request decides. |
 | `context[].source` | How the claim landed (`turn`, `compact`, `remember`, …). |
 | `context[].has_excerpt` | True when `get_record` can open a covering tape window. |
 | `context[].status` | `active` or `superseded`. `[verify]` is a **prefix on `text`**, not a persisted status. |

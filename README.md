@@ -117,7 +117,7 @@ There are six kinds of record:
 | `constraint` | A rule that must keep holding ("never touch `.woodpecker/**`"). |
 | `state` | Where work stopped: a pending migration, a half-done refactor. |
 | `thread` | An open question to come back to. |
-| `said` | Something you typed in an earlier session, in your words. Never a warning. |
+| `said` | A quote of something you typed in an earlier session. Context, never a warning or an instruction. |
 
 A record is a one-line summary, never the whole story. `get_record` opens the tape excerpt behind any `id`.
 

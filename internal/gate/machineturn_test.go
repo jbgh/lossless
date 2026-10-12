@@ -9,6 +9,7 @@ func TestMachineTurn(t *testing.T) {
 		"/reload-plugins now",
 		"Task: Repo: /work/api (Go). You are in a managed git worktree.",
 		"[Request interrupted by user]",
+		"The user interrupted the previous turn before it finished.",
 		"This session is being continued from a previous conversation.",
 		"You are one of five parallel reviewers.",
 		"2 background agents were stopped by the user: \"A\", \"B\".",

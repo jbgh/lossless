@@ -14,7 +14,7 @@ var machineLead = []string{
 	"task:", "your task is", "your task:", "[request interrupted", "caveat:",
 	"this session is being continued", "your claude.ai usage limit",
 	"stop hook", "base directory for this skill",
-	"continue if you have next steps",
+	"continue if you have next steps", "the user interrupted the previous",
 }
 
 // BriefLen is how long a turn is before the marks of a brief count. A

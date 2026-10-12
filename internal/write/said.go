@@ -43,6 +43,10 @@ type SaidOpts struct {
 	// session (Claude Code's cli entrypoint). Its opening prompt is the
 	// user's, however long. Nil: not known.
 	Interactive func(Message) bool
+	// Programmatic reports a turn whose line says a program started the
+	// session (Claude Code's sdk entrypoints). Nobody typed its user
+	// turns, and they are not stored as the user's words. Nil: not known.
+	Programmatic func(Message) bool
 	// Briefs remembers the opening briefs turned away, by text, so the
 	// same brief met again in a re-copied tape is still a brief. Nil
 	// keeps no memory.
@@ -60,7 +64,14 @@ func Said(msgs []Message, opts ExtractOpts, so SaidOpts) []claim.Record {
 		}
 		first := opening
 		opening = false
-		text := strings.Join(strings.Fields(stripLeadBlocks(userQuery(m.prose()))), " ")
+		// A said record tells a later agent "the user typed this". That
+		// is only safe to say of text a person did type: not of a turn a
+		// program wrote, and not of what a person pasted in from
+		// somewhere else.
+		if so.Programmatic != nil && so.Programmatic(m) {
+			continue
+		}
+		text := strings.Join(strings.Fields(stripLeadBlocks(stripPasted(userQuery(m.prose())))), " ")
 		// "[Image #1] make the header sticky like this" is the user's
 		// words after the marker. A file mention stays: it is the
 		// referent, and the path the record is found by.
@@ -187,7 +198,11 @@ func stripLeadBlocks(s string) string {
 	return s
 }
 
-var userQueryRE = regexp.MustCompile(`(?s)<user_query>(.*?)</user_query>`)
+// userQueryRE is the one wrapper a harness puts around a message it
+// delivered mid-turn. It is anchored to the start of the turn: the same
+// tags further in are part of whatever the turn quotes, and lifting their
+// contents out would store quoted text as the user's own.
+var userQueryRE = regexp.MustCompile(`(?s)^\s*The user sent a message while you were working:\s*<user_query>(.*?)</user_query>`)
 
 // userQuery unwraps a message the harness delivered mid-turn ("The user
 // sent a message while you were working: <user_query>…</user_query>").
@@ -196,6 +211,15 @@ func userQuery(s string) string {
 		return m[1]
 	}
 	return s
+}
+
+var pastedRE = regexp.MustCompile(`(?s)<pasted_content\b[^>]*>.*?(?:</pasted_content>|$)`)
+
+// stripPasted removes what the user pasted from elsewhere. A paste is
+// material the user handed over, and may hold instructions they did not
+// write; only their own words around it are theirs.
+func stripPasted(s string) string {
+	return pastedRE.ReplaceAllString(s, " ")
 }
 
 // saidLeadRunes is how much of a turn's opening the template check
@@ -264,6 +288,7 @@ var (
 	// Claude Code stamps each line with how the session was started.
 	// "cli" is a person at a terminal; "sdk-…" is a program.
 	cliEntryRE = regexp.MustCompile(`"entrypoint"\s*:\s*"cli"`)
+	sdkEntryRE = regexp.MustCompile(`"entrypoint"\s*:\s*"sdk-`)
 )
 
 // lineAt is the JSONL line that starts at rel in chunk.
@@ -335,6 +360,9 @@ func writeSaid(st *store.Store, msgs []Message, chunk string, base int64, opts E
 		Briefs:    run.briefs,
 		Interactive: func(m Message) bool {
 			return cliEntryRE.MatchString(lineAt(chunk, m.Offset-base))
+		},
+		Programmatic: func(m Message) bool {
+			return sdkEntryRE.MatchString(lineAt(chunk, m.Offset-base))
 		},
 		At: func(m Message) time.Time {
 			if t := lineTime(chunk, m.Offset-base); !t.IsZero() {

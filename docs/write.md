@@ -263,7 +263,10 @@ Not kept as `said`:
 - turns under 25 or over 1500 bytes, under four words, or with fewer than two words longer than three letters;
 - turns that only ask a question or only steer this session ("don't push yet", "never mind"). A request worded as a question ("can you give me the choices as a list?") is kept.
 
-A message the harness delivered mid-turn is unwrapped from its `<user_query>` first. Sentence-level extract is unchanged and still runs on the same turn; when both a typed record and the said record of one turn are on topic, `ask` returns the typed one.
+- turns of a session a program started (Claude Code's `sdk-…` entrypoints): nobody typed them;
+- what the user pasted (`<pasted_content>` blocks): material handed over, which can carry instructions the user did not write. The words around the paste are kept.
+
+A said record tells a later agent "the user typed this", so it is only written for text a person did type, and `ask` presents it as a quote to weigh, never as an instruction or a permission (see the skill). A message the harness delivered mid-turn is unwrapped from its `<user_query>` only when the turn opens with that wrapper; the same tags further into a turn stay as quoted text. Sentence-level extract is unchanged and still runs on the same turn; when both a typed record and the said record of one turn are on topic, `ask` returns the typed one.
 
 `lossless backfill [--project KEY] [--dry-run]` reads the stored tapes again, sealed or not, and adds the said records an older version did not keep. A turn the store already holds is left alone, so it is safe to run twice and beside the daemon. The tape is the corpus: what a later release learns to keep is not lost for the sessions before it.
 
