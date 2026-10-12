@@ -521,9 +521,9 @@ func extractNoise(rec claim.Record) bool {
 	// A said record is a user turn kept whole: the sentence shapes below
 	// judge extracted claims, not this.
 	if rec.Type == "said" {
-		// A paste is not the user's words (write.Said strips it; a row
-		// from before that still holds it).
-		return gate.MachineTurn(t) || strings.Contains(t, "<pasted_content")
+		// The writer's own rule, asked again: a row an older version
+		// stored with markup in it is not known to be the user's words.
+		return gate.MachineTurn(t) || write.SaidMarkedUp(t)
 	}
 	if gate.SkipProse(t) || gate.ListChrome(t, true) {
 		return true

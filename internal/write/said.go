@@ -205,36 +205,50 @@ func saidSource(m Message) (string, bool) {
 		return "", false
 	}
 	raw = stripContextLead(userQuery(raw))
-	if markedUp(raw) {
+	if SaidMarkedUp(raw) {
 		return "", false
 	}
 	return stripNonProse(raw), true
 }
 
 var (
-	// closingTagRE is any closing tag. A closed block of any name is not
-	// typing, and a closing tag whose opening tag is gone still ends one.
-	closingTagRE = regexp.MustCompile(`</[a-z][\w-]*\s*>`)
-	// harnessOpenRE is the opening tag of a block a harness or tool
-	// writes, closed or not.
-	harnessOpenRE = regexp.MustCompile(`<(?:pasted_content|system-reminder|task-notification|user_query|agent-message|agent-reminder|user-prompt-submit-hook|claude-user-context|user_info|ide_[a-z_]+|local-command-[a-z-]+|command-[a-z-]+|skills?)\b`)
-	// contextLeadRE is one editor context block at the very front.
-	contextLeadRE = regexp.MustCompile(`(?s)^\s*<(ide_opened_file|ide_selection)\b[^>]*>.*?</(ide_opened_file|ide_selection)\s*>`)
+	// closingTagRE is any closing tag, whatever its name is made of. A
+	// closed block is not typing, and a closing tag whose opening tag is
+	// gone still ends one.
+	closingTagRE = regexp.MustCompile(`</[a-z][^\s<>]*\s*>`)
+	// harnessOpenRE is an opening tag shaped like the ones harnesses and
+	// tools write: a name with a hyphen, an underscore, or a colon in it
+	// (system-reminder, pasted_content, ns:tag), or one of the plain
+	// names they use. It costs a typed "<your_key>"; "<div>" and
+	// "Map<string, number>" are untouched.
+	harnessOpenRE = regexp.MustCompile(`<(?:[a-z][a-z0-9]*[-_:][^\s<>]*|skills?\b|summary\b|result\b|event\b|output\b|status\b)`)
+	// declRE is a comment, a declaration, or a processing instruction.
+	declRE = regexp.MustCompile(`<[!?]`)
+	// contextLeadRE is one editor context block at the very front, in
+	// exactly the form the editor integration writes: one tag, text with
+	// no angle bracket in it, the same tag closed. A block whose text
+	// holds any markup does not match, and the turn is then turned away
+	// for the tags it still carries.
+	contextLeadRE = regexp.MustCompile(`^\s*<(ide_opened_file|ide_selection)(?:\s[^<>]*)?>[^<]*</(ide_opened_file|ide_selection)>`)
+	// userQueryRE is the one wrapper a harness puts around a message it
+	// delivered mid-turn, anchored to the start of the turn, around text
+	// with no angle bracket in it. The same tags further into a turn are
+	// part of whatever the turn quotes.
+	userQueryRE = regexp.MustCompile(`^\s*The user sent a message while you were working:\s*<user_query>([^<]*)</user_query>`)
 )
 
-// markedUp reports markup that is not the user's typing. "<div> wrappers
-// should be flex" and "set it to <your_key>" are typing: no block is
-// closed and no harness tag is opened.
-func markedUp(s string) bool {
+// SaidMarkedUp reports markup that is not the user's typing: any closing
+// tag, any harness-shaped opening tag, any comment or declaration. "<div>
+// wrappers should be flex" and "Map<string, number>" are typing. The
+// reader applies it too, so a row an older version stored is judged by
+// the same rule as a turn written today.
+func SaidMarkedUp(s string) bool {
 	low := strings.ToLower(s)
-	return closingTagRE.MatchString(low) || harnessOpenRE.MatchString(low)
+	return closingTagRE.MatchString(low) || harnessOpenRE.MatchString(low) || declRE.MatchString(low)
 }
 
 // stripContextLead removes the context blocks an IDE integration puts in
-// front of what the user typed: the open file, the selection. Each block
-// ends at its first closing tag; if the block's text held a closing tag
-// of its own, what is left still has one, and markedUp turns the turn
-// away.
+// front of what the user typed: the open file, the selection.
 func stripContextLead(s string) string {
 	for {
 		m := contextLeadRE.FindStringSubmatchIndex(s)
@@ -244,12 +258,6 @@ func stripContextLead(s string) string {
 		s = s[m[1]:]
 	}
 }
-
-// userQueryRE is the one wrapper a harness puts around a message it
-// delivered mid-turn. It is anchored to the start of the turn: the same
-// tags further in are part of whatever the turn quotes, and lifting their
-// contents out would store quoted text as the user's own.
-var userQueryRE = regexp.MustCompile(`(?s)^\s*The user sent a message while you were working:\s*<user_query>(.*?)</user_query>`)
 
 // userQuery unwraps a message the harness delivered mid-turn ("The user
 // sent a message while you were working: <user_query>…</user_query>").
