@@ -11,13 +11,21 @@ import (
 )
 
 // HomeTag identifies a store without publishing its path: serve's /health
-// answers with it, so a client can tell whether the daemon it can reach
-// serves the home it is about to write (restore refuses to write under a
-// daemon holding that home, and under no other). The path is made absolute
-// and clean first, so two spellings of one directory agree.
+// answers a caller on the same machine with it, so a client can tell whether
+// the daemon it can reach serves the home it is about to write (restore
+// refuses to write under a daemon holding that home, and under no other).
+// The path is made absolute and its symlinks are resolved first, so two
+// spellings of one directory agree — a home reached through a symlink or a
+// /tmp-style alias must not read as a different store. A path that does not
+// exist yet has no symlinks to resolve and falls back to the cleaned
+// absolute form. Letter case is not folded: on a case-insensitive volume,
+// two casings of one path are two stores here.
 func HomeTag(home string) string {
 	if abs, err := filepath.Abs(home); err == nil {
 		home = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(home); err == nil {
+		home = resolved
 	}
 	sum := sha256.Sum256([]byte(filepath.Clean(home)))
 	return hex.EncodeToString(sum[:8])

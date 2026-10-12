@@ -1,6 +1,7 @@
 package env
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -15,6 +16,28 @@ func TestHome(t *testing.T) {
 	t.Setenv("HOME", root)
 	if Home() != filepath.Join(root, ".lossless") {
 		t.Fatal(Home())
+	}
+}
+
+func TestHomeTagIgnoresSpelling(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	// A home reached through a symlink is the same store as the real path:
+	// restore's daemon guard turns on these agreeing.
+	if HomeTag(link) != HomeTag(real) {
+		t.Fatalf("symlink %s and %s must share a tag", link, real)
+	}
+	if HomeTag(filepath.Join(real, ".")) != HomeTag(real) {
+		t.Fatal("a trailing dot must not change the tag")
+	}
+	// A path that is not there yet still gets a stable tag, and it differs
+	// from every other home.
+	missing := filepath.Join(real, "not", "there")
+	if HomeTag(missing) != HomeTag(missing) || HomeTag(missing) == HomeTag(real) {
+		t.Fatal("a missing path must hash stably and distinctly")
 	}
 }
 

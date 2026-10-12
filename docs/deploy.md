@@ -247,7 +247,16 @@ lossless restore           # latest generation into an empty store
 lossless setup             # or just start serve again
 ```
 
-`restore` refuses a running daemon and a non-empty store. `--force` unions
+`restore` refuses a daemon that is serving the store it is about to write,
+and a non-empty store. The daemon it
+refuses is the one holding *this* home: `/health` answers a caller on this
+machine with a tag for the home it serves (a hash of the path, not the
+path), so a daemon for another
+home does not block the restore and a drill into a scratch home runs while
+the real daemon stays up. A daemon too old to name its home is taken to be
+the one holding it. The check needs a sidecar URL to ask: with
+`LOSSLESS_SIDECAR=off` `restore` warns and cannot tell whether a daemon is
+up, so stop `serve` yourself. `--force` unions
 into a non-empty store: index snapshots are replaced, raw and export files
 that differ locally are left alone and listed. The restored machine becomes
 the bucket's writer; if the old machine comes back it refuses to back up
@@ -313,7 +322,12 @@ allowed only for `127.0.0.1`, so a MinIO on another box needs TLS.
 
 ## Security (the parts we own)
 
-- Public listen requires a bearer. Loopback does not.
+- Public listen requires a bearer. Loopback does not. `/health` is the one
+  endpoint that answers without it, on whatever `--listen` is bound: it
+  reports the record count and the version, and a request that arrives from
+  this machine also gets the home as a tag (a hash of the path, not the
+  path) — a proxy on this box (Caddy, Tailscale) forwards from loopback, so
+  the tag travels with whatever it fronts.
 - Remote URL must be `https`. No redirect following.
 - Sidecar redacts before bytes leave the machine. Home redacts again.
 - Store dirs `0700`; `export/`, `raw/`, `spool/`, sqlite `0600`.

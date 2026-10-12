@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"lossless/internal/claim"
+	"lossless/internal/env"
 	"lossless/internal/retrieve"
 	"lossless/internal/store"
 	"lossless/internal/write"
@@ -737,4 +738,42 @@ func joinTexts(out retrieve.Response) string {
 		b.WriteString(h.Text)
 	}
 	return b.String()
+}
+
+// The home tag is what a local restore uses to tell whether this daemon
+// holds the store it is about to write. A caller off the machine gets no
+// tag, so a guessable home path cannot be confirmed from the network.
+func TestHealthHomeTagIsLoopbackOnly(t *testing.T) {
+	home := t.TempDir()
+	st, err := store.Open(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	h := Handler(st, "tok")
+
+	body := func(remote string) map[string]any {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req.RemoteAddr = remote
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status %d", remote, rec.Code)
+		}
+		var out map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	if got := body("127.0.0.1:5000")["home"]; got != env.HomeTag(home) {
+		t.Fatalf("a loopback caller must get the home tag, got %v", got)
+	}
+	if _, ok := body("[::1]:5000")["home"]; !ok {
+		t.Fatal("::1 is loopback too")
+	}
+	if got, ok := body("10.0.0.9:5000")["home"]; ok {
+		t.Fatalf("an off-machine caller must not get the tag: %v", got)
+	}
 }

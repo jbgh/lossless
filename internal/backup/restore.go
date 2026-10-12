@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	ErrDaemonRunning    = errors.New("lossless serve is running; stop it before restore")
+	ErrDaemonRunning    = errors.New("a lossless daemon is holding this store; stop lossless serve before restore")
 	ErrStoreNotEmpty    = errors.New("store already has raw or export files; use --force to union")
 	ErrNothingToRestore = errors.New("nothing to restore: the bucket has no manifest")
 )

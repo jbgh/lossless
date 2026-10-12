@@ -78,7 +78,16 @@ func Handler(st *store.Store, token string) http.Handler {
 		if emb == "" {
 			emb = "none"
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "records": st.CountActive(), "embedder": emb, "version": version.Version, "home": env.HomeTag(st.Root)})
+		body := map[string]any{"ok": true, "records": st.CountActive(), "embedder": emb, "version": version.Version}
+		// The home tag is how a local `restore` tells whether this daemon
+		// holds the store it is about to write. It is a hash of a guessable
+		// path, so only a caller on this machine gets it: a peer that can
+		// reach a network listener learns nothing about where the store
+		// lives, and falls back to the conservative refusal.
+		if loopback(r.RemoteAddr) {
+			body["home"] = env.HomeTag(st.Root)
+		}
+		writeJSON(w, http.StatusOK, body)
 	})
 	mux.HandleFunc("/v1/ask", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
