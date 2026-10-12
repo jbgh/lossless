@@ -35,11 +35,11 @@ func runBackup(args []string) int {
 	dry := fs.Bool("dry-run", false, "plan only; write nothing to the bucket")
 	verbose := fs.Bool("verbose", false, "print each uploaded file")
 	takeOver := fs.Bool("take-over", false, "adopt the install that last wrote the bucket")
-	allowEmpty := fs.Bool("allow-empty", false, "publish an empty generation when a store root is missing")
+	allowMissing := fs.Bool("allow-missing", false, "publish a generation even when a store root the bucket holds files from is gone")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	sum, err := backup.Run(context.Background(), *home, backup.RunOptions{DryRun: *dry, Verbose: *verbose, TakeOver: *takeOver, AllowEmpty: *allowEmpty, Out: os.Stdout})
+	sum, err := backup.Run(context.Background(), *home, backup.RunOptions{DryRun: *dry, Verbose: *verbose, TakeOver: *takeOver, AllowMissing: *allowMissing, Out: os.Stdout})
 	if err != nil {
 		return exitFor("backup", err)
 	}

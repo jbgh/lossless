@@ -482,6 +482,16 @@ func TestRunRefusesWhenAStoreRootIsGone(t *testing.T) {
 	first := runOK(t, home, RunOptions{})
 	before := pointerOf(t, home, srv)
 
+	// Only raw/ goes, the way a volume that did not mount does. The index is
+	// still there, so the walk finds files and the generation would quietly
+	// lose every tape the bucket holds.
+	must(t, os.RemoveAll(filepath.Join(home, "raw")))
+	_, err := Run(context.Background(), home, RunOptions{})
+	if !errors.Is(err, ErrStoreMissing) || !strings.Contains(err.Error(), "raw/") {
+		t.Fatalf("want ErrStoreMissing naming raw/, got %v", err)
+	}
+
+	// Everything gone is the same answer.
 	for _, root := range roots {
 		must(t, os.RemoveAll(filepath.Join(home, root)))
 	}
@@ -496,15 +506,8 @@ func TestRunRefusesWhenAStoreRootIsGone(t *testing.T) {
 		t.Fatalf("a refused run must keep the old success and stamp the error: %+v", st)
 	}
 
-	// One root back is still a store that is not there: raw/ exists and is
-	// empty, export/ and index/ do not.
-	must(t, os.MkdirAll(filepath.Join(home, "raw"), 0o700))
-	if _, err := Run(context.Background(), home, RunOptions{}); !errors.Is(err, ErrStoreMissing) {
-		t.Fatalf("want ErrStoreMissing with two roots gone, got %v", err)
-	}
-
-	// --allow-empty publishes the empty state on purpose.
-	sum := runOK(t, home, RunOptions{AllowEmpty: true})
+	// --allow-missing publishes what is left on purpose.
+	sum := runOK(t, home, RunOptions{AllowMissing: true})
 	if sum.NoChange || sum.Scanned != 0 || sum.Uploaded != 0 || sum.Generation == "" {
 		t.Fatalf("%+v", sum)
 	}
@@ -513,6 +516,52 @@ func TestRunRefusesWhenAStoreRootIsGone(t *testing.T) {
 	}
 	if m := pointerOf(t, home, srv); !slices.Contains(m.Generations, first.Generation) {
 		t.Fatalf("the previous generation must stay restorable: %+v", m)
+	}
+}
+
+// raw/ moved to another volume and left as a symlink still backs up: the
+// walk follows a symlinked root, and the generation keeps the tapes.
+func TestRunFollowsASymlinkedRoot(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	home := setupBackup(t, srv, 5)
+	elsewhere := t.TempDir()
+	must(t, os.Rename(filepath.Join(home, "raw"), filepath.Join(elsewhere, "raw")))
+	must(t, os.Symlink(filepath.Join(elsewhere, "raw"), filepath.Join(home, "raw")))
+	sum := runOK(t, home, RunOptions{})
+	if sum.Scanned == 0 {
+		t.Fatal("nothing scanned")
+	}
+	m := pointerOf(t, home, srv)
+	tapes := 0
+	for rel, e := range m.Files {
+		if !strings.HasPrefix(rel, "raw/") {
+			continue
+		}
+		tapes++
+		if _, ok := srv.Object("bkt", "pre/"+e.Object); !ok {
+			t.Fatalf("no object for %s in the bucket", rel)
+		}
+	}
+	if tapes == 0 {
+		t.Fatalf("the generation holds no tapes: %+v", m.Files)
+	}
+}
+
+// Roots that are there and empty are a store that was emptied by hand: a
+// real change, not a missing store, so it publishes without the flag.
+func TestRunPublishesWhenTheRootsAreEmpty(t *testing.T) {
+	srv := s3test.New()
+	defer srv.Close()
+	home := setupBackup(t, srv, 5)
+	runOK(t, home, RunOptions{})
+	for _, root := range roots {
+		must(t, os.RemoveAll(filepath.Join(home, root)))
+		must(t, os.MkdirAll(filepath.Join(home, root), 0o700))
+	}
+	sum := runOK(t, home, RunOptions{})
+	if sum.Scanned != 0 || sum.NoChange || sum.Generation == "" {
+		t.Fatalf("%+v", sum)
 	}
 }
 

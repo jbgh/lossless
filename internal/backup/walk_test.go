@@ -129,6 +129,38 @@ func TestWalkSelectsExactlyTheStore(t *testing.T) {
 	}
 }
 
+// A root that is a symlink to the directory holding it (raw/ moved to
+// another volume) is still walked: WalkDir does not follow the root itself,
+// so a symlinked root used to contribute nothing and read as an empty one.
+func TestWalkFollowsASymlinkedRoot(t *testing.T) {
+	home, _ := seedHome(t)
+	elsewhere := t.TempDir()
+	must(t, os.Rename(filepath.Join(home, "raw"), filepath.Join(elsewhere, "raw")))
+	must(t, os.Symlink(filepath.Join(elsewhere, "raw"), filepath.Join(home, "raw")))
+
+	items, missing, err := walk(home, filepath.Join(home, "backup-tmp"), testKeys(t), LoadState(home), emptyManifest())
+	must(t, err)
+	if len(missing) != 0 {
+		t.Fatalf("a symlinked root is not a missing one: %v", missing)
+	}
+	joined := strings.Join(rels(items), ",")
+	for _, want := range []string{"raw/acme__api/2026-09/live.jsonl", "raw/acme__api/2026-09/sealed.jsonl.zst"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("symlinked root lost %s: %v", want, joined)
+		}
+	}
+
+	// A root that is a dangling symlink is missing, not empty: the volume
+	// it points at is not mounted.
+	must(t, os.Remove(filepath.Join(home, "raw")))
+	must(t, os.Symlink(filepath.Join(elsewhere, "not-mounted"), filepath.Join(home, "raw")))
+	_, missing, err = walk(home, filepath.Join(home, "backup-tmp"), testKeys(t), LoadState(home), emptyManifest())
+	must(t, err)
+	if len(missing) != 1 || missing[0] != "raw" {
+		t.Fatalf("a dangling root must be reported missing: %v", missing)
+	}
+}
+
 func TestWalkReusesCachedHashWhenStatUnchanged(t *testing.T) {
 	home, _ := seedHome(t)
 	tmp := filepath.Join(home, "backup-tmp")

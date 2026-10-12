@@ -215,11 +215,13 @@ writes nothing. Bucket versioning is not assumed; Cloudflare R2 does not
 implement it.
 
 A run that finds nothing normally means everything was removed, and the
-empty result becomes the newest generation. If a root the backup reads
-(`raw/`, `export/`, `index/`) is missing, that is a store that is not there
-— an unmounted volume, a home that moved — and the run fails instead,
-leaving the previous generation the newest one. `lossless backup
---allow-empty` publishes the empty state on purpose.
+empty result becomes the newest generation. A root the backup reads
+(`raw/`, `export/`, `index/`) that is *gone* while the bucket still holds
+files from under it is a store that is not there — an unmounted volume, a
+home that moved — and the run fails instead, leaving the previous
+generation the newest one. A root that is merely empty is a real change and
+publishes. `lossless backup --allow-missing` publishes what is left when a
+root really is gone for good.
 
 ```bash
 lossless restore --list
@@ -245,12 +247,7 @@ lossless restore           # latest generation into an empty store
 lossless setup             # or just start serve again
 ```
 
-`restore` refuses a running daemon and a non-empty store. The daemon it
-refuses is the one holding *this* home: `/health` answers with a tag for the
-home it serves (a hash of the path, not the path), so a daemon for another
-home does not block the restore and a drill into a scratch home runs while
-the real daemon stays up. A daemon too old to name its home is taken to be
-the one holding it. `--force` unions
+`restore` refuses a running daemon and a non-empty store. `--force` unions
 into a non-empty store: index snapshots are replaced, raw and export files
 that differ locally are left alone and listed. The restored machine becomes
 the bucket's writer; if the old machine comes back it refuses to back up

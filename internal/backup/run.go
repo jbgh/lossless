@@ -25,12 +25,12 @@ const parallel = 4
 var sleepHook func(time.Duration)
 
 type RunOptions struct {
-	DryRun     bool
-	Verbose    bool
-	TakeOver   bool
-	AllowEmpty bool // publish an empty generation when the store's roots are gone
-	Out        io.Writer
-	Now        func() time.Time
+	DryRun       bool
+	Verbose      bool
+	TakeOver     bool
+	AllowMissing bool // publish a generation even when a root the bucket holds files from is gone
+	Out          io.Writer
+	Now          func() time.Time
 }
 
 type Summary struct {
@@ -50,13 +50,29 @@ type Summary struct {
 // keeps saying "never backed up" instead of "ok" over an empty bucket.
 var ErrEmptyStore = errors.New("nothing to back up: the store is empty")
 
-// ErrStoreMissing: a root the walk reads (raw/, export/, index/) is not
-// there while the bucket holds files. A walk that finds nothing normally
-// means everything was removed, but a store that is not there — an
-// unmounted volume, a home that moved — looks the same, and publishing the
-// empty result would make the newest restorable generation empty. The
-// previous generation stays the latest instead. --allow-empty overrides it.
-var ErrStoreMissing = errors.New("nothing to back up: raw/, export/, or index/ is missing; refusing to replace the bucket's newest generation with an empty one (check that the store is mounted, or pass --allow-empty)")
+// ErrStoreMissing: a root the walk reads (raw/, export/, index/) is gone
+// while the bucket still holds files from under it. A walk that finds
+// nothing normally means everything was removed, but a store that is not
+// there — an unmounted volume, a home that moved — looks the same, and
+// publishing the result would make the newest generation lose those files.
+// The previous generation stays the latest instead. --allow-missing
+// overrides it.
+var ErrStoreMissing = errors.New("a store root is missing while the bucket holds files from it")
+
+func missingRootErr(root string) error {
+	return fmt.Errorf("%s/: %w (check that the store is mounted, or pass --allow-missing)", root, ErrStoreMissing)
+}
+
+// holdsUnder reports whether any path in files sits under root.
+func holdsUnder(files map[string]FileEntry, root string) bool {
+	prefix := root + "/"
+	for rel := range files {
+		if strings.HasPrefix(rel, prefix) {
+			return true
+		}
+	}
+	return false
+}
 
 // OtherWriterError: the pointer was last written by an install this one
 // has not adopted.
@@ -172,12 +188,18 @@ func run(ctx context.Context, home string, cfg *Config, rm *remote, state *State
 	if len(items) == 0 && pointer.Generation == "" {
 		return ErrEmptyStore
 	}
-	// A walk that found nothing while the pointer holds files is normally
-	// "everything was removed". A root that is gone means a store that is
-	// not there, and the empty result must not become the newest
-	// generation: the bucket's last good copy stays the latest.
-	if len(items) == 0 && !o.AllowEmpty && len(missing) > 0 && len(pointer.Files) > 0 {
-		return ErrStoreMissing
+	// A root that is gone is a store that is not there when the bucket still
+	// holds files from under it: publishing the walk's result would make the
+	// newest generation lose them (raw/ on a volume that did not mount, a
+	// home that moved). The bucket's last good copy stays the latest instead.
+	// A root that is merely empty, or a store emptied by hand, is a real
+	// change and still publishes.
+	if !o.AllowMissing {
+		for _, root := range missing {
+			if holdsUnder(pointer.Files, root) {
+				return missingRootErr(root)
+			}
+		}
 	}
 	gen := NewGeneration(start)
 	p := makePlan(items, pointer, cfg.Keep, gen)

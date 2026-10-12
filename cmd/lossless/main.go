@@ -130,7 +130,7 @@ func usage() {
   lossless install-mcp        # MCP for every supported harness (or point any MCP client at /mcp)
   lossless ensure             # replay spool after sidecar was down
   lossless backup init s3://B/P [--endpoint URL] [--region R] [--every 1h] [--keep 5]   # opt-in encrypted copy to a bucket you own
-  lossless backup [--dry-run] [--verbose] [--take-over] [--allow-empty]   # one incremental run; serve --watch runs it on the schedule
+  lossless backup [--dry-run] [--verbose] [--take-over] [--allow-missing]   # one incremental run; serve --watch runs it on the schedule
   lossless restore [--force] [--at GEN] [--list]   # pull a generation back into an empty store
   lossless embed-backfill     # embed active claims if an on-box model is configured
   lossless backfill [--project KEY] [--dry-run]   # read stored tapes again; add what this version keeps (the user's turns)

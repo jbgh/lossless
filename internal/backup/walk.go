@@ -88,21 +88,34 @@ func walk(home, tmp string, keys *crypt.Keys, cache *State, pointer *Manifest) (
 	for _, root := range roots {
 		dir := filepath.Join(home, root)
 		if _, err := os.Stat(dir); err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				// A root that is there but cannot be read is not an empty
+				// store: fail the run instead of publishing a generation
+				// with that root silently left out.
+				return nil, nil, fmt.Errorf("%s: %w", root, err)
+			}
 			missing = append(missing, root)
 			continue
 		}
-		err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		// A root may be a symlink to the directory that holds it (raw/ on
+		// another volume). WalkDir does not follow the root itself, so walk
+		// what os.Stat resolved and keep rel relative to the home.
+		base := dir
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			base = resolved
+		}
+		err := filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
 			if d.IsDir() || d.Type()&fs.ModeSymlink != 0 || skipName(d.Name()) {
 				return nil
 			}
-			rel, err := filepath.Rel(home, path)
+			sub, err := filepath.Rel(base, path)
 			if err != nil {
 				return err
 			}
-			rel = filepath.ToSlash(rel)
+			rel := filepath.ToSlash(filepath.Join(root, sub))
 			var it Item
 			switch {
 			case root == "raw" && strings.HasSuffix(rel, ".jsonl.zst"):
