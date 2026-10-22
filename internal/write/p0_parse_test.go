@@ -33,9 +33,10 @@ func TestStripSkillSpans(t *testing.T) {
 		`before <skill name="lossless" location="/x/SKILL.md">Never undo a decision.</skill> after`: "before  after",
 		`<skills><skill>a</skill><skill name="k" location="l">b</skill></skills>kept`:               "kept",
 		`<SKILL NAME="x" LOCATION="y">hidden</SKILL>`:                                               "",
-		`<skillful>docs</skillful>`:                                                                 "<skillful>docs</skillful>",
-		`unclosed <skill name="x">drops to end`:                                                     "unclosed",
-		`İstanbul <skill name="x">hidden</skill> we decided X.`:                                     "İstanbul  we decided X.",
+
+		`<skillful>docs</skillful>`:                             "<skillful>docs</skillful>",
+		`unclosed <skill name="x">drops to end`:                 "unclosed",
+		`İstanbul <skill name="x">hidden</skill> we decided X.`: "İstanbul  we decided X.",
 	}
 	for in, want := range cases {
 		got := stripHarnessChrome(in)
