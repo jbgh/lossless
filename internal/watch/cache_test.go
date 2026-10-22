@@ -368,3 +368,35 @@ INSERT INTO part(id, message_id, time_created, data) VALUES
 		t.Fatal("an aged opencode.db listing was not cached")
 	}
 }
+
+// A peek that failed for a passing reason on a file that never changes is
+// retried at the verify pass, not left empty for good.
+func TestWatcherVerifyPassRepeeksAnEmptyCWD(t *testing.T) {
+	st, opts, cdir, cfile := cacheFixture(t)
+	real := peekClaudeCWD
+	fail := true
+	peekClaudeCWD = func(p string) string {
+		if fail {
+			return ""
+		}
+		return real(p)
+	}
+	t.Cleanup(func() { peekClaudeCWD = real })
+	_, catchUps := countPeeks(t)
+	w := NewWatcher()
+	age(t, cfile, cdir, filepath.Dir(cdir))
+	if res, err := w.Tick(st, opts); err != nil || res.CatchUps != 0 {
+		t.Fatalf("failed-peek tick: %+v %v", res, err)
+	}
+	fail = false
+	if res, err := w.Tick(st, opts); err != nil || res.CatchUps != 0 {
+		t.Fatalf("idle tick should keep the cached empty peek: %+v %v", res, err)
+	}
+	w.lastVerify = time.Now().Add(-verifyEvery)
+	if res, err := w.Tick(st, opts); err != nil || res.CatchUps != 1 {
+		t.Fatalf("verify tick did not re-peek and catch up: %+v %v", res, err)
+	}
+	if catchUps[cfile] != 1 {
+		t.Fatalf("catch-ups %d", catchUps[cfile])
+	}
+}

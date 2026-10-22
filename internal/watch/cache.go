@@ -101,8 +101,9 @@ type quietEntry struct {
 }
 
 // beginTick starts a generation. A verify tick drops the listing and
-// per-target caches; the peek cache stays (a found cwd does not change,
-// and an empty one is re-peeked when its file changes).
+// per-target caches. Found cwds stay (they do not change); empty ones are
+// dropped too, so a peek that failed for a passing reason (EMFILE, a
+// permission flip) on a file that never changes is retried here.
 func (w *Watcher) beginTick(now time.Time) {
 	w.gen++
 	w.verify = w.lastVerify.IsZero() || now.Sub(w.lastVerify) >= verifyEvery
@@ -111,6 +112,11 @@ func (w *Watcher) beginTick(now time.Time) {
 		w.dirs = map[string]dirEntry{}
 		w.quiet = map[string]quietEntry{}
 		w.ocOK = false
+		for k, e := range w.peeks {
+			if e.cwd == "" {
+				delete(w.peeks, k)
+			}
+		}
 	}
 }
 
