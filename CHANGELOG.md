@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.43 — unreleased
+
+- **The watcher no longer costs half a core while nothing happens.** Every 1 s tick walked every harness root and opened and parsed the head of every transcript to find its cwd — 2,400 opens and JSON parses a second on a machine with 9.8 GB of Claude projects — then ran a cursor query and the idle-seal stats for every one of 5,700 targets. `serve --watch` had used about 104 CPU-hours in 8 days. The watch loop now keeps what it learned between ticks: a transcript's cwd is peeked once (an empty one again only when the file changes), a directory is re-read only when its mtime moves, the OpenCode session list is re-read only when `opencode.db` or its WAL changes, and a target found caught up and seal-checked is skipped while its file's size and mtime (or its harness update time) hold. An idle tick on that machine went from about 720 ms of CPU to about 30 ms. Anything modified within the last 2 s is not trusted to the cache, and every 5 minutes a tick runs everything in full, so an idle seal comes at most 5 minutes past its threshold.
+- **A catch-up that fails is not retried every tick.** A Pi subagent transcript (`subagent-artifacts/*_transcript.jsonl`) has no cwd, so its catch-up fails, and 80 of them were retried every second. A failed file is tried again when it changes or on the 5-minute full pass.
+- **An OpenCode session is listed once per key.** Once ingested it is listed both under its virtual spool path and from `opencode.db`; the two listings used to overwrite each other's state, so every one of 2,290 sessions was checked on every tick.
+- **The watcher polls every 2 s, and the interval is a flag.** `lossless serve --watch-interval 5s`, `lossless watch --interval 5s`.
+
 ## 0.1.42 — 2026-10-12
 
 - **A store that is not there is no longer backed up as an empty one.** A run that found nothing while the bucket held files used to publish an empty generation as the newest one, so the next restore had nothing to restore — an unmounted volume or a home that moved looked exactly like a store whose files were all deleted. A root the backup reads (`raw/`, `export/`, `index/`) that is gone while the bucket still holds files from under it now fails the run, and the previous generation stays the newest; `lossless backup --allow-missing` publishes what is left on purpose. A root that is merely empty is a real change and still publishes.

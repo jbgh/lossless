@@ -3,6 +3,7 @@ package watch
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,11 +74,20 @@ func Defaults() Options {
 		PiRoot:     filepath.Join(pi, "agent", "sessions"),
 		OmpRoot:    harness.OmpSessionsRoot(),
 		OpenCodeDB: harness.OpenCodeDB(),
-		Interval:   time.Second,
+		Interval:   DefaultInterval,
 	}
 }
 
+// Discover lists every session target under opts' roots plus the known
+// sessions, with no cache: each call walks and peeks everything. The
+// watch loop uses a Watcher, which keeps what it learned between ticks.
 func Discover(opts Options, known []store.Session) []Target {
+	w := NewWatcher()
+	w.beginTick(time.Now())
+	return w.discover(opts, known)
+}
+
+func (w *Watcher) discover(opts Options, known []store.Session) []Target {
 	seen := map[string]bool{}
 	var out []Target
 	add := func(t Target) {
@@ -101,12 +111,9 @@ func Discover(opts Options, known []store.Session) []Target {
 		add(Target{JSONL: s.JSONL, Harness: s.Harness, SessionID: s.SessionID, Workspace: s.Workspace, Project: s.Project})
 	}
 	if opts.GrokRoot != "" {
-		_ = filepath.WalkDir(opts.GrokRoot, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return nil
-			}
+		w.walk(opts.GrokRoot, func(path string, d fs.DirEntry) {
 			if filepath.Base(path) != "chat_history.jsonl" {
-				return nil
+				return
 			}
 			rel, _ := filepath.Rel(opts.GrokRoot, path)
 			parts := strings.Split(filepath.ToSlash(rel), "/")
@@ -116,44 +123,35 @@ func Discover(opts Options, known []store.Session) []Target {
 				sid = parts[1]
 			}
 			add(Target{JSONL: path, Harness: "grok", SessionID: sid, Workspace: ws})
-			return nil
 		})
 	}
 	if opts.ClaudeRoot != "" {
-		_ = filepath.WalkDir(opts.ClaudeRoot, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return nil
-			}
+		w.walk(opts.ClaudeRoot, func(path string, d fs.DirEntry) {
 			if !strings.HasSuffix(path, ".jsonl") {
-				return nil
+				return
 			}
 			// Task/workflow dumps are instruction chrome, not product tape.
 			// Nested JSONL with cwd that is not under subagents/ still catch-up.
 			if claudeSubagentDump(path) {
-				return nil
+				return
 			}
-			cwd := harness.PeekClaudeCWD(path)
+			cwd := w.peek(path, d, peekClaudeCWD)
 			if cwd == "" {
-				return nil
+				return
 			}
 			sid := strings.TrimSuffix(filepath.Base(path), ".jsonl")
 			add(Target{JSONL: path, Harness: "claude", SessionID: sid, Workspace: cwd})
-			return nil
 		})
 	}
 	if opts.CodexRoot != "" {
-		_ = filepath.WalkDir(opts.CodexRoot, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return nil
-			}
+		w.walk(opts.CodexRoot, func(path string, d fs.DirEntry) {
 			base := filepath.Base(path)
 			if !strings.HasPrefix(base, "rollout-") || !strings.HasSuffix(base, ".jsonl") {
-				return nil
+				return
 			}
 			sid := harness.CodexSessionIDFromPath(path)
-			_, cwd := harness.PeekCodexMeta(path)
+			cwd := w.peek(path, d, codexCWD)
 			add(Target{JSONL: path, Harness: "codex", SessionID: sid, Workspace: cwd})
-			return nil
 		})
 		for _, th := range harness.CodexStateThreads(filepath.Dir(opts.CodexRoot)) {
 			if th.Rollout != "" {
@@ -163,7 +161,7 @@ func Discover(opts Options, known []store.Session) []Target {
 				}
 				cwd := th.CWD
 				if cwd == "" {
-					_, cwd = harness.PeekCodexMeta(th.Rollout)
+					cwd = w.peek(th.Rollout, nil, codexCWD)
 				}
 				add(Target{JSONL: th.Rollout, Harness: "codex", SessionID: sid, Workspace: cwd, UpdatedAt: th.Updated})
 				continue
@@ -178,38 +176,30 @@ func Discover(opts Options, known []store.Session) []Target {
 		}
 	}
 	if opts.PiRoot != "" {
-		_ = filepath.WalkDir(opts.PiRoot, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return nil
-			}
+		w.walk(opts.PiRoot, func(path string, d fs.DirEntry) {
 			if !strings.HasSuffix(path, ".jsonl") {
-				return nil
+				return
 			}
 			sid := harness.PiSessionIDFromPath(path)
-			cwd := harness.PeekPiCWD(path)
+			cwd := w.peek(path, d, peekPiCWD)
 			add(Target{JSONL: path, Harness: "pi", SessionID: sid, Workspace: cwd})
-			return nil
 		})
 	}
 	if opts.OmpRoot != "" {
-		_ = filepath.WalkDir(opts.OmpRoot, func(path string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return nil
-			}
+		w.walk(opts.OmpRoot, func(path string, d fs.DirEntry) {
 			// Only omp's own session files (<ts>_<uuid>.jsonl). A session's
 			// artifact directory holds subagent transcripts and bash logs,
 			// which are chrome, like Claude's agent-*.jsonl dumps.
 			if !harness.OmpSessionFile(path) {
-				return nil
+				return
 			}
 			sid := harness.OmpSessionIDFromPath(path)
-			cwd := harness.PeekOmpCWD(path)
+			cwd := w.peek(path, d, peekOmpCWD)
 			add(Target{JSONL: path, Harness: "omp", SessionID: sid, Workspace: cwd})
-			return nil
 		})
 	}
 	if opts.OpenCodeDB != "" {
-		for _, s := range write.ListOpenCodeSessions(opts.OpenCodeDB) {
+		for _, s := range w.openCodeSessions(opts.OpenCodeDB) {
 			if s.Directory == "" {
 				continue
 			}
@@ -217,6 +207,24 @@ func Discover(opts Options, known []store.Session) []Target {
 		}
 	}
 	return out
+}
+
+// The transcript peeks open a file and parse its head. Tests replace them
+// to count calls.
+var (
+	peekClaudeCWD = harness.PeekClaudeCWD
+	peekCodexMeta = harness.PeekCodexMeta
+	peekPiCWD     = harness.PeekPiCWD
+	peekOmpCWD    = harness.PeekOmpCWD
+)
+
+// catchUp copies a target's new lines to its tape. Tests replace it to
+// count attempts.
+var catchUp = write.CatchUp
+
+func codexCWD(path string) string {
+	_, cwd := peekCodexMeta(path)
+	return cwd
 }
 
 // resolveProject turns a workspace into a project key by running git.
@@ -334,17 +342,6 @@ func idleSealPath(raw string, idle time.Duration) bool {
 	return err == nil
 }
 
-func needsCatchUp(st *store.Store, jsonl string) bool {
-	if jsonl == "" {
-		return false
-	}
-	fi, err := os.Stat(jsonl)
-	if err != nil {
-		return false
-	}
-	return st.Cursor(jsonl) != fi.Size()
-}
-
 func sqliteCursorKey(harness, sessionID string) string {
 	return "sqlite:" + harness + ":" + sessionID
 }
@@ -392,7 +389,16 @@ func replayLogLine(res write.EnsureResult) string {
 	return s
 }
 
+// Tick runs one full pass with no cache. The watch loop runs a Watcher's
+// Tick, which skips what has not changed since its last pass.
 func Tick(st *store.Store, opts Options) (Result, error) {
+	return NewWatcher().Tick(st, opts)
+}
+
+func (w *Watcher) Tick(st *store.Store, opts Options) (Result, error) {
+	now := time.Now()
+	w.beginTick(now)
+	defer w.endTick()
 	// Hooks spool a catch-up when the daemon is down or slow. Only the
 	// `ensure` CLI replayed the spool before; the tick does it now.
 	if files, _ := write.ListSpool(st.Root); len(files) > 0 {
@@ -409,17 +415,17 @@ func Tick(st *store.Store, opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	targets := Discover(opts, known)
+	targets := w.discover(opts, known)
 	projects := projectsBySession(known)
 	var res Result
 	res.Seen = len(targets)
 	sqliteCatchUps := 0
 	for _, t := range targets {
 		if t.Workspace == "" && t.Project == "" && t.Harness == "codex" && t.JSONL != "" {
-			_, t.Workspace = harness.PeekCodexMeta(t.JSONL)
+			t.Workspace = w.peek(t.JSONL, nil, codexCWD)
 		}
 		if t.Workspace == "" && t.Project == "" && t.Harness == "claude" && t.JSONL != "" {
-			t.Workspace = harness.PeekClaudeCWD(t.JSONL)
+			t.Workspace = w.peek(t.JSONL, nil, peekClaudeCWD)
 		}
 		if t.Workspace == "" && t.Project == "" {
 			// Do not guess a project. Claude/OpenCode/empty-Codex stay
@@ -432,29 +438,70 @@ func Tick(st *store.Store, opts Options) (Result, error) {
 		if (t.Harness == "opencode" || (t.Harness == "codex" && t.JSONL == "")) && t.SessionID != "" {
 			sqliteKey = sqliteCursorKey(t.Harness, t.SessionID)
 		}
+		// quietKey names this target (an OpenCode session can be listed
+		// twice: once from the session table under its virtual path, once
+		// from opencode.db), sig is its file's state.
+		var quietKey string
+		var sig fileSig
+		var fi os.FileInfo
 		if sqliteKey != "" {
+			quietKey = sqliteKey + "\x00" + t.JSONL
+			// Quiet: caught up and seal-checked at this update time.
+			if w.isQuiet(quietKey, sig, t.UpdatedAt) {
+				continue
+			}
 			if !needsSQLiteCatchUp(st, sqliteKey, t.UpdatedAt) {
 				if sealed := idleSeal(st, t, opts, projects); sealed {
 					res.Sealed++
 				}
+				w.markQuiet(quietKey, sig, t.UpdatedAt)
 				continue
 			}
 			if sqliteCatchUps >= sqliteTickCap {
 				continue
 			}
-		} else if !needsCatchUp(st, t.JSONL) {
-			if sealed := idleSeal(st, t, opts, projects); sealed {
-				res.Sealed++
+		} else {
+			// One stat per file target per tick. A file whose size and
+			// mtime match the pass that last found it caught up (and
+			// seal-checked) costs nothing more: no cursor query, no
+			// idle-seal stats.
+			quietKey = t.JSONL
+			if quietKey == "" {
+				quietKey = t.Harness + ":" + t.SessionID
 			}
-			continue
+			if t.JSONL != "" {
+				if f, err := os.Stat(t.JSONL); err == nil {
+					fi, sig = f, sigOf(f)
+				}
+			}
+			if w.isQuiet(quietKey, sig, t.UpdatedAt) {
+				continue
+			}
+			if fi == nil || st.Cursor(t.JSONL) == fi.Size() {
+				if sealed := idleSeal(st, t, opts, projects); sealed {
+					res.Sealed++
+				}
+				if fi == nil || !racy(fi, now) {
+					w.markQuiet(quietKey, sig, t.UpdatedAt)
+				}
+				continue
+			}
 		}
 		req := write.CatchUpRequest{
 			JSONL: t.JSONL, Project: t.Project, WorkspaceRoot: t.Workspace,
 			Harness: t.Harness, SessionID: t.SessionID, Source: "turn",
 			Messages: t.Messages,
 		}
-		out, err := write.CatchUp(st, req)
+		out, err := catchUp(st, req)
 		if err != nil {
+			// A file that failed at this state is tried again when it
+			// changes or at the next verify pass, not every tick: a Pi
+			// subagent transcript has no cwd, and its catch-up fails
+			// ("project or workspace_root required") for as long as the
+			// file stands.
+			if fi != nil && !racy(fi, now) {
+				w.markQuiet(quietKey, sig, t.UpdatedAt)
+			}
 			continue
 		}
 		if sqliteKey != "" {
@@ -490,16 +537,22 @@ func claudeSubagentDump(path string) bool {
 	return strings.HasPrefix(base, "agent-") && strings.HasSuffix(base, ".jsonl")
 }
 
+// DefaultInterval is how often the watcher polls the harness roots. An
+// idle tick is a stat per known file and per directory; 0.1.42 polled
+// every second and peeked every transcript each time.
+const DefaultInterval = 2 * time.Second
+
 func Run(ctx context.Context, st *store.Store, opts Options) error {
 	if opts.Interval <= 0 {
-		opts.Interval = time.Second
+		opts.Interval = DefaultInterval
 	}
+	w := NewWatcher()
 	t := time.NewTicker(opts.Interval)
 	defer t.Stop()
 	sweep := time.NewTicker(time.Hour)
 	defer sweep.Stop()
 	_ = write.SweepStaleVirtual(st.Root)
-	_, _ = safeTick(st, opts)
+	_, _ = safeTick(w, st, opts)
 	var sweeping atomic.Bool
 	var sweeps sync.WaitGroup
 	// Run returns only after a running sweep has stopped, so nothing
@@ -514,7 +567,7 @@ func Run(ctx context.Context, st *store.Store, opts Options) error {
 			_ = write.SweepStaleVirtual(st.Root)
 			sweepRawTapesAsync(ctx, st, opts, &sweeping, &sweeps)
 		case <-t.C:
-			_, _ = safeTick(st, opts)
+			_, _ = safeTick(w, st, opts)
 		}
 	}
 }
@@ -566,7 +619,7 @@ var testPanicTick func()
 
 // safeTick turns a panic in one tick into an error. The watcher is the
 // daemon's only long-lived goroutine; one bad line must not kill it.
-func safeTick(st *store.Store, opts Options) (res Result, err error) {
+func safeTick(w *Watcher, st *store.Store, opts Options) (res Result, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("watch tick panic: %v", r)
@@ -576,5 +629,5 @@ func safeTick(st *store.Store, opts Options) (res Result, err error) {
 	if testPanicTick != nil {
 		testPanicTick()
 	}
-	return Tick(st, opts)
+	return w.Tick(st, opts)
 }

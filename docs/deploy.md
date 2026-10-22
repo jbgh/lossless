@@ -27,7 +27,7 @@ lossless update         # later: GitHub Releases → ~/.local/bin/lossless
 
 No token. Nothing listens off loopback. Nothing is uploaded. You can skip `setup` and only run `serve` if you will configure the client yourself.
 
-`serve` watches the harness session files of this login by default (`--watch` is on; the service `setup` writes passes it explicitly). Pass `--watch=false` when the daemon should only answer requests: a throwaway `--home` for an experiment, a copy of a store you are inspecting, or a remote home that receives pushes and has no harness of its own. Without it, a `serve --home /tmp/x` ingests every live session on the machine into `/tmp/x`.
+`serve` watches the harness session files of this login by default (`--watch` is on; the service `setup` writes passes it explicitly). Pass `--watch=false` when the daemon should only answer requests: a throwaway `--home` for an experiment, a copy of a store you are inspecting, or a remote home that receives pushes and has no harness of its own. Without it, a `serve --home /tmp/x` ingests every live session on the machine into `/tmp/x`. The watcher polls every 2 s (`--watch-interval`, e.g. `--watch-interval 5s`); an idle poll is a stat per transcript and per directory, and it re-reads a transcript's head only when that file is new or has changed.
 
 ### Update channel
 

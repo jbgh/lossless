@@ -113,9 +113,9 @@ func usage() {
   lossless catch-up --jsonl FILE [--project KEY] [--workspace DIR] [--harness grok] [--session ID] [--home DIR]
   lossless remember --type decision --text "..." [--project KEY] [--workspace DIR] [--home DIR]
   lossless ask --project KEY [--question "..."] [--goal "..."] [--path FILE] [--session ID] [--workspace DIR]
-  lossless serve [--listen 127.0.0.1:7432] [--token TOKEN] [--watch=false]   # watches harness session files unless --watch=false
+  lossless serve [--listen 127.0.0.1:7432] [--token TOKEN] [--watch=false] [--watch-interval 2s]   # watches harness session files unless --watch=false
   lossless mcp                # stdio MCP client of the daemon (ask, remember, get_record)
-  lossless watch              # poll harness session files
+  lossless watch [--interval 2s]   # poll harness session files
   lossless hook-grok          # stdin: Grok hook JSON; fail-open
   lossless hook-claude        # stdin: Claude hook JSON; fail-open
   lossless hook-codex         # stdin: Codex hook JSON; fail-open
@@ -424,7 +424,12 @@ func runServe(args []string) int {
 	listen := fs.String("listen", serve.DefaultAddr, "bind address")
 	token := fs.String("token", env.Token(), "bearer token (required if not loopback)")
 	doWatch := fs.Bool("watch", true, "poll harness session files while serving; pass --watch=false for a throwaway --home, or it ingests the real harness sessions into it")
+	interval := fs.Duration("watch-interval", watch.DefaultInterval, "how often --watch polls the harness session files")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *interval <= 0 {
+		fmt.Fprintln(os.Stderr, "lossless serve: --watch-interval must be positive")
 		return 2
 	}
 	st, err := openStore(*home)
@@ -447,7 +452,7 @@ func runServe(args []string) int {
 	}
 	stamp := time.Now().UTC().Format(time.RFC3339)
 	fmt.Fprintf(os.Stderr, "%s lossless serve %s (home %s) watch=%v embedder=%s version=%s\n", stamp, *listen, *home, *doWatch, orNone(st.EmbedderName()), version.Version)
-	if err := serve.Listen(serve.Options{Addr: *listen, Token: *token, Watch: *doWatch}, st); err != nil {
+	if err := serve.Listen(serve.Options{Addr: *listen, Token: *token, Watch: *doWatch, WatchInterval: *interval}, st); err != nil {
 		fmt.Fprintln(os.Stderr, time.Now().UTC().Format(time.RFC3339), "lossless serve:", err)
 		return 1
 	}
@@ -457,7 +462,12 @@ func runServe(args []string) int {
 func runWatch(args []string) int {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	home := homeFlag(fs)
+	interval := fs.Duration("interval", watch.DefaultInterval, "how often to poll the harness session files")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *interval <= 0 {
+		fmt.Fprintln(os.Stderr, "lossless watch: --interval must be positive")
 		return 2
 	}
 	st, err := openStore(*home)
@@ -467,7 +477,9 @@ func runWatch(args []string) int {
 	}
 	defer st.Close()
 	fmt.Fprintf(os.Stderr, "lossless watch (home %s)\n", *home)
-	if err := watch.Run(context.Background(), st, watch.Defaults()); err != nil {
+	wopts := watch.Defaults()
+	wopts.Interval = *interval
+	if err := watch.Run(context.Background(), st, wopts); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}

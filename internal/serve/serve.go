@@ -30,9 +30,10 @@ import (
 const DefaultAddr = "127.0.0.1:7432"
 
 type Options struct {
-	Addr  string
-	Token string
-	Watch bool
+	Addr          string
+	Token         string
+	Watch         bool
+	WatchInterval time.Duration // 0 = watch.DefaultInterval
 }
 
 func CheckAddr(addr, token string) error {
@@ -286,6 +287,9 @@ func Listen(opts Options, st *store.Store) error {
 	}
 	if opts.Watch {
 		wopts := watch.Defaults()
+		if opts.WatchInterval > 0 {
+			wopts.Interval = opts.WatchInterval
+		}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		go func() { _ = watch.Run(ctx, st, wopts) }()
