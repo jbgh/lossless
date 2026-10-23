@@ -67,6 +67,10 @@ type Watcher struct {
 	knownGen      uint64
 	knownOK       bool
 
+	// discover's dedupe map and result, reused between ticks.
+	seen    map[string]bool
+	targets []Target
+
 	codexHome string
 	codexSig  []fileSig
 	codexRows []harness.CodexThread

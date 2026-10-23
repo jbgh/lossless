@@ -87,9 +87,22 @@ func Discover(opts Options, known []store.Session) []Target {
 	return w.discover(opts, known)
 }
 
+// discover's result is valid until its next call: the watcher reuses the
+// slice and the dedupe map between ticks (rebuilding them was most of an
+// idle tick's allocations).
 func (w *Watcher) discover(opts Options, known []store.Session) []Target {
-	seen := map[string]bool{}
-	var out []Target
+	if w.seen == nil {
+		w.seen = make(map[string]bool, len(known))
+	} else {
+		clear(w.seen)
+	}
+	seen := w.seen
+	out := w.targets[:0]
+	defer func() {
+		// Drop the old tail so it keeps nothing alive.
+		clear(out[len(out):cap(out)])
+		w.targets = out
+	}()
 	add := func(t Target) {
 		key := t.JSONL
 		if key == "" {
