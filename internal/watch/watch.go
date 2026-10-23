@@ -218,6 +218,9 @@ var (
 	peekOmpCWD    = harness.PeekOmpCWD
 )
 
+// listSessions reads the session table. Tests replace it to count reads.
+var listSessions = (*store.Store).ListSessions
+
 // codexStateRows reads the Codex state databases. Tests replace it to
 // count reads.
 var codexStateRows = harness.CodexStateRows
@@ -415,12 +418,11 @@ func (w *Watcher) Tick(st *store.Store, opts Options) (Result, error) {
 			lastReplayLine = line
 		}
 	}
-	known, err := st.ListSessions()
+	known, projects, err := w.knownSessions(st)
 	if err != nil {
 		return Result{}, err
 	}
 	targets := w.discover(opts, known)
-	projects := projectsBySession(known)
 	var res Result
 	res.Seen = len(targets)
 	sqliteCatchUps := 0

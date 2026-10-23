@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"lossless/internal/harness"
+	"lossless/internal/store"
 	"lossless/internal/write"
 )
 
@@ -17,6 +18,8 @@ import (
 // half a core around the clock.
 //
 // Everything cached is a shortcut to an answer a fresh pass would give:
+//   - the session table, kept while the store's session generation holds
+//     (a row another process writes is seen at the verify pass);
 //   - a transcript's peeked cwd, kept while the file's size and mtime
 //     hold (and for good once found: a session's cwd never changes);
 //   - a directory's listing, kept while its mtime holds;
@@ -44,6 +47,13 @@ type Watcher struct {
 	ocSig  [2]fileSig
 	ocList []write.OpenCodeSession
 	ocOK   bool
+
+	// The session table, kept while the store's SessionsGen holds.
+	known         []store.Session
+	knownProjects map[string]string
+	knownStore    *store.Store
+	knownGen      uint64
+	knownOK       bool
 
 	codexHome string
 	codexSig  []fileSig
@@ -121,6 +131,7 @@ func (w *Watcher) beginTick(now time.Time) {
 		w.quiet = map[string]quietEntry{}
 		w.ocOK = false
 		w.codexOK = false
+		w.knownOK = false
 		for k, e := range w.peeks {
 			if e.cwd == "" {
 				delete(w.peeks, k)
@@ -255,6 +266,26 @@ func (w *Watcher) openCodeSessions(db string) []write.OpenCodeSession {
 	w.ocOK = trust && sig[0].ok
 	w.ocSig, w.ocList = sig, list
 	return list
+}
+
+// knownSessions returns the session table and the project of each session
+// by harness and id, reading the table again only when this store changed
+// it since the last read, or at the verify pass. The generation is read
+// before the rows, so a write landing during the read moves it past the
+// one kept here and the next tick reads again.
+func (w *Watcher) knownSessions(st *store.Store) ([]store.Session, map[string]string, error) {
+	gen := st.SessionsGen()
+	if w.knownOK && w.knownStore == st && w.knownGen == gen {
+		return w.known, w.knownProjects, nil
+	}
+	known, err := listSessions(st)
+	if err != nil {
+		w.knownOK = false
+		return nil, nil, err
+	}
+	w.known, w.knownProjects = known, projectsBySession(known)
+	w.knownStore, w.knownGen, w.knownOK = st, gen, true
+	return known, w.knownProjects, nil
 }
 
 // codexThreads lists the Codex state threads, reusing the rows read last
