@@ -4,8 +4,8 @@ import "lossless/internal/projectkey"
 
 // SessionsGen moves whenever this Store inserts, changes or deletes a
 // session row. The watcher keeps the session list between ticks and
-// reloads it when this moves; a row written by another process (the CLI)
-// is seen at the watcher's next full pass.
+// reloads it when this or SessionsVersion (which also sees other
+// processes' writes) moves.
 func (s *Store) SessionsGen() uint64 { return s.sessionsGen.Load() }
 
 type Session struct {
