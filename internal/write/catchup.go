@@ -59,7 +59,7 @@ func CatchUp(st *store.Store, req CatchUpRequest) (CatchUpResult, error) {
 	}
 	project := req.Project
 	if project == "" && req.WorkspaceRoot != "" {
-		project = projectkey.FromWorkspace(req.WorkspaceRoot)
+		project = projectkey.Cached(req.WorkspaceRoot)
 	}
 	if project == "" {
 		return out, fmt.Errorf("project or workspace_root required")

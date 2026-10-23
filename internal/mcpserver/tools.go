@@ -131,7 +131,7 @@ func (s *Server) toolGet(args json.RawMessage) (any, error) {
 	}
 	project := p.Project
 	if project == "" && p.WorkspaceRoot != "" {
-		project = projectkey.FromWorkspace(p.WorkspaceRoot)
+		project = projectkey.Cached(p.WorkspaceRoot)
 	}
 	rec, ok, err := s.Backend.Get(p.ID, project, fillSession(p.SessionID))
 	if err != nil {

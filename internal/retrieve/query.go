@@ -72,7 +72,7 @@ func resolveProject(req Request) (string, error) {
 		return projectkey.Normalize(req.Project), nil
 	}
 	if strings.TrimSpace(req.WorkspaceRoot) != "" {
-		return projectkey.FromWorkspace(req.WorkspaceRoot), nil
+		return projectkey.Cached(req.WorkspaceRoot), nil
 	}
 	return "", errBadRequest
 }

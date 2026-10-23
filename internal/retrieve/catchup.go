@@ -70,7 +70,7 @@ func (e Engine) catchUpLocated(req Request) {
 	}
 	project := req.Project
 	if project == "" {
-		project = projectkey.FromWorkspace(req.WorkspaceRoot)
+		project = projectkey.Cached(req.WorkspaceRoot)
 	}
 	_, _ = write.CatchUp(e.Store, write.CatchUpRequest{
 		JSONL: jsonl, Project: project, WorkspaceRoot: req.WorkspaceRoot,
