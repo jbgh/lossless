@@ -105,23 +105,168 @@ func placeholder(v string) bool {
 
 var sensitivePath = regexp.MustCompile(`(?:^|/)(?:\.env(?:\..+)?|\.envrc|.*\.pem|id_rsa|id_rsa\.pub|id_ed25519|id_ed25519\.pub|id_ecdsa|id_dsa|authorized_keys|credentials(?:\.json)?|aws-exports\.js)$`)
 
+// ContainsSecret runs every secret pattern over text. Running all the
+// regexes over every line was nearly all of a catch-up's CPU (about
+// 2.4 MB/s), so each pattern first checks for a literal it cannot match
+// without (secretHints, dsnSchemes, assignHint). A check only ever skips a
+// regex that would not have matched: the answer is the same as running
+// them all (the differential and fuzz tests compare the two).
 func ContainsSecret(text string) bool {
-	for _, re := range secrets {
-		if re.MatchString(text) {
+	folded := foldCase(text)
+	for i, re := range secrets {
+		if secretHints[i](text, folded) && re.MatchString(text) {
 			return true
 		}
 	}
-	for _, m := range dsnPassword.FindAllStringSubmatch(text, -1) {
-		if !placeholder(m[2]) {
-			return true
+	if strings.Contains(text, "://") && containsAny(folded, dsnSchemes...) {
+		for _, m := range dsnPassword.FindAllStringSubmatch(text, -1) {
+			if !placeholder(m[2]) {
+				return true
+			}
 		}
 	}
-	for _, m := range secretAssign.FindAllStringSubmatch(text, -1) {
-		if assignedSecret(m[0], m[1]) {
+	if assignHint(folded) {
+		for _, m := range secretAssign.FindAllStringSubmatch(text, -1) {
+			if assignedSecret(m[0], m[1]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// secretHints[i] is a literal secrets[i] needs to match. text is the
+// line; folded is foldCase(text), for the (?i) patterns. A literal behind
+// \b must also start a word (wordStart): base64 image data holds AKIA or
+// eyJ by chance, nearly always mid-word.
+var secretHints = []func(text, folded string) bool{
+	func(t, _ string) bool { return wordStart(t, "AKIA") || wordStart(t, "ASIA") },
+	func(t, _ string) bool { return strings.Contains(t, "-----BEGIN ") },
+	func(_, f string) bool { return strings.Contains(f, "bearer ") },
+	func(_, f string) bool { return strings.Contains(f, "authorization:") },
+	func(t, _ string) bool {
+		return wordStart(t, "gho_") || wordStart(t, "ghp_") || wordStart(t, "ghs_") || wordStart(t, "ghu_")
+	},
+	func(t, _ string) bool { return wordStart(t, "github_pat_") },
+	func(t, _ string) bool { return wordStart(t, "glpat-") },
+	func(t, _ string) bool { return wordStart(t, "sk-") },
+	func(t, _ string) bool { return wordStart(t, "sk-ant-") },
+	func(t, _ string) bool { return wordStart(t, "sk-proj-") },
+	func(t, _ string) bool {
+		return wordStart(t, "sk_live_") || wordStart(t, "sk_test_") || wordStart(t, "rk_live_") || wordStart(t, "rk_test_")
+	},
+	func(t, _ string) bool { return wordStart(t, "xai-") },
+	func(t, _ string) bool { return wordStart(t, "AIza") },
+	func(t, _ string) bool { return wordStart(t, "xox") },
+	func(t, _ string) bool { return wordStart(t, "npm_") },
+	func(t, _ string) bool { return wordStart(t, "SG.") },
+	func(t, _ string) bool { return strings.Contains(t, "https://hooks.slack.com/services/T") },
+	func(t, _ string) bool { return strings.Contains(t, "https://discord") },
+	func(t, _ string) bool { return wordStart(t, "eyJ") },
+}
+
+// dsnSchemes are dsnPassword's schemes with their "://", folded.
+var dsnSchemes = []string{
+	"postgres://", "postgresql://", "mysql://", "mongodb://", "mongodb+srv://",
+	"mssql://", "redis://", "rediss://", "amqp://", "amqps://",
+}
+
+// wordStart reports an occurrence of lit (which opens with an ASCII word
+// character) at the start of text or after a byte that is not one: where
+// Go's ASCII \b allows a match to begin. A non-ASCII rune is not a word
+// character to \b, and none of its bytes is either.
+func wordStart(text, lit string) bool {
+	for off := 0; ; {
+		i := strings.Index(text[off:], lit)
+		if i < 0 {
+			return false
+		}
+		i += off
+		if i == 0 || !asciiWord(text[i-1]) {
+			return true
+		}
+		off = i + 1
+	}
+}
+
+func asciiWord(c byte) bool {
+	return c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
+
+func init() {
+	if len(secretHints) != len(secrets) {
+		panic("redact: secretHints and secrets differ in length")
+	}
+}
+
+func containsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		if strings.Contains(s, sub) {
 			return true
 		}
 	}
 	return false
+}
+
+// assignKeyTails are the endings of secretAssign's key words: password,
+// passwd and pwd, secret, api/access key, auth token and token.
+var assignKeyTails = []string{"word", "wd", "secret", "key", "token"}
+
+// assignHint reports whether folded holds a key word, optional
+// whitespace, then = or :, which secretAssign needs. A bare key word is
+// not enough: nearly every transcript line has "input_tokens".
+func assignHint(folded string) bool {
+	for i := 0; i < len(folded); i++ {
+		if c := folded[i]; c != '=' && c != ':' {
+			continue
+		}
+		j := i
+		// \s in Go's regexp is [\t\n\f\r ].
+		for j > 0 && strings.IndexByte("\t\n\f\r ", folded[j-1]) >= 0 {
+			j--
+		}
+		for _, tail := range assignKeyTails {
+			if strings.HasSuffix(folded[:j], tail) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// foldCase maps text the way a (?i) pattern compares ASCII letters:
+// A-Z to a-z, and the two non-ASCII runes Go folds onto ASCII letters,
+// ſ (U+017F) to s and the Kelvin sign (U+212A) to k. Other bytes stay.
+// Only used to look for literals, never to match.
+func foldCase(text string) string {
+	i := 0
+	for ; i < len(text); i++ {
+		if c := text[i]; (c >= 'A' && c <= 'Z') || c == 0xC5 || c == 0xE2 {
+			break
+		}
+	}
+	if i == len(text) {
+		return text
+	}
+	var b strings.Builder
+	b.Grow(len(text))
+	b.WriteString(text[:i])
+	for ; i < len(text); i++ {
+		c := text[i]
+		switch {
+		case c >= 'A' && c <= 'Z':
+			b.WriteByte(c + 'a' - 'A')
+		case c == 0xC5 && i+1 < len(text) && text[i+1] == 0xBF:
+			b.WriteByte('s')
+			i++
+		case c == 0xE2 && i+2 < len(text) && text[i+1] == 0x84 && text[i+2] == 0xAA:
+			b.WriteByte('k')
+			i += 2
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
 }
 
 // Scrub blanks each secret's own span: a token whole, a URL's password,
