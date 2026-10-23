@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"lossless/internal/harness"
 	"lossless/internal/write"
 )
 
@@ -20,6 +21,8 @@ import (
 //     hold (and for good once found: a session's cwd never changes);
 //   - a directory's listing, kept while its mtime holds;
 //   - the OpenCode session list, kept while opencode.db and its WAL hold;
+//   - the Codex state threads, kept while each state database and its WAL
+//     hold (whether a thread's rollout file exists is checked every tick);
 //   - "this target was caught up and checked for an idle seal", kept
 //     while its file's size and mtime (or its harness update time) hold.
 //
@@ -41,6 +44,11 @@ type Watcher struct {
 	ocSig  [2]fileSig
 	ocList []write.OpenCodeSession
 	ocOK   bool
+
+	codexHome string
+	codexSig  []fileSig
+	codexRows []harness.CodexThread
+	codexOK   bool
 }
 
 // verifyEvery is how often a tick ignores the listing and per-target
@@ -112,6 +120,7 @@ func (w *Watcher) beginTick(now time.Time) {
 		w.dirs = map[string]dirEntry{}
 		w.quiet = map[string]quietEntry{}
 		w.ocOK = false
+		w.codexOK = false
 		for k, e := range w.peeks {
 			if e.cwd == "" {
 				delete(w.peeks, k)
@@ -246,6 +255,47 @@ func (w *Watcher) openCodeSessions(db string) []write.OpenCodeSession {
 	w.ocOK = trust && sig[0].ok
 	w.ocSig, w.ocList = sig, list
 	return list
+}
+
+// codexThreads lists the Codex state threads, reusing the rows read last
+// time while every state database and its WAL are unchanged. The rollout
+// file check runs every tick: a rollout written after its thread row
+// becomes a file target without a database change.
+func (w *Watcher) codexThreads(home string) []harness.CodexThread {
+	now := time.Now()
+	var sig []fileSig
+	trust := true
+	for _, db := range harness.CodexStateDBs(home) {
+		for _, p := range []string{db, db + "-wal"} {
+			fi, err := os.Lstat(p)
+			if err != nil {
+				sig = append(sig, fileSig{})
+				continue
+			}
+			sig = append(sig, sigOf(fi))
+			if racy(fi, now) {
+				trust = false
+			}
+		}
+	}
+	if !w.codexOK || w.codexHome != home || !sameSigs(sig, w.codexSig) {
+		w.codexRows = codexStateRows(home)
+		w.codexHome, w.codexSig = home, sig
+		w.codexOK = trust
+	}
+	return harness.CodexLiveRollouts(w.codexRows)
+}
+
+func sameSigs(a, b []fileSig) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // isQuiet reports a target this watcher already found caught up, with

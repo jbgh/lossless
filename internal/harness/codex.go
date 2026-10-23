@@ -203,10 +203,28 @@ type CodexThread struct {
 // CodexStateThreads lists desktop/CLI threads, including rows whose
 // rollout_path is empty or the file is gone. sessions/ may not exist.
 func CodexStateThreads(home string) []CodexThread {
+	return CodexLiveRollouts(CodexStateRows(home))
+}
+
+// CodexStateDBs are the Codex state databases CodexStateRows reads, newest
+// schema first, whether or not they exist.
+func CodexStateDBs(home string) []string {
+	names := []string{"state_5.sqlite", "state_4.sqlite", "state.sqlite"}
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = filepath.Join(home, n)
+	}
+	return out
+}
+
+// CodexStateRows reads every thread row as stored, rollout_path included
+// even when its file is gone. The rows change only when a state database
+// does, so the watcher caches them; CodexLiveRollouts applies the file
+// check, which can change any time.
+func CodexStateRows(home string) []CodexThread {
 	var out []CodexThread
 	seen := map[string]bool{}
-	for _, name := range []string{"state_5.sqlite", "state_4.sqlite", "state.sqlite"} {
-		p := filepath.Join(home, name)
+	for _, p := range CodexStateDBs(home) {
 		if !fileExists(p) {
 			continue
 		}
@@ -227,14 +245,27 @@ func CodexStateThreads(home string) []CodexThread {
 			if t.ID == "" || seen[t.ID] {
 				continue
 			}
-			if t.Rollout != "" && !fileExists(t.Rollout) {
-				t.Rollout = ""
-			}
 			seen[t.ID] = true
 			out = append(out, t)
 		}
 		_ = rows.Close()
 		_ = db.Close()
+	}
+	return out
+}
+
+// CodexLiveRollouts returns a copy of rows with Rollout cleared where the
+// file does not exist.
+func CodexLiveRollouts(rows []CodexThread) []CodexThread {
+	if len(rows) == 0 {
+		return nil
+	}
+	out := make([]CodexThread, len(rows))
+	copy(out, rows)
+	for i := range out {
+		if out[i].Rollout != "" && !fileExists(out[i].Rollout) {
+			out[i].Rollout = ""
+		}
 	}
 	return out
 }

@@ -153,7 +153,7 @@ func (w *Watcher) discover(opts Options, known []store.Session) []Target {
 			cwd := w.peek(path, d, codexCWD)
 			add(Target{JSONL: path, Harness: "codex", SessionID: sid, Workspace: cwd})
 		})
-		for _, th := range harness.CodexStateThreads(filepath.Dir(opts.CodexRoot)) {
+		for _, th := range w.codexThreads(filepath.Dir(opts.CodexRoot)) {
 			if th.Rollout != "" {
 				sid := th.ID
 				if sid == "" {
@@ -217,6 +217,10 @@ var (
 	peekPiCWD     = harness.PeekPiCWD
 	peekOmpCWD    = harness.PeekOmpCWD
 )
+
+// codexStateRows reads the Codex state databases. Tests replace it to
+// count reads.
+var codexStateRows = harness.CodexStateRows
 
 // catchUp copies a target's new lines to its tape. Tests replace it to
 // count attempts.

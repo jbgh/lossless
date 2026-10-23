@@ -132,6 +132,44 @@ VALUES('thread-missing-file', '/no/such/rollout.jsonl', 1, 8, 'desktop', 'openai
 	if len(CodexStateRollouts(root)) != 0 {
 		t.Fatal("no live rollout files")
 	}
+
+	// The raw rows keep the stored path; the live pass clears it while the
+	// file is gone and keeps it once the file exists.
+	rows := CodexStateRows(root)
+	var missing CodexThread
+	for _, th := range rows {
+		if th.ID == "thread-missing-file" {
+			missing = th
+		}
+	}
+	if missing.Rollout != "/no/such/rollout.jsonl" {
+		t.Fatalf("raw row lost its rollout path: %+v", missing)
+	}
+	if got := CodexStateDBs(root); len(got) == 0 || got[0] != dbPath {
+		t.Fatalf("state dbs %v", got)
+	}
+	live := filepath.Join(root, "rollout-later.jsonl")
+	rows = append(rows, CodexThread{ID: "thread-later", Rollout: live})
+	for _, th := range CodexLiveRollouts(rows) {
+		if th.ID == "thread-later" && th.Rollout != "" {
+			t.Fatal("rollout counted before its file exists")
+		}
+	}
+	if err := os.WriteFile(live, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, th := range CodexLiveRollouts(rows) {
+		if th.ID == "thread-later" && th.Rollout == live {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("rollout not counted once its file exists")
+	}
+	if rows[len(rows)-1].Rollout != live {
+		t.Fatal("the live pass changed the caller's rows")
+	}
 }
 
 func TestMergeCodexHooks(t *testing.T) {
