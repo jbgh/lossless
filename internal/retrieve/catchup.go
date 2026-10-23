@@ -119,13 +119,20 @@ func fileRegular(p string) bool {
 }
 
 func (e Engine) catchUpStoredWorkspace(req Request) {
-	sess, err := e.Store.ListSessions()
-	if err != nil {
-		return
-	}
+	// Every stored project key is normalized (UpsertSession), and a
+	// non-empty workspace always resolves to a key (owner/repo or the
+	// path-hash fallback), so the project index finds exactly the rows a
+	// full ListSessions filtered down to.
 	proj := projectkey.Normalize(req.Project)
 	if proj == "" && req.WorkspaceRoot != "" {
-		proj = projectkey.FromWorkspace(req.WorkspaceRoot)
+		proj = projectkey.Cached(req.WorkspaceRoot)
+	}
+	if proj == "" {
+		return
+	}
+	sess, err := e.Store.SessionsForProject(proj)
+	if err != nil {
+		return
 	}
 	ws := ""
 	if req.WorkspaceRoot != "" {
@@ -134,13 +141,6 @@ func (e Engine) catchUpStoredWorkspace(req Request) {
 	var same, other []store.Session
 	for _, s := range sess {
 		if s.JSONL == "" || s.SessionID == "" {
-			continue
-		}
-		if proj != "" {
-			if projectkey.Normalize(s.Project) != proj {
-				continue
-			}
-		} else if ws == "" || filepath.Clean(s.Workspace) != ws {
 			continue
 		}
 		if ws != "" && filepath.Clean(s.Workspace) == ws {

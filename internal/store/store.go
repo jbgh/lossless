@@ -96,6 +96,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   workspace TEXT,
   project_key TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_sessions_sid ON sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_proj ON sessions(project_key);
 CREATE TABLE IF NOT EXISTS path_postings (
   project_key TEXT NOT NULL,
   path_key TEXT NOT NULL,
