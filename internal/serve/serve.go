@@ -100,7 +100,7 @@ func Handler(st *store.Store, token string) http.Handler {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 			return
 		}
-		out, err := retrieve.Ask(st, req)
+		out, err := timedAsk(st, req)
 		if err != nil {
 			if errors.Is(err, retrieve.ErrBadRequest) {
 				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})

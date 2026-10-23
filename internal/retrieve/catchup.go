@@ -3,6 +3,7 @@ package retrieve
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"lossless/internal/harness"
 	"lossless/internal/projectkey"
@@ -29,6 +30,7 @@ func (e Engine) maybeCatchUp(req Request) {
 	if e.Store == nil {
 		return
 	}
+	defer req.timing.addCatchUp(time.Now())
 	req.SessionID = CleanSessionID(req.SessionID)
 	if req.SessionID != "" {
 		if sess, ok := e.Store.SessionByID(req.SessionID); ok && sess.JSONL != "" {
@@ -54,6 +56,7 @@ func (e Engine) catchUpKnown(req Request, sess store.Session) {
 	if ws == "" {
 		ws = req.WorkspaceRoot
 	}
+	req.timing.countCatchUp()
 	_, _ = write.CatchUp(e.Store, write.CatchUpRequest{
 		JSONL: sess.JSONL, Project: project, WorkspaceRoot: ws,
 		Harness: sess.Harness, SessionID: sess.SessionID, Source: "turn",
@@ -72,6 +75,7 @@ func (e Engine) catchUpLocated(req Request) {
 	if project == "" {
 		project = projectkey.Cached(req.WorkspaceRoot)
 	}
+	req.timing.countCatchUp()
 	_, _ = write.CatchUp(e.Store, write.CatchUpRequest{
 		JSONL: jsonl, Project: project, WorkspaceRoot: req.WorkspaceRoot,
 		Harness: harn, SessionID: hid, Source: "turn",

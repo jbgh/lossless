@@ -24,6 +24,8 @@ type Request struct {
 	// skipCatchUp is set by compact checkout. Catch-up already ran;
 	// the live harness file may be shrinking. JSON/MCP cannot set this.
 	skipCatchUp bool
+	// timing, when set (AskTimed), collects where the ask spent its time.
+	timing *AskTiming
 }
 
 type Hit struct {
@@ -72,6 +74,7 @@ func resolveProject(req Request) (string, error) {
 		return projectkey.Normalize(req.Project), nil
 	}
 	if strings.TrimSpace(req.WorkspaceRoot) != "" {
+		defer req.timing.addProject(time.Now())
 		return projectkey.Cached(req.WorkspaceRoot), nil
 	}
 	return "", errBadRequest
