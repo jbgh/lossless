@@ -2,6 +2,12 @@ package store
 
 import "lossless/internal/projectkey"
 
+// SessionsGen moves whenever this Store inserts, changes or deletes a
+// session row. The watcher keeps the session list between ticks and
+// reloads it when this moves; a row written by another process (the CLI)
+// is seen at the watcher's next full pass.
+func (s *Store) SessionsGen() uint64 { return s.sessionsGen.Load() }
+
 type Session struct {
 	JSONL     string
 	SessionID string
@@ -17,16 +23,29 @@ func (s *Store) UpsertSession(sess Session) error {
 	if sess.Project != "" {
 		sess.Project = projectkey.Normalize(sess.Project)
 	}
+	// A catch-up re-upserts its session's row every time; the WHERE
+	// makes an unchanged row a no-op, so it writes nothing and leaves
+	// SessionsGen alone.
 	return withBusyRetry(func() error {
-		_, err := s.DB.Exec(`INSERT INTO sessions(jsonl, session_id, harness, workspace, project_key)
+		res, err := s.DB.Exec(`INSERT INTO sessions(jsonl, session_id, harness, workspace, project_key)
 		VALUES(?,?,?,?,?)
 		ON CONFLICT(jsonl) DO UPDATE SET
 			session_id=excluded.session_id,
 			harness=excluded.harness,
 			workspace=excluded.workspace,
-			project_key=excluded.project_key`,
+			project_key=excluded.project_key
+		WHERE sessions.session_id IS NOT excluded.session_id
+			OR sessions.harness IS NOT excluded.harness
+			OR sessions.workspace IS NOT excluded.workspace
+			OR sessions.project_key IS NOT excluded.project_key`,
 			sess.JSONL, sess.SessionID, sess.Harness, sess.Workspace, sess.Project)
-		return err
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			s.sessionsGen.Add(1)
+		}
+		return nil
 	})
 }
 

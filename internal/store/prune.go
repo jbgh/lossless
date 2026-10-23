@@ -61,10 +61,14 @@ func (s *Store) DeleteSession(jsonl string) error {
 	if jsonl == "" {
 		return nil
 	}
-	if _, err := s.DB.Exec(`DELETE FROM sessions WHERE jsonl = ?`, jsonl); err != nil {
+	res, err := s.DB.Exec(`DELETE FROM sessions WHERE jsonl = ?`, jsonl)
+	if err != nil {
 		return err
 	}
-	_, err := s.DB.Exec(`DELETE FROM cursors WHERE path = ?`, jsonl)
+	if n, _ := res.RowsAffected(); n > 0 {
+		s.sessionsGen.Add(1)
+	}
+	_, err = s.DB.Exec(`DELETE FROM cursors WHERE path = ?`, jsonl)
 	return err
 }
 

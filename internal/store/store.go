@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"lossless/internal/claim"
@@ -24,6 +25,9 @@ type Store struct {
 	DB       *sql.DB
 	Embedder embed.Embedder
 	writeMu  sync.Mutex
+	// sessionsGen moves on every change to the sessions table made
+	// through this Store (see SessionsGen).
+	sessionsGen atomic.Uint64
 }
 
 func Open(root string) (*Store, error) {
