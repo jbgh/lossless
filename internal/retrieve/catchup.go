@@ -3,7 +3,6 @@ package retrieve
 import (
 	"os"
 	"path/filepath"
-	"time"
 
 	"lossless/internal/harness"
 	"lossless/internal/projectkey"
@@ -30,7 +29,7 @@ func (e Engine) maybeCatchUp(req Request) {
 	if e.Store == nil {
 		return
 	}
-	defer req.timing.addCatchUp(time.Now())
+	defer req.timing.startCatchUp()()
 	req.SessionID = CleanSessionID(req.SessionID)
 	if req.SessionID != "" {
 		if sess, ok := e.Store.SessionByID(req.SessionID); ok && sess.JSONL != "" {
@@ -56,11 +55,12 @@ func (e Engine) catchUpKnown(req Request, sess store.Session) {
 	if ws == "" {
 		ws = req.WorkspaceRoot
 	}
-	req.timing.countCatchUp()
-	_, _ = write.CatchUp(e.Store, write.CatchUpRequest{
+	if out, err := write.CatchUp(e.Store, write.CatchUpRequest{
 		JSONL: sess.JSONL, Project: project, WorkspaceRoot: ws,
 		Harness: sess.Harness, SessionID: sess.SessionID, Source: "turn",
-	})
+	}); err == nil && out.Copied > 0 {
+		req.timing.countCatchUp()
+	}
 }
 
 func (e Engine) catchUpLocated(req Request) {
@@ -73,13 +73,14 @@ func (e Engine) catchUpLocated(req Request) {
 	}
 	project := req.Project
 	if project == "" {
-		project = projectkey.Cached(req.WorkspaceRoot)
+		project = req.timing.project(req.WorkspaceRoot)
 	}
-	req.timing.countCatchUp()
-	_, _ = write.CatchUp(e.Store, write.CatchUpRequest{
+	if out, err := write.CatchUp(e.Store, write.CatchUpRequest{
 		JSONL: jsonl, Project: project, WorkspaceRoot: req.WorkspaceRoot,
 		Harness: harn, SessionID: hid, Source: "turn",
-	})
+	}); err == nil && out.Copied > 0 {
+		req.timing.countCatchUp()
+	}
 }
 
 func locateExact(ws, sid string) (jsonl, sessionID, harn string) {
@@ -129,7 +130,7 @@ func (e Engine) catchUpStoredWorkspace(req Request) {
 	// full ListSessions filtered down to.
 	proj := projectkey.Normalize(req.Project)
 	if proj == "" && req.WorkspaceRoot != "" {
-		proj = projectkey.Cached(req.WorkspaceRoot)
+		proj = req.timing.project(req.WorkspaceRoot)
 	}
 	if proj == "" {
 		return

@@ -39,6 +39,11 @@ func Cached(root string) string {
 				delete(cache.m, p)
 			}
 		}
+		// Still full of live entries (hundreds of worktrees within ten
+		// minutes): start over rather than grow. A miss costs one git run.
+		if len(cache.m) >= cachedMaxEntries {
+			cache.m = map[string]cacheEntry{}
+		}
 	}
 	cache.m[k] = cacheEntry{key: key, at: now}
 	cache.Unlock()

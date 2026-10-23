@@ -74,8 +74,7 @@ func resolveProject(req Request) (string, error) {
 		return projectkey.Normalize(req.Project), nil
 	}
 	if strings.TrimSpace(req.WorkspaceRoot) != "" {
-		defer req.timing.addProject(time.Now())
-		return projectkey.Cached(req.WorkspaceRoot), nil
+		return req.timing.project(req.WorkspaceRoot), nil
 	}
 	return "", errBadRequest
 }

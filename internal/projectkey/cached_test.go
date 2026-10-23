@@ -93,3 +93,18 @@ func TestCachedPrunesExpiredEntries(t *testing.T) {
 		t.Fatalf("cache holds %d entries after expiry, want 1", n)
 	}
 }
+
+// Live entries past the cap do not make the cache grow without bound.
+func TestCachedStaysBoundedWithLiveEntries(t *testing.T) {
+	key := "acme/api"
+	fakeResolver(t, &key)
+	for i := 0; i < 3*cachedMaxEntries; i++ {
+		Cached("/ws/" + time.Duration(i).String())
+	}
+	cache.Lock()
+	n := len(cache.m)
+	cache.Unlock()
+	if n > cachedMaxEntries {
+		t.Fatalf("cache holds %d live entries, cap %d", n, cachedMaxEntries)
+	}
+}
