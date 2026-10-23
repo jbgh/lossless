@@ -108,3 +108,17 @@ func TestCachedStaysBoundedWithLiveEntries(t *testing.T) {
 		t.Fatalf("cache holds %d live entries, cap %d", n, cachedMaxEntries)
 	}
 }
+
+// A relative root is keyed by its absolute path: the same relative name
+// from two working directories is two workspaces.
+func TestCachedKeysARelativeRootByItsAbsolutePath(t *testing.T) {
+	key := "a/b"
+	calls, _ := fakeResolver(t, &key)
+	t.Chdir(t.TempDir())
+	Cached("repo")
+	t.Chdir(t.TempDir())
+	Cached("repo")
+	if *calls != 2 {
+		t.Fatalf("resolved %d times, want 2 (one per absolute path)", *calls)
+	}
+}

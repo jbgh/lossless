@@ -21,7 +21,12 @@ func Cached(root string) string {
 	if strings.TrimSpace(root) == "" {
 		return ""
 	}
-	k := filepath.Clean(root)
+	// Keyed like FromWorkspace resolves it: by absolute path, so a
+	// relative root means the same workspace whatever the caller's cwd.
+	k, err := filepath.Abs(root)
+	if err != nil {
+		k = filepath.Clean(root)
+	}
 	now := cachedNow()
 	cache.Lock()
 	if e, ok := cache.m[k]; ok && now.Sub(e.at) < ttlFor(e.key) {

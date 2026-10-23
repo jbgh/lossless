@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"lossless/internal/store"
 )
@@ -89,9 +88,8 @@ func TestWatcherKeepsTheSessionListUntilItChanges(t *testing.T) {
 }
 
 // Another process (the CLI) writes the same database through its own
-// store. A row it inserts or deletes changes the table's count or max
-// rowid and is seen on the next tick; a row it rewrites in place is seen
-// at the next full pass.
+// store. Every row it inserts, rewrites or deletes moves the table's
+// version (a trigger), so the watcher sees it on the next tick.
 func TestWatcherSeesAnotherStoresSessions(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "home")
 	st, err := store.Open(home)
@@ -125,13 +123,25 @@ func TestWatcherSeesAnotherStoresSessions(t *testing.T) {
 		t.Fatal(err)
 	}
 	tick()
-	if w.knownProjects["grok:g2"] != "jay/api" {
-		t.Fatalf("expected the cached project until the verify pass, got %q", w.knownProjects["grok:g2"])
-	}
-	w.lastVerify = time.Now().Add(-verifyEvery)
-	tick()
 	if w.knownProjects["grok:g2"] != "jay/web" {
-		t.Fatal("the verify pass did not reload a row rewritten in place")
+		t.Fatalf("a row another store rewrote in place was not seen on the next tick: %q", w.knownProjects["grok:g2"])
+	}
+
+	// Deleting the newest row and inserting another can reuse its rowid
+	// (same count, same max rowid); the version still moves.
+	if err := other.DeleteSession(file); err != nil {
+		t.Fatal(err)
+	}
+	file2 := "/gone/elsewhere/2/chat_history.jsonl"
+	if err := other.UpsertSession(store.Session{JSONL: file2, SessionID: "g3", Harness: "grok", Project: "jay/api"}); err != nil {
+		t.Fatal(err)
+	}
+	tick()
+	if knownHas(w, file) || !knownHas(w, file2) {
+		t.Fatal("a delete plus an insert between ticks was missed")
+	}
+	if err := other.UpsertSession(store.Session{JSONL: file, SessionID: "g2", Harness: "grok", Project: "jay/web"}); err != nil {
+		t.Fatal(err)
 	}
 
 	if err := other.DeleteSession(file); err != nil {

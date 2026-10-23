@@ -268,3 +268,24 @@ func TestWatcherSpreadsColdChecksOverTicks(t *testing.T) {
 		t.Fatalf("one tick ran %d of %d cold checks", most, n)
 	}
 }
+
+// The cold bound is time, not ticks: a longer poll interval checks cold
+// files on fewer ticks, so they are still looked at about every 30 s.
+func TestColdEveryFollowsTheInterval(t *testing.T) {
+	for _, c := range []struct {
+		interval time.Duration
+		want     uint64
+	}{
+		{2 * time.Second, 15},
+		{DefaultInterval, defaultColdEvery},
+		{5 * time.Second, 6},
+		{7 * time.Second, 5},
+		{30 * time.Second, 1},
+		{time.Minute, 1},
+		{0, defaultColdEvery},
+	} {
+		if got := coldEveryFor(c.interval); got != c.want {
+			t.Errorf("coldEveryFor(%v) = %d, want %d", c.interval, got, c.want)
+		}
+	}
+}

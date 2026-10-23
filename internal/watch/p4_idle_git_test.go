@@ -11,13 +11,14 @@ import (
 // project, and idleSeal resolved each one by running git, every tick: a
 // thousand git processes a second-long tick, nonstop, since v0.1.0. A
 // session the store already knows reuses its stored project, and a
-// workspace that still has to be resolved is resolved once per TTL.
+// workspace that still has to be resolved goes through the shared
+// project-key cache (projectkey.Cached, whose own tests pin that git runs
+// once per TTL).
 func TestIdleSealDoesNotShellOutForKnownSessions(t *testing.T) {
 	calls := 0
 	old := resolveProject
 	resolveProject = func(ws string) string { calls++; return "acme/api" }
-	t.Cleanup(func() { resolveProject = old; resetProjectCache() })
-	resetProjectCache()
+	t.Cleanup(func() { resolveProject = old })
 
 	st, err := store.Open(t.TempDir())
 	if err != nil {
@@ -39,8 +40,8 @@ func TestIdleSealDoesNotShellOutForKnownSessions(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		idleSeal(st, unknown, Options{}, idx)
 	}
-	if calls != 1 {
-		t.Fatalf("an unknown workspace resolves once per TTL, git ran %d times", calls)
+	if calls != 5 {
+		t.Fatalf("an unknown workspace must resolve through the shared cache, resolved %d times", calls)
 	}
 	if got := sealProject(Target{Project: "given/key", Workspace: "/work/api"}, idx); got != "given/key" {
 		t.Fatalf("an explicit project wins: %q", got)

@@ -66,7 +66,7 @@ type Watcher struct {
 	knownProjects map[string]string
 	knownStore    *store.Store
 	knownGen      uint64
-	knownShape    [2]int64 // row count and max rowid at the last read
+	knownVersion  int64 // the table's SessionsVersion at the last read
 	knownOK       bool
 
 	// discover's dedupe map and result, reused between ticks.
@@ -89,13 +89,28 @@ const verifyEvery = 5 * time.Minute
 const racyWindow = 2 * time.Second
 
 // A file or directory unchanged this long is checked on its slot only:
-// once every coldEvery ticks (30 s at the default 2 s interval). A hook
-// reports each turn as it happens, so this bounds how late the watcher
-// catches a turn a hook missed in a session idle for coldAfter.
+// about every coldCheck, which is coldEvery ticks at the watch interval
+// (15 at the default 2 s). A hook reports each turn as it happens, so
+// this bounds how late the watcher catches a turn a hook missed in a
+// session idle for coldAfter.
 const (
 	defaultColdAfter = 10 * time.Minute
+	coldCheck        = 30 * time.Second
 	defaultColdEvery = 15
 )
+
+// coldEveryFor is the number of ticks at interval that spans coldCheck,
+// so a longer --watch-interval does not stretch the cold bound with it.
+func coldEveryFor(interval time.Duration) uint64 {
+	if interval <= 0 {
+		return defaultColdEvery
+	}
+	n := uint64((coldCheck + interval - 1) / interval)
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
 
 func NewWatcher() *Watcher {
 	return &Watcher{
@@ -346,18 +361,16 @@ func (w *Watcher) openCodeSessions(db string) []write.OpenCodeSession {
 
 // knownSessions returns the session table and the project of each session
 // by harness and id, reading the table again only when it changed since
-// the last read, or at the verify pass. A change through this Store moves
-// SessionsGen; a row another process inserts or deletes moves the table's
-// count or max rowid. Another process rewriting a row in place (a CLI
-// catch-up that changes a session's project) is seen at the verify pass.
-// Both marks are read before the rows, so a write landing during the read
-// moves them past the ones kept here and the next tick reads again.
+// the last read, or at the verify pass. Any process's insert, update or
+// delete moves the table's SessionsVersion (a trigger keeps it), and this
+// Store's own writes also move SessionsGen. Both are read before the
+// rows, so a write landing during the read moves them past the ones kept
+// here and the next tick reads again. If the version cannot be read, the
+// table is read in full, as every tick did before the cache.
 func (w *Watcher) knownSessions(st *store.Store) ([]store.Session, map[string]string, error) {
 	gen := st.SessionsGen()
-	var shape [2]int64
-	var err error
-	shape[0], shape[1], err = st.SessionsShape()
-	if err == nil && w.knownOK && w.knownStore == st && w.knownGen == gen && w.knownShape == shape {
+	version, err := st.SessionsVersion()
+	if err == nil && w.knownOK && w.knownStore == st && w.knownGen == gen && w.knownVersion == version {
 		return w.known, w.knownProjects, nil
 	}
 	known, err := listSessions(st)
@@ -366,7 +379,7 @@ func (w *Watcher) knownSessions(st *store.Store) ([]store.Session, map[string]st
 		return nil, nil, err
 	}
 	w.known, w.knownProjects = known, projectsBySession(known)
-	w.knownStore, w.knownGen, w.knownShape, w.knownOK = st, gen, shape, true
+	w.knownStore, w.knownGen, w.knownVersion, w.knownOK = st, gen, version, true
 	return known, w.knownProjects, nil
 }
 

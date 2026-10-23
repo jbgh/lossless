@@ -38,40 +38,62 @@ func (s *Store) SessionsForProject(project string) ([]Session, error) {
 	return out, rows.Err()
 }
 
-// SessionsShape is the session table's row count and largest rowid. A
-// session another process inserts or deletes (a CLI catch-up, backfill or
-// prune) moves it, so the watcher can tell its cached list is stale
-// without reading every row; SessionsGen only sees this Store's writes.
-func (s *Store) SessionsShape() (count, maxRowid int64, err error) {
-	err = s.DB.QueryRow(`SELECT count(*), COALESCE(max(rowid), 0) FROM sessions`).Scan(&count, &maxRowid)
-	return count, maxRowid, err
+// SessionsVersion moves on every insert, update or delete of a session
+// row, by any process and any release from 0.1.44 on: triggers on the
+// sessions table bump it (see migrate). The watcher reads it each tick
+// to tell whether its cached session list is stale; SessionsGen sees
+// only this Store's writes.
+func (s *Store) SessionsVersion() (int64, error) {
+	var v int64
+	err := s.DB.QueryRow(`SELECT version FROM table_versions WHERE name = 'sessions'`).Scan(&v)
+	return v, err
 }
 
 // legacyFor returns the stored session keys, other than project itself,
-// that normalize to project. The scan of distinct keys runs once per
-// Store: every row written since uses the normalized form, so the set
-// does not grow.
+// that normalize to project. The scan of distinct keys runs until it
+// succeeds once per Store: every row written since uses the normalized
+// form, so the set does not grow. A scan that fails (the database busy
+// under a writer) is tried again on the next call.
 func (s *Store) legacyFor(project string) []any {
-	s.legacyOnce.Do(func() {
-		s.legacyKeys = map[string][]string{}
-		rows, err := s.DB.Query(`SELECT DISTINCT project_key FROM sessions WHERE project_key IS NOT NULL AND project_key != ''`)
-		if err != nil {
-			return
+	s.legacyMu.Lock()
+	defer s.legacyMu.Unlock()
+	if !s.legacyLoaded {
+		if m, err := s.scanLegacyKeys(); err == nil {
+			s.legacyKeys, s.legacyLoaded = m, true
 		}
-		defer rows.Close()
-		for rows.Next() {
-			var k string
-			if rows.Scan(&k) != nil {
-				continue
-			}
-			if n := projectkey.Normalize(k); n != k && n != "" {
-				s.legacyKeys[n] = append(s.legacyKeys[n], k)
-			}
-		}
-	})
+	}
 	var out []any
 	for _, k := range s.legacyKeys[project] {
 		out = append(out, k)
 	}
 	return out
+}
+
+// scanLegacyKeys is a test hook over readLegacyKeys.
+var scanLegacyKeysHook func(*Store) (map[string][]string, error)
+
+func (s *Store) scanLegacyKeys() (map[string][]string, error) {
+	if scanLegacyKeysHook != nil {
+		return scanLegacyKeysHook(s)
+	}
+	return s.readLegacyKeys()
+}
+
+func (s *Store) readLegacyKeys() (map[string][]string, error) {
+	rows, err := s.DB.Query(`SELECT DISTINCT project_key FROM sessions WHERE project_key IS NOT NULL AND project_key != ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := map[string][]string{}
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		if n := projectkey.Normalize(k); n != k && n != "" {
+			m[n] = append(m[n], k)
+		}
+	}
+	return m, rows.Err()
 }

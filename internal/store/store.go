@@ -30,9 +30,10 @@ type Store struct {
 	sessionsGen atomic.Uint64
 	// legacyKeys maps a normalized project key to stored session keys
 	// that normalize to it but are not in that form (rows written by an
-	// older release); read once (see SessionsForProject).
-	legacyOnce sync.Once
-	legacyKeys map[string][]string
+	// older release); read once it reads cleanly (see SessionsForProject).
+	legacyMu     sync.Mutex
+	legacyLoaded bool
+	legacyKeys   map[string][]string
 }
 
 func Open(root string) (*Store, error) {
@@ -107,6 +108,17 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_sid ON sessions(session_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_proj ON sessions(project_key);
+CREATE TABLE IF NOT EXISTS table_versions (
+  name TEXT PRIMARY KEY,
+  version INTEGER NOT NULL
+);
+INSERT OR IGNORE INTO table_versions(name, version) VALUES('sessions', 0);
+CREATE TRIGGER IF NOT EXISTS sessions_version_ins AFTER INSERT ON sessions
+BEGIN UPDATE table_versions SET version = version + 1 WHERE name = 'sessions'; END;
+CREATE TRIGGER IF NOT EXISTS sessions_version_upd AFTER UPDATE ON sessions
+BEGIN UPDATE table_versions SET version = version + 1 WHERE name = 'sessions'; END;
+CREATE TRIGGER IF NOT EXISTS sessions_version_del AFTER DELETE ON sessions
+BEGIN UPDATE table_versions SET version = version + 1 WHERE name = 'sessions'; END;
 CREATE TABLE IF NOT EXISTS path_postings (
   project_key TEXT NOT NULL,
   path_key TEXT NOT NULL,

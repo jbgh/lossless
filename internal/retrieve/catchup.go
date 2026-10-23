@@ -55,6 +55,10 @@ func (e Engine) catchUpKnown(req Request, sess store.Session) {
 	if ws == "" {
 		ws = req.WorkspaceRoot
 	}
+	if project == "" && ws != "" {
+		// What CatchUp would resolve for itself, timed as project time.
+		project = req.timing.project(ws)
+	}
 	if out, err := write.CatchUp(e.Store, write.CatchUpRequest{
 		JSONL: sess.JSONL, Project: project, WorkspaceRoot: ws,
 		Harness: sess.Harness, SessionID: sess.SessionID, Source: "turn",

@@ -250,40 +250,12 @@ func codexCWD(path string) string {
 	return cwd
 }
 
-// resolveProject turns a workspace into a project key by running git.
-// Tests replace it to count calls.
-var resolveProject = projectkey.FromWorkspace
-
-// projectTTL is how long a workspace's resolved project is reused. An
-// origin changes about never; the catch-up path resolves for itself.
-const projectTTL = 10 * time.Minute
-
-var projectCache = struct {
-	sync.Mutex
-	m map[string]projectEntry
-}{m: map[string]projectEntry{}}
-
-type projectEntry struct {
-	key string
-	at  time.Time
-}
-
-func resetProjectCache() {
-	projectCache.Lock()
-	projectCache.m = map[string]projectEntry{}
-	projectCache.Unlock()
-}
-
-func cachedProject(workspace string) string {
-	projectCache.Lock()
-	defer projectCache.Unlock()
-	if e, ok := projectCache.m[workspace]; ok && time.Since(e.at) < projectTTL {
-		return e.key
-	}
-	key := resolveProject(workspace)
-	projectCache.m[workspace] = projectEntry{key: key, at: time.Now()}
-	return key
-}
+// resolveProject turns a workspace into a project key through the shared
+// per-workspace cache (projectkey.Cached), the one catch-up and ask use,
+// so the watcher never disagrees with them about a workspace's project
+// (a path-hash key is kept 30 s, an owner/repo key 10 minutes). Tests
+// replace it to count calls.
+var resolveProject = projectkey.Cached
 
 // projectsBySession indexes the stored project of every known session by
 // harness and session id. Discover lists database-tracked sessions
@@ -311,7 +283,7 @@ func sealProject(t Target, known map[string]string) string {
 		return p
 	}
 	if t.Workspace != "" {
-		return cachedProject(t.Workspace)
+		return resolveProject(t.Workspace)
 	}
 	return ""
 }
@@ -575,6 +547,7 @@ func Run(ctx context.Context, st *store.Store, opts Options) error {
 		opts.Interval = DefaultInterval
 	}
 	w := NewWatcher()
+	w.coldEvery = coldEveryFor(opts.Interval)
 	t := time.NewTicker(opts.Interval)
 	defer t.Stop()
 	sweep := time.NewTicker(time.Hour)
