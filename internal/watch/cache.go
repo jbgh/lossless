@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"hash/fnv"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -33,12 +34,23 @@ import (
 // clock can stamp two writes alike), and every verifyEvery the walk and
 // the per-target checks run in full.
 //
+// Most transcripts sit idle for days. A file or directory that has not
+// changed for coldAfter is cold: between verify passes it is looked at
+// once every coldEvery ticks, on a slot spread by a hash of its path,
+// instead of on every tick. Cold-ness comes from the mtime the watcher
+// last saw, so a cold file that grows is caught on its slot and is hot
+// from then on.
+//
 // A Watcher is used by one goroutine. The zero value is not ready; use
 // NewWatcher.
 type Watcher struct {
 	gen        uint64
 	verify     bool // this tick runs in full
 	lastVerify time.Time
+	now        time.Time // this tick's start
+
+	coldAfter time.Duration
+	coldEvery uint64 // ticks; 1 checks everything every tick
 
 	peeks map[string]peekEntry
 	dirs  map[string]dirEntry
@@ -70,12 +82,43 @@ const verifyEvery = 5 * time.Minute
 // clock, so its cached state is not trusted.
 const racyWindow = 2 * time.Second
 
+// A file or directory unchanged this long is checked on its slot only:
+// once every coldEvery ticks (30 s at the default 2 s interval). A hook
+// reports each turn as it happens, so this bounds how late the watcher
+// catches a turn a hook missed in a session idle for coldAfter.
+const (
+	defaultColdAfter = 10 * time.Minute
+	defaultColdEvery = 15
+)
+
 func NewWatcher() *Watcher {
 	return &Watcher{
-		peeks: map[string]peekEntry{},
-		dirs:  map[string]dirEntry{},
-		quiet: map[string]quietEntry{},
+		coldAfter: defaultColdAfter,
+		coldEvery: defaultColdEvery,
+		peeks:     map[string]peekEntry{},
+		dirs:      map[string]dirEntry{},
+		quiet:     map[string]quietEntry{},
 	}
+}
+
+// slotOf spreads cold checks over the ticks of a cycle.
+func slotOf(key string) uint32 {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(key))
+	return h.Sum32()
+}
+
+// due reports whether a cached file or directory, last seen with mtime
+// mod (0 when it was missing), is looked at this tick: always on a verify
+// pass, every tick while it changed within coldAfter, else on its slot.
+func (w *Watcher) due(slot uint32, mod int64) bool {
+	if w.verify || w.coldEvery <= 1 {
+		return true
+	}
+	if mod != 0 && w.now.UnixNano()-mod < int64(w.coldAfter) {
+		return true
+	}
+	return (uint64(slot)+w.gen)%w.coldEvery == 0
 }
 
 type fileSig struct {
@@ -101,21 +144,25 @@ func racy(fi fs.FileInfo, now time.Time) bool {
 }
 
 type peekEntry struct {
-	sig fileSig
-	cwd string
-	gen uint64
+	sig  fileSig
+	cwd  string
+	gen  uint64
+	slot uint32
 }
 
 type dirEntry struct {
 	mod     int64
 	entries []fs.DirEntry
+	paths   []string // dir joined with each entry's name
 	gen     uint64
+	slot    uint32
 }
 
 type quietEntry struct {
 	sig     fileSig
 	updated int64
 	gen     uint64
+	slot    uint32
 }
 
 // beginTick starts a generation. A verify tick drops the listing and
@@ -124,6 +171,7 @@ type quietEntry struct {
 // permission flip) on a file that never changes is retried here.
 func (w *Watcher) beginTick(now time.Time) {
 	w.gen++
+	w.now = now
 	w.verify = w.lastVerify.IsZero() || now.Sub(w.lastVerify) >= verifyEvery
 	if w.verify {
 		w.lastVerify = now
@@ -165,7 +213,9 @@ func (w *Watcher) endTick() {
 // root itself is Lstat'ed (a symlinked root is not followed), symlinked
 // directories are not entered, and an unreadable directory is skipped.
 // A directory whose mtime has not moved since it was last read is not
-// read again; it still costs one Lstat. Appending to a file does not move
+// read again; it still costs one Lstat, and a cold one (see due) is not
+// even Lstat'ed off its slot. The root is Lstat'ed every tick, so a new
+// project directory is found at once. Appending to a file does not move
 // its directory's mtime, so callers stat the files they care about.
 func (w *Watcher) walk(root string, fn func(path string, d fs.DirEntry)) {
 	fi, err := os.Lstat(root)
@@ -181,25 +231,39 @@ func (w *Watcher) walk(root string, fn func(path string, d fs.DirEntry)) {
 
 func (w *Watcher) walkDir(dir string, fi fs.FileInfo, now time.Time, fn func(string, fs.DirEntry)) {
 	mod := fi.ModTime().UnixNano()
-	var entries []fs.DirEntry
-	if e, ok := w.dirs[dir]; ok && e.mod == mod {
-		entries = e.entries
-		e.gen = w.gen
-		w.dirs[dir] = e
-	} else {
+	e, ok := w.dirs[dir]
+	if !ok || e.mod != mod {
 		// Stat before reading: an entry added after the read moves the
 		// mtime past the one cached here.
-		var err error
-		entries, err = os.ReadDir(dir)
-		if err == nil && !racy(fi, now) {
-			w.dirs[dir] = dirEntry{mod: mod, entries: entries, gen: w.gen}
-		} else {
+		entries, err := os.ReadDir(dir)
+		paths := make([]string, len(entries))
+		for i, d := range entries {
+			paths[i] = filepath.Join(dir, d.Name())
+		}
+		e = dirEntry{mod: mod, entries: entries, paths: paths, slot: slotOf(dir)}
+		if err != nil || racy(fi, now) {
 			delete(w.dirs, dir)
+			w.visit(e, now, fn)
+			return
 		}
 	}
-	for _, e := range entries {
-		p := filepath.Join(dir, e.Name())
-		if e.IsDir() {
+	e.gen = w.gen
+	w.dirs[dir] = e
+	w.visit(e, now, fn)
+}
+
+// visit walks a directory listing. A subdirectory with a cached listing
+// that is not due this tick is entered from the cache without an Lstat.
+func (w *Watcher) visit(e dirEntry, now time.Time, fn func(string, fs.DirEntry)) {
+	for i, d := range e.entries {
+		p := e.paths[i]
+		if d.IsDir() {
+			if c, ok := w.dirs[p]; ok && !w.due(c.slot, c.mod) {
+				c.gen = w.gen
+				w.dirs[p] = c
+				w.visit(c, now, fn)
+				continue
+			}
 			sub, err := os.Lstat(p)
 			if err != nil || !sub.IsDir() {
 				continue
@@ -207,7 +271,7 @@ func (w *Watcher) walkDir(dir string, fi fs.FileInfo, now time.Time, fn func(str
 			w.walkDir(p, sub, now, fn)
 			continue
 		}
-		fn(p, e)
+		fn(p, d)
 	}
 }
 
@@ -217,6 +281,12 @@ func (w *Watcher) walkDir(dir string, fi fs.FileInfo, now time.Time, fn func(str
 func (w *Watcher) peek(path string, d fs.DirEntry, fn func(string) string) string {
 	// The walk listed the file, so it exists; a found cwd needs no stat.
 	if e, ok := w.peeks[path]; ok && e.cwd != "" && d != nil {
+		e.gen = w.gen
+		w.peeks[path] = e
+		return e.cwd
+	}
+	// No cwd yet in a file idle for coldAfter: look again on its slot.
+	if e, ok := w.peeks[path]; ok && d != nil && !w.due(e.slot, e.sig.mod) {
 		e.gen = w.gen
 		w.peeks[path] = e
 		return e.cwd
@@ -239,7 +309,7 @@ func (w *Watcher) peek(path string, d fs.DirEntry, fn func(string) string) strin
 		return e.cwd
 	}
 	cwd := fn(path)
-	w.peeks[path] = peekEntry{sig: sig, cwd: cwd, gen: w.gen}
+	w.peeks[path] = peekEntry{sig: sig, cwd: cwd, gen: w.gen, slot: slotOf(path)}
 	return cwd
 }
 
@@ -348,5 +418,20 @@ func (w *Watcher) markQuiet(key string, sig fileSig, updated int64) {
 	if key == "" {
 		return
 	}
-	w.quiet[key] = quietEntry{sig: sig, updated: updated, gen: w.gen}
+	w.quiet[key] = quietEntry{sig: sig, updated: updated, gen: w.gen, slot: slotOf(key)}
+}
+
+// coldQuiet reports a file target found quiet before whose file is cold
+// and off its slot this tick: it is skipped without a stat.
+func (w *Watcher) coldQuiet(key string, updated int64) bool {
+	if w.verify || key == "" {
+		return false
+	}
+	e, ok := w.quiet[key]
+	if !ok || e.updated != updated || w.due(e.slot, e.sig.mod) {
+		return false
+	}
+	e.gen = w.gen
+	w.quiet[key] = e
+	return true
 }

@@ -218,6 +218,9 @@ var (
 	peekOmpCWD    = harness.PeekOmpCWD
 )
 
+// statFile is the per-target stat. Tests replace it to count stats.
+var statFile = os.Stat
+
 // listSessions reads the session table. Tests replace it to count reads.
 var listSessions = (*store.Store).ListSessions
 
@@ -475,14 +478,20 @@ func (w *Watcher) Tick(st *store.Store, opts Options) (Result, error) {
 			if quietKey == "" {
 				quietKey = t.Harness + ":" + t.SessionID
 			}
+			if w.coldQuiet(quietKey, t.UpdatedAt) {
+				continue
+			}
 			if t.JSONL != "" {
-				if f, err := os.Stat(t.JSONL); err == nil {
+				if f, err := statFile(t.JSONL); err == nil {
 					fi, sig = f, sigOf(f)
 				}
 			}
 			if w.isQuiet(quietKey, sig, t.UpdatedAt) {
 				continue
 			}
+			// Its file moved on (or is new): drop the old state, so the
+			// next look stats it and sees it hot, not cold at its old mtime.
+			delete(w.quiet, quietKey)
 			if fi == nil || st.Cursor(t.JSONL) == fi.Size() {
 				if sealed := idleSeal(st, t, opts, projects); sealed {
 					res.Sealed++

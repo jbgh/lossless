@@ -105,6 +105,9 @@ func TestWatcherCatchesUpAGrownFileWithoutRepeek(t *testing.T) {
 	st, opts, cdir, cfile := cacheFixture(t)
 	peeks, _ := countPeeks(t)
 	w := NewWatcher()
+	// This test pins pickup on the very next tick; the cold backoff (see
+	// cold_test.go) would delay an hour-old file to its slot.
+	w.coldEvery = 1
 	if _, err := w.Tick(st, opts); err != nil {
 		t.Fatal(err)
 	}
@@ -160,6 +163,9 @@ func TestWatcherDropsADeletedFile(t *testing.T) {
 func TestWatcherFindsANewFileInACachedDirectory(t *testing.T) {
 	st, opts, cdir, cfile := cacheFixture(t)
 	w := NewWatcher()
+	// This test pins pickup on the very next tick; the cold backoff (see
+	// cold_test.go) would delay an hour-old file to its slot.
+	w.coldEvery = 1
 	age(t, cfile, cdir, filepath.Dir(cdir))
 	if _, err := w.Tick(st, opts); err != nil {
 		t.Fatal(err)
@@ -242,6 +248,9 @@ func TestWatcherRetriesAFailedCatchUpOnlyWhenTheFileChanges(t *testing.T) {
 	opts := Options{PiRoot: filepath.Join(root, "pi")}
 	peeks, catchUps := countPeeks(t)
 	w := NewWatcher()
+	// This test pins pickup on the very next tick; the cold backoff (see
+	// cold_test.go) would delay an hour-old file to its slot.
+	w.coldEvery = 1
 	for i := 0; i < 3; i++ {
 		if _, err := w.Tick(st, opts); err != nil {
 			t.Fatal(err)
