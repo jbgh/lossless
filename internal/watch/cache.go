@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"lossless/internal/harness"
@@ -65,6 +66,7 @@ type Watcher struct {
 	knownProjects map[string]string
 	knownStore    *store.Store
 	knownGen      uint64
+	knownShape    [2]int64 // row count and max rowid at the last read
 	knownOK       bool
 
 	// discover's dedupe map and result, reused between ticks.
@@ -343,13 +345,19 @@ func (w *Watcher) openCodeSessions(db string) []write.OpenCodeSession {
 }
 
 // knownSessions returns the session table and the project of each session
-// by harness and id, reading the table again only when this store changed
-// it since the last read, or at the verify pass. The generation is read
-// before the rows, so a write landing during the read moves it past the
-// one kept here and the next tick reads again.
+// by harness and id, reading the table again only when it changed since
+// the last read, or at the verify pass. A change through this Store moves
+// SessionsGen; a row another process inserts or deletes moves the table's
+// count or max rowid. Another process rewriting a row in place (a CLI
+// catch-up that changes a session's project) is seen at the verify pass.
+// Both marks are read before the rows, so a write landing during the read
+// moves them past the ones kept here and the next tick reads again.
 func (w *Watcher) knownSessions(st *store.Store) ([]store.Session, map[string]string, error) {
 	gen := st.SessionsGen()
-	if w.knownOK && w.knownStore == st && w.knownGen == gen {
+	var shape [2]int64
+	var err error
+	shape[0], shape[1], err = st.SessionsShape()
+	if err == nil && w.knownOK && w.knownStore == st && w.knownGen == gen && w.knownShape == shape {
 		return w.known, w.knownProjects, nil
 	}
 	known, err := listSessions(st)
@@ -358,7 +366,7 @@ func (w *Watcher) knownSessions(st *store.Store) ([]store.Session, map[string]st
 		return nil, nil, err
 	}
 	w.known, w.knownProjects = known, projectsBySession(known)
-	w.knownStore, w.knownGen, w.knownOK = st, gen, true
+	w.knownStore, w.knownGen, w.knownShape, w.knownOK = st, gen, shape, true
 	return known, w.knownProjects, nil
 }
 
@@ -383,24 +391,15 @@ func (w *Watcher) codexThreads(home string) []harness.CodexThread {
 			}
 		}
 	}
-	if !w.codexOK || w.codexHome != home || !sameSigs(sig, w.codexSig) {
-		w.codexRows = codexStateRows(home)
+	if !w.codexOK || w.codexHome != home || !slices.Equal(sig, w.codexSig) {
+		rows, complete := codexStateRows(home)
+		w.codexRows = rows
 		w.codexHome, w.codexSig = home, sig
-		w.codexOK = trust
+		// A read that failed part way is used this tick and read again
+		// on the next, as every tick did before the cache.
+		w.codexOK = trust && complete
 	}
 	return harness.CodexLiveRollouts(w.codexRows)
-}
-
-func sameSigs(a, b []fileSig) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // isQuiet reports a target this watcher already found caught up, with

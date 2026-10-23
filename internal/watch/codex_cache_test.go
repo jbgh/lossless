@@ -24,7 +24,7 @@ func countCodexReads(t *testing.T) *int {
 	t.Helper()
 	n := new(int)
 	real := codexStateRows
-	codexStateRows = func(home string) []harness.CodexThread { *n++; return real(home) }
+	codexStateRows = func(home string) ([]harness.CodexThread, bool) { *n++; return real(home) }
 	t.Cleanup(func() { codexStateRows = real })
 	return n
 }
@@ -108,5 +108,43 @@ func TestWatcherCachesCodexStateRows(t *testing.T) {
 	}
 	if *reads != 2 {
 		t.Fatalf("the rollout check reopened the db: %d reads", *reads)
+	}
+}
+
+// A read that failed part way (Codex holding a lock on its state database)
+// is not kept as the database's contents: the next tick reads again, as
+// every tick did before the cache, even though no file changed.
+func TestWatcherRereadsAnIncompleteCodexRead(t *testing.T) {
+	home := t.TempDir()
+	dbPath := filepath.Join(home, "state_5.sqlite")
+	if err := os.WriteFile(dbPath, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	age(t, dbPath)
+	n := 0
+	complete := false
+	real := codexStateRows
+	codexStateRows = func(string) ([]harness.CodexThread, bool) {
+		n++
+		return nil, complete
+	}
+	t.Cleanup(func() { codexStateRows = real })
+	w := NewWatcher()
+	opts := Options{CodexRoot: filepath.Join(home, "sessions")}
+	tick := func() {
+		w.beginTick(time.Now())
+		defer w.endTick()
+		w.discover(opts, nil)
+	}
+	tick()
+	tick()
+	if n != 2 {
+		t.Fatalf("incomplete read reused: %d reads over two ticks, want 2", n)
+	}
+	complete = true
+	tick()
+	tick()
+	if n != 3 {
+		t.Fatalf("complete read not cached: %d reads, want 3", n)
 	}
 }

@@ -66,3 +66,24 @@ func TestSessionsForProjectMatchesAFilteredList(t *testing.T) {
 		t.Fatalf("empty project matched %d rows", len(got))
 	}
 }
+
+// A row an older release stored with a key in another form (before
+// Normalize learned it) is still found by the project it normalizes to,
+// as the old filter-in-Go found it.
+func TestSessionsForProjectMatchesALegacyKey(t *testing.T) {
+	st := orphanStore(t)
+	if err := st.UpsertSession(Session{JSONL: "/a/new.jsonl", SessionID: "new", Harness: "claude", Project: "acme/api"}); err != nil {
+		t.Fatal(err)
+	}
+	// Written raw, the way an older release would have stored it.
+	if _, err := st.DB.Exec(`INSERT INTO sessions(jsonl, session_id, harness, workspace, project_key) VALUES('/a/old.jsonl','old','claude','','Acme/API.git')`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.SessionsForProject("acme/api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].SessionID != "new" || got[1].SessionID != "old" {
+		t.Fatalf("got %+v, want new then old", got)
+	}
+}

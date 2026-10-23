@@ -135,7 +135,7 @@ VALUES('thread-missing-file', '/no/such/rollout.jsonl', 1, 8, 'desktop', 'openai
 
 	// The raw rows keep the stored path; the live pass clears it while the
 	// file is gone and keeps it once the file exists.
-	rows := CodexStateRows(root)
+	rows, _ := CodexStateRows(root)
 	var missing CodexThread
 	for _, th := range rows {
 		if th.ID == "thread-missing-file" {

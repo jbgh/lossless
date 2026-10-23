@@ -89,8 +89,10 @@ func TestWatcherKeepsTheSessionListUntilItChanges(t *testing.T) {
 }
 
 // Another process (the CLI) writes the same database through its own
-// store; its rows reach the watcher at the next full pass.
-func TestWatcherSeesAnotherStoresSessionAtTheVerifyPass(t *testing.T) {
+// store. A row it inserts or deletes changes the table's count or max
+// rowid and is seen on the next tick; a row it rewrites in place is seen
+// at the next full pass.
+func TestWatcherSeesAnotherStoresSessions(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "home")
 	st, err := store.Open(home)
 	if err != nil {
@@ -103,24 +105,40 @@ func TestWatcherSeesAnotherStoresSessionAtTheVerifyPass(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = other.Close() })
 	w := NewWatcher()
-	if _, err := w.Tick(st, Options{}); err != nil {
-		t.Fatal(err)
+	tick := func() {
+		t.Helper()
+		if _, err := w.Tick(st, Options{}); err != nil {
+			t.Fatal(err)
+		}
 	}
+	tick()
 	file := "/gone/elsewhere/chat_history.jsonl"
 	if err := other.UpsertSession(store.Session{JSONL: file, SessionID: "g2", Harness: "grok", Project: "jay/api"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Tick(st, Options{}); err != nil {
+	tick()
+	if !knownHas(w, file) {
+		t.Fatal("another store's new session was not seen on the next tick")
+	}
+
+	if err := other.UpsertSession(store.Session{JSONL: file, SessionID: "g2", Harness: "grok", Project: "jay/web"}); err != nil {
 		t.Fatal(err)
 	}
-	if knownHas(w, file) {
-		t.Fatal("expected the cached list until the verify pass")
+	tick()
+	if w.knownProjects["grok:g2"] != "jay/api" {
+		t.Fatalf("expected the cached project until the verify pass, got %q", w.knownProjects["grok:g2"])
 	}
 	w.lastVerify = time.Now().Add(-verifyEvery)
-	if _, err := w.Tick(st, Options{}); err != nil {
+	tick()
+	if w.knownProjects["grok:g2"] != "jay/web" {
+		t.Fatal("the verify pass did not reload a row rewritten in place")
+	}
+
+	if err := other.DeleteSession(file); err != nil {
 		t.Fatal(err)
 	}
-	if !knownHas(w, file) {
-		t.Fatal("the verify pass did not reload the session list")
+	tick()
+	if knownHas(w, file) {
+		t.Fatal("another store's deleted session was still listed on the next tick")
 	}
 }

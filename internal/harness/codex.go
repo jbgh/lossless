@@ -203,7 +203,8 @@ type CodexThread struct {
 // CodexStateThreads lists desktop/CLI threads, including rows whose
 // rollout_path is empty or the file is gone. sessions/ may not exist.
 func CodexStateThreads(home string) []CodexThread {
-	return CodexLiveRollouts(CodexStateRows(home))
+	rows, _ := CodexStateRows(home)
+	return CodexLiveRollouts(rows)
 }
 
 // CodexStateDBs are the Codex state databases CodexStateRows reads, newest
@@ -220,9 +221,12 @@ func CodexStateDBs(home string) []string {
 // CodexStateRows reads every thread row as stored, rollout_path included
 // even when its file is gone. The rows change only when a state database
 // does, so the watcher caches them; CodexLiveRollouts applies the file
-// check, which can change any time.
-func CodexStateRows(home string) []CodexThread {
-	var out []CodexThread
+// check, which can change any time. complete is false when a database
+// that exists could not be read in full (Codex holding a lock, a schema
+// mid-migration): the rows are what could be read, and a caller must not
+// keep them as the database's contents.
+func CodexStateRows(home string) (out []CodexThread, complete bool) {
+	complete = true
 	seen := map[string]bool{}
 	for _, p := range CodexStateDBs(home) {
 		if !fileExists(p) {
@@ -230,16 +234,19 @@ func CodexStateRows(home string) []CodexThread {
 		}
 		db, err := sql.Open("sqlite", "file:"+p+"?mode=ro")
 		if err != nil {
+			complete = false
 			continue
 		}
 		rows, err := db.Query(`SELECT id, COALESCE(cwd, ''), COALESCE(rollout_path, ''), COALESCE(first_user_message, ''), COALESCE(updated_at, 0) FROM threads`)
 		if err != nil {
+			complete = false
 			_ = db.Close()
 			continue
 		}
 		for rows.Next() {
 			var t CodexThread
 			if rows.Scan(&t.ID, &t.CWD, &t.Rollout, &t.FirstUser, &t.Updated) != nil {
+				complete = false
 				continue
 			}
 			if t.ID == "" || seen[t.ID] {
@@ -248,10 +255,13 @@ func CodexStateRows(home string) []CodexThread {
 			seen[t.ID] = true
 			out = append(out, t)
 		}
+		if rows.Err() != nil {
+			complete = false
+		}
 		_ = rows.Close()
 		_ = db.Close()
 	}
-	return out
+	return out, complete
 }
 
 // CodexLiveRollouts returns a copy of rows with Rollout cleared where the

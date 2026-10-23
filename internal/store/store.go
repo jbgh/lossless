@@ -28,6 +28,11 @@ type Store struct {
 	// sessionsGen moves on every change to the sessions table made
 	// through this Store (see SessionsGen).
 	sessionsGen atomic.Uint64
+	// legacyKeys maps a normalized project key to stored session keys
+	// that normalize to it but are not in that form (rows written by an
+	// older release); read once (see SessionsForProject).
+	legacyOnce sync.Once
+	legacyKeys map[string][]string
 }
 
 func Open(root string) (*Store, error) {
