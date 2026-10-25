@@ -495,28 +495,30 @@ func emit(packed []scored, st *store.Store) ([]Hit, []string, int) {
 			_, h.HasExcerpt = st.ExcerptCovering(c.rec.TranscriptRef, created)
 		}
 		hits = append(hits, h)
-		if c.failedOverlap == 1 && c.rec.Type == "failed" {
-			w := "A prior attempt at this goal failed (see " + c.rec.ID + "). Do not repeat it without new evidence."
-			if !seenWarn[w] {
-				warnings = append(warnings, w)
-				seenWarn[w] = true
-			}
+		kind := -1
+		switch {
+		case c.failedOverlap == 1 && c.rec.Type == "failed":
+			kind = warnFailed
+		case c.shippedOverlap == 1 && c.rec.Type == "decision":
+			kind = warnCover
+		case c.shippedOverlap == 1 && c.rec.Type == "constraint":
+			kind = warnConstraint
 		}
-		if c.shippedOverlap == 1 && c.rec.Type == "decision" {
-			w := "Existing implementation may already cover part of this goal (see " + c.rec.ID + "). get_record that id before treating it as done."
-			if !seenWarn[w] {
-				warnings = append(warnings, w)
-				seenWarn[w] = true
-			}
-		}
-		if c.shippedOverlap == 1 && c.rec.Type == "constraint" {
-			w := "A standing constraint applies (see " + c.rec.ID + "). Do not violate it without an explicit override."
+		if kind >= 0 {
+			w := warnKinds[kind].line(c.rec.ID)
 			if !seenWarn[w] {
 				warnings = append(warnings, w)
 				seenWarn[w] = true
 			}
 		}
 	}
+	return hits, warnings, packetTokens(hits, warnings)
+}
+
+// packetTokens is the estimate an ask reports: the hits as JSON plus the
+// warnings, one per line. emit, warning decay, and the merge all count
+// with it.
+func packetTokens(hits []Hit, warnings []string) int {
 	tokens := 0
 	if len(hits) > 0 {
 		tokens += estimateTokens(mustJSON(hits))
@@ -524,7 +526,7 @@ func emit(packed []scored, st *store.Store) ([]Hit, []string, int) {
 	if len(warnings) > 0 {
 		tokens += estimateTokens(strings.Join(warnings, "\n"))
 	}
-	return hits, warnings, tokens
+	return tokens
 }
 
 func toHit(c scored, verify bool) Hit {

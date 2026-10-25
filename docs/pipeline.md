@@ -149,7 +149,8 @@ ask(work context)
   context ≤5, token budget, diversity
   if a failed-overlap missed the cap, evict something else
   warnings only for ids that are in context (carve-out: the recurrence
-    warning cites the cluster's newest id, which may be outside context)
+    warning quotes the cluster's newest rule, which may be outside context);
+    one line per warning kind, citing every id
   return
 ```
 

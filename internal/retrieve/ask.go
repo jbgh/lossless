@@ -62,11 +62,33 @@ func (e Engine) Ask(req Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	e.recordAsk(req, p.q, p.seed, p.out)
+	e.recordAsk(p.req, p.q, p.seed, p.out)
 	return p.out, nil
 }
 
+// fillFromSession resolves an ask the model sent with only a stamped
+// session id: the session rows the watcher indexed carry the project and
+// workspace, so the ask keeps its project identity instead of failing on
+// missing project identity, and the workspace steps ([verify] marks, the
+// thin-ask compile) still run. Caller-sent project or workspace wins; a
+// field the session's rows disagree on is not filled.
+func (e Engine) fillFromSession(req Request) Request {
+	if e.Store == nil {
+		return req
+	}
+	sid := CleanSessionID(req.SessionID)
+	if sid == "" || req.Project != "" || req.WorkspaceRoot != "" {
+		return req
+	}
+	if sess, ok := e.Store.SessionIdentity(sid); ok {
+		req.Project = sess.Project
+		req.WorkspaceRoot = sess.Workspace
+	}
+	return req
+}
+
 type prep struct {
+	req    Request // the request after fillFromSession
 	q      query
 	seed   []string
 	cand   []scored
@@ -83,6 +105,7 @@ type traceDrop struct {
 }
 
 func (e Engine) prepare(req Request) (prep, error) {
+	req = e.fillFromSession(req)
 	if !req.skipCatchUp {
 		e.maybeCatchUp(req)
 	}
@@ -98,7 +121,7 @@ func (e Engine) prepare(req Request) (prep, error) {
 	q.Targeted = q.ContentTokens == 1 && hasInterrogative(q.QuestionTokens, q.GoalTokens)
 	prof := selectProfile(q)
 	empty := Response{Context: []Hit{}, Warnings: []string{}, Project: q.ProjectKey}
-	p := prep{q: q, seed: seedPaths, out: empty}
+	p := prep{req: req, q: q, seed: seedPaths, out: empty}
 	if e.Store != nil {
 		q.CompactAt = compactedAt(e.Store, q.ProjectKey, q.SessionID)
 	}
@@ -253,9 +276,12 @@ func (e Engine) prepare(req Request) (prep, error) {
 	for _, w := range recurrenceWarnings(e.Store, q, packed, now, memo) {
 		if !slices.Contains(warnings, w) {
 			warnings = append(warnings, w)
-			tokens += estimateTokens(w)
 		}
 	}
+	// One line per warning kind, citing every id (§7b). Last, so decay and
+	// recurrence still see one line per record.
+	warnings = mergeWarnings(warnings)
+	tokens = packetTokens(hits, warnings)
 	p.cand = cand
 	p.packed = packed
 	p.out = Response{Context: hits, Warnings: warnings, Tokens: tokens, Project: q.ProjectKey}

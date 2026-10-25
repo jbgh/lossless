@@ -735,6 +735,7 @@ var (
 		"recap-as-failed",
 		// talk about ask's own warning text
 		"prior attempt failed", "prior attempt at this goal",
+		"prior attempts failed", "prior attempts at this goal",
 	}
 	processState = []string{
 		"in this session", "the next stop", "next test that matters",

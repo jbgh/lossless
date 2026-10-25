@@ -239,7 +239,7 @@ func (e Engine) recordAsk(req Request, q query, seedPaths []string, out Response
 		})
 	}
 	for _, w := range out.Warnings {
-		if id := warnClaimID(w); id != "" {
+		for _, id := range warnClaimIDs(w) {
 			acts = append(acts, store.Action{
 				ProjectKey: q.ProjectKey, SessionID: sess, Kind: store.ActionWarn,
 				ClaimID: id, At: at,
@@ -256,19 +256,6 @@ func (e Engine) recordAsk(req Request, q query, seedPaths []string, out Response
 		SessionSet: strings.TrimSpace(req.SessionID) != "",
 		Identity:   debuglog.Identity(req.Project, q.ProjectKey),
 		Hits:       len(out.Context),
-		Warns:      len(out.Warnings),
+		Warns:      warnRecordCount(out.Warnings),
 	})
-}
-
-func warnClaimID(w string) string {
-	i := strings.Index(w, "(see ")
-	if i < 0 {
-		return ""
-	}
-	rest := w[i+5:]
-	j := strings.IndexByte(rest, ')')
-	if j < 0 {
-		return ""
-	}
-	return strings.TrimSpace(rest[:j])
 }

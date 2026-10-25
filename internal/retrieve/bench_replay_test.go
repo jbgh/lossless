@@ -110,7 +110,7 @@ func TestBenchAuditBundleRecurrence(t *testing.T) {
 		t.Fatalf("standing constraint not packed: %s", textsOf(out))
 	}
 	for _, w := range out.Warnings {
-		if strings.Contains(w, "prior attempt at this goal failed") {
+		if isWarnKind(w, warnFailed) {
 			t.Fatalf("status-snapshot faileds must stay silent, got: %v", out.Warnings)
 		}
 	}
@@ -143,7 +143,7 @@ func TestBenchTailscaleStaleConstraintQuits(t *testing.T) {
 		Goal:     "ship the deploy",
 	})
 	for _, w := range out.Warnings {
-		if strings.Contains(w, "standing constraint applies") {
+		if isWarnKind(w, warnConstraint) {
 			t.Fatalf("stale constraint still warns: %v", out.Warnings)
 		}
 	}
@@ -285,7 +285,7 @@ func TestBenchRecurrenceNoDoubleWarning(t *testing.T) {
 	})
 	standing, recurring := false, false
 	for _, w := range out.Warnings {
-		if strings.Contains(w, "standing constraint applies") {
+		if isWarnKind(w, warnConstraint) {
 			standing = true
 		}
 		if strings.Contains(w, "Recurring failure") {
@@ -348,7 +348,12 @@ func TestBenchRecurrenceRarityCap(t *testing.T) {
 	// warning if the constraint packs on overlap (the no-double rule
 	// then correctly suppresses the recurrence warning), else by the
 	// recurrence warning itself.
-	delivered := strings.Contains(strings.Join(out.Warnings, " "), "standing constraint applies")
+	delivered := false
+	for _, w := range out.Warnings {
+		if isWarnKind(w, warnConstraint) {
+			delivered = true
+		}
+	}
 	if !delivered {
 		for _, w := range out.Warnings {
 			if strings.Contains(w, "audit-gate") {
@@ -366,4 +371,11 @@ func TestBenchRecurrenceRarityCap(t *testing.T) {
 	if !delivered {
 		t.Fatalf("rare trap should win delivery, got warnings=%v context=%s", out.Warnings, textsOf(out))
 	}
+}
+
+// isWarnKind reports whether w is a pack-side warning of kind k, merged or
+// not. It matches the line's opening, so a recurrence line quoting a rule
+// that happens to contain the same words does not count.
+func isWarnKind(w string, k int) bool {
+	return strings.HasPrefix(w, warnKinds[k].one) || strings.HasPrefix(w, warnKinds[k].many)
 }

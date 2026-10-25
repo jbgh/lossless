@@ -28,6 +28,7 @@ const (
 	RecurrenceWindowDays = 60
 	RecurrenceMinRecords = 3
 	RecurrenceMaxWarn    = 1
+	RecurrenceRuleRunes  = 240
 	ConstraintFTSStrong  = 0.8
 	PackCap              = 5
 	PackTypeCap          = 2

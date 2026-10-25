@@ -9,6 +9,7 @@ import (
 
 	"lossless/internal/claim"
 	"lossless/internal/store"
+	"lossless/internal/write"
 )
 
 // Recurrence-keyed warnings (docs/algorithm.md §7). A gate, script, or
@@ -50,8 +51,9 @@ func recKey(s string) string {
 type recurrenceCluster struct {
 	ident string
 	count int
-	ref   store.RecurrenceRow // reference record: newest constraint (always exists)
-	ids   []string            // member record ids
+	ref   store.RecurrenceRow  // reference record: newest constraint (always exists)
+	quote *store.RecurrenceRow // newest live constraint a warning may quote (quotableRule), if any
+	ids   []string             // member record ids
 }
 
 // recurrenceClusters scans the project's active failed/constraint
@@ -104,6 +106,7 @@ func recurrenceClusters(st *store.Store, project string, now time.Time, memo *de
 		// session's retry burst: require members to span at least two
 		// distinct days or two distinct sessions.
 		hasConstraint := false
+		var quote *store.RecurrenceRow
 		ref := rs[0]
 		newest := rs[0]
 		ids := make([]string, 0, len(rs))
@@ -126,6 +129,14 @@ func recurrenceClusters(st *store.Store, project string, now time.Time, memo *de
 				ref = r
 				hasConstraint = true
 			}
+			// The quote is chosen on its own: a newer turn-extracted echo
+			// of the rule must not hide the rule an agent recorded.
+			if r.Type == "constraint" && (quote == nil || r.CreatedAt >= quote.CreatedAt) && !isDecayed(r) {
+				if _, ok := quotableRule(r); ok {
+					q := r
+					quote = &q
+				}
+			}
 		}
 		if !hasConstraint {
 			continue
@@ -133,7 +144,7 @@ func recurrenceClusters(st *store.Store, project string, now time.Time, memo *de
 		if len(days) < 2 && len(sessions) < 2 {
 			continue
 		}
-		out = append(out, recurrenceCluster{ident: ident, count: len(rs), ref: ref, ids: ids})
+		out = append(out, recurrenceCluster{ident: ident, count: len(rs), ref: ref, quote: quote, ids: ids})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		// Newest rule first: a freshly written standing rule should
@@ -256,9 +267,45 @@ func recurrenceWarnings(st *store.Store, q query, packed []scored, now time.Time
 		if len(out) >= RecurrenceMaxWarn {
 			break
 		}
-		out = append(out, fmt.Sprintf(
-			"Recurring failure in this project: `%s` appears in %d failure/constraint records over the last %d days (newest %s). get_record the newest id and confirm this goal will not trip it again without an explicit override.",
-			c.ident, c.count, RecurrenceWindowDays, c.ref.ID))
+		out = append(out, recurrenceLine(c))
 	}
 	return out
+}
+
+// recurrenceLine is one recurrence warning. The rule's own sentence rides
+// in it when an agent wrote a live rule of the cluster with remember (the
+// newest such rule, not the newest rule of any source): agents opened about 1%
+// of cited ids, and on 2026-10-17 a builder warned by id only ran the job
+// the rule forbids. A rule extracted from a turn, or one with markup in it,
+// is cited by id only: a warning is read as blocking and fires on every
+// ask, so it must not carry a sentence nobody chose to record (the same
+// line said records hold, a quote and never an instruction). "(id …)", not
+// "(see …)": warn actions are booked from "(see …)" and share the
+// session's action-tape window, so a new row per ask would shift packs.
+func recurrenceLine(c recurrenceCluster) string {
+	head := fmt.Sprintf("Recurring failure in this project: `%s` appears in %d failure/constraint records over the last %d days.",
+		c.ident, c.count, RecurrenceWindowDays)
+	if c.quote != nil {
+		rule, _ := quotableRule(*c.quote)
+		day := c.quote.CreatedAt
+		if len(day) >= 10 {
+			day = day[:10]
+		}
+		return fmt.Sprintf("%s The rule on record (id %s, %s) reads: \"%s\" Confirm this goal will not trip it without an explicit override.",
+			head, c.quote.ID, day, rule)
+	}
+	return fmt.Sprintf("%s The newest rule is id %s. get_record it and confirm this goal will not trip it without an explicit override.",
+		head, c.ref.ID)
+}
+
+// quotableRule is the rule sentence a recurrence warning may quote: an
+// agent-written (remember) record that passes the markup test quotes of
+// the user's own turns pass (write.SaidMarkedUp: no closing tag, no
+// harness-shaped tag, no comment; "Map<string, number>" and "a < b" are
+// fine) and has no code fence.
+func quotableRule(r store.RecurrenceRow) (string, bool) {
+	if r.Source != "remember" || write.SaidMarkedUp(r.Text) || strings.Contains(r.Text, "```") {
+		return "", false
+	}
+	return warnRuleText(r.Text, RecurrenceRuleRunes), true
 }

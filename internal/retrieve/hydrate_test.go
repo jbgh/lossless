@@ -1,6 +1,7 @@
 package retrieve
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -157,11 +158,14 @@ func TestDwellDoesNotForceFailedOnNewPath(t *testing.T) {
 	}
 }
 
-func TestWarnClaimID(t *testing.T) {
-	if warnClaimID("A prior attempt at this goal failed (see 01JFAIL). Do not repeat.") != "01JFAIL" {
-		t.Fatal(warnClaimID("A prior attempt at this goal failed (see 01JFAIL). Do not repeat."))
+func TestWarnClaimIDs(t *testing.T) {
+	if got := warnClaimIDs("A prior attempt at this goal failed (see 01JFAIL). Do not repeat."); !slices.Equal(got, []string{"01JFAIL"}) {
+		t.Fatal(got)
 	}
-	if warnClaimID("no id") != "" {
-		t.Fatal("empty")
+	if got := warnClaimIDs("Prior attempts at this goal failed (see 01JA, 01JB). Do not repeat them."); !slices.Equal(got, []string{"01JA", "01JB"}) {
+		t.Fatal(got)
+	}
+	if got := warnClaimIDs("no id"); got != nil {
+		t.Fatal(got)
 	}
 }

@@ -27,8 +27,25 @@ func Remember(st *store.Store, rec claim.Record) (CatchUpResult, error) {
 	if rec.Text == "" || rec.Type == "" {
 		return out, fmt.Errorf("type and text required")
 	}
+	// A harness-stamped session id locates the session the watcher already
+	// indexed (harness, workspace, project), so a remember the model sent
+	// without a workspace_root still books to the right project and keeps
+	// its harness instead of falling back to "other". Caller-sent fields
+	// win: project and workspace are filled together, and only when the
+	// caller sent neither, so they never come from two different repos. A
+	// field the session's rows disagree on is not filled.
+	rec.SessionID = claim.CleanSessionID(rec.SessionID)
+	if sess, ok := st.SessionIdentity(rec.SessionID); ok {
+		if rec.Harness == "" {
+			rec.Harness = sess.Harness
+		}
+		if rec.ProjectKey == "" && rec.WorkspaceRoot == "" {
+			rec.ProjectKey = sess.Project
+			rec.WorkspaceRoot = sess.Workspace
+		}
+	}
 	if rec.ProjectKey == "" && rec.WorkspaceRoot != "" {
-		rec.ProjectKey = projectkey.FromWorkspace(rec.WorkspaceRoot)
+		rec.ProjectKey = projectkey.Cached(rec.WorkspaceRoot)
 	}
 	if rec.ProjectKey == "" {
 		return out, fmt.Errorf("project or workspace_root required")

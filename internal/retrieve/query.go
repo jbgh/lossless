@@ -79,16 +79,9 @@ func resolveProject(req Request) (string, error) {
 	return "", errBadRequest
 }
 
-// CleanSessionID drops sentinels children send instead of omitting the field.
-// "default" must not exact-locate or bind a fake action tape id.
-func CleanSessionID(s string) string {
-	s = strings.TrimSpace(s)
-	switch strings.ToLower(s) {
-	case "", "default", "none", "null", "undefined":
-		return ""
-	}
-	return s
-}
+// CleanSessionID drops sentinels children send instead of omitting the field
+// (see claim.CleanSessionID).
+func CleanSessionID(s string) string { return claim.CleanSessionID(s) }
 
 func normalize(req Request) (query, error) {
 	project, err := resolveProject(req)

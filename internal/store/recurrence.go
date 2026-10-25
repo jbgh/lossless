@@ -7,7 +7,7 @@ import (
 // recurrenceCols is the lean projection for the recurrence scan: the
 // scan runs on every ask, so it hydrates only what the clusterer reads
 // instead of the full 17-column claim row.
-const recurrenceCols = `id, type, session_id, created_at, text`
+const recurrenceCols = `id, type, session_id, created_at, text, source`
 
 // RecurrenceRow is the lean projection the recurrence scan needs.
 type RecurrenceRow struct {
@@ -16,6 +16,7 @@ type RecurrenceRow struct {
 	SessionID string
 	CreatedAt string
 	Text      string
+	Source    string
 }
 
 // RecordsForRecurrence returns the active failed/constraint rows of a
@@ -34,7 +35,7 @@ func (s *Store) RecordsForRecurrence(project, since string) ([]RecurrenceRow, er
 	var out []RecurrenceRow
 	for rows.Next() {
 		var r RecurrenceRow
-		if err := rows.Scan(&r.ID, &r.Type, &r.SessionID, &r.CreatedAt, &r.Text); err != nil {
+		if err := rows.Scan(&r.ID, &r.Type, &r.SessionID, &r.CreatedAt, &r.Text, &r.Source); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

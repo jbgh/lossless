@@ -301,15 +301,7 @@ func decayConstraintWarnings(packed []scored, warnings []string, hits []Hit, tok
 	if len(kept) == len(warnings) {
 		return warnings, tokens
 	}
-	// Recount the way emit counted: hits plus the surviving warnings.
-	total := 0
-	if len(hits) > 0 {
-		total += estimateTokens(mustJSON(hits))
-	}
-	if len(kept) > 0 {
-		total += estimateTokens(strings.Join(kept, "\n"))
-	}
-	return kept, total
+	return kept, packetTokens(hits, kept)
 }
 
 // StaleCandidate is one decayed, still-active constraint: `inspect --prune`

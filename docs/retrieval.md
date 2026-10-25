@@ -310,7 +310,9 @@ After packing, scan the **packed** hits plus any `failed_overlap=1` candidate th
 
 If a `failed_overlap` record did not fit in the 5, **evict the lowest-score non-failed packed hit** and insert it. Job 1 is not allowed to lose to the cap.
 
-Warnings must cite ids that appear in `context`. If you warn, the record is in `context`. One carve-out: the recurrence warning cites the cluster's newest record, which may sit outside `context` (gate-named faileds stay out of packs by design) — it is still get_record-able by id.
+Several warnings of one kind merge into one line citing every id: `Prior attempts at this goal failed (see {id}, {id}). Do not repeat them without new evidence.`, `Existing implementation may already cover part of this goal (see {id}, {id}). get_record the one that matches before treating it as done.`, `Standing constraints apply (see {id}, {id}). Do not violate them without an explicit override.` A kind with one id keeps the sentence above ([algorithm.md](algorithm.md) §7b).
+
+Warnings must cite ids that appear in `context`. If you warn, the record is in `context`. One carve-out: the recurrence warning cites the cluster's newest standing rule as `(id {id})`, quoting its sentence when an agent wrote it with `remember` and it has no markup; that record may sit outside `context` (gate-named faileds stay out of packs by design) — it is still get_record-able by id.
 
 ---
 

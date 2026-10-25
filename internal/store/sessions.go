@@ -76,6 +76,54 @@ func (s *Store) SessionByID(sessionID string) (Session, bool) {
 	return out, true
 }
 
+// SessionIdentity is what every row indexed under one session id agrees on:
+// a field is filled only when all rows carry the same value, and nothing
+// is returned when they disagree on the project. One
+// id can have several rows (a resumed or forked session, another harness
+// firing the same hooks); picking one of them would be a guess, and an ask
+// or remember filled from the wrong row books to the wrong project.
+func (s *Store) SessionIdentity(sessionID string) (Session, bool) {
+	if sessionID == "" {
+		return Session{}, false
+	}
+	rows, err := s.DB.Query(
+		`SELECT DISTINCT harness, COALESCE(workspace, ''), COALESCE(project_key, '') FROM sessions WHERE session_id = ?`, sessionID)
+	if err != nil {
+		return Session{}, false
+	}
+	defer rows.Close()
+	var all []Session
+	for rows.Next() {
+		var r Session
+		if err := rows.Scan(&r.Harness, &r.Workspace, &r.Project); err != nil {
+			return Session{}, false
+		}
+		all = append(all, r)
+	}
+	if rows.Err() != nil || len(all) == 0 {
+		return Session{}, false
+	}
+	// Rows that disagree on the project fill nothing: a workspace they
+	// share may be a worktree since deleted, which would resolve to an
+	// empty path-keyed project instead of the missing-identity error.
+	for _, r := range all[1:] {
+		if r.Project != all[0].Project {
+			return Session{}, false
+		}
+	}
+	out := all[0]
+	for _, r := range all[1:] {
+		if r.Harness != all[0].Harness {
+			out.Harness = ""
+		}
+		if r.Workspace != all[0].Workspace {
+			out.Workspace = ""
+		}
+	}
+	out.SessionID = sessionID
+	return out, true
+}
+
 func (s *Store) ListSessions() ([]Session, error) {
 	rows, err := s.DB.Query(`SELECT jsonl, session_id, harness, workspace, project_key FROM sessions`)
 	if err != nil {
