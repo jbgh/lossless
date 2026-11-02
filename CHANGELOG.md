@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.47 — 2026-11-02
+
+- **Remembered decisions keep their place in the context again.** 0.1.46 let the step that makes room for a standing rule push out any record that does not warn, and decisions stopped warning in that release. On a replay of real asks that changed about a third of the answers, usually swapping a decision recorded about the exact task for a looser rule. Decisions are protected again: on the same asks the context now matches 0.1.45 exactly, with the smaller set of warnings from 0.1.46 (about 1.7 per ask instead of 2.75).
+- **Fewer real failures mistaken for tests that fail on purpose.** "The checkout test failed first with a timeout" and "red on CI and green locally" are failures, not test-first steps; wording like that now counts as a test-first report only beside a new test or a pass after it.
+- **Docs** no longer describe a decision warning.
+
 ## 0.1.46 — 2026-11-02
 
 - **Claude Code's copies of each request are no longer read as turns.** Recent Claude Code versions write every message they send to the model a second time, in an `api-request-blob` line. Every turn in it is also on its own line, so lossless was reading each one twice. The copy carries harness text in the user's slot, so compact resume instructions and pieces of skill files were stored as the user's rules, and harness lines such as "Permission granted for: …" were stored as the user's own words. Every claim in a copy was also written a second time, a couple of seconds later. Those lines are now skipped. Records they already produced stay in a store until they are retired by hand with `lossless supersede`.
