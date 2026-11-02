@@ -345,26 +345,30 @@ func lineEntrypoint(chunk string, rel int64) string {
 	return top.Entrypoint
 }
 
-// turnEntrypoint is lineEntrypoint for a turn's line, or, when that line
-// has none (a queue-operation enqueue), the nearest earlier line's in the
-// chunk, then the nearest later one: a queued message belongs to the
-// session around it.
+// turnEntrypoint is lineEntrypoint for a turn's line. Claude Code writes
+// a queued message (queue-operation enqueue) with no entrypoint of its
+// own; it belongs to the session around it, so such a line takes the
+// nearest earlier line's entrypoint in the chunk, then the nearest later
+// one, looking at most entrypointReach lines each way. Only a
+// queue-operation line falls back: other harnesses never stamp an
+// entrypoint, and a scan for each of their turns would read the whole
+// chunk.
 func turnEntrypoint(chunk string, rel int64) string {
 	if e := lineEntrypoint(chunk, rel); e != "" {
 		return e
 	}
-	if rel < 0 || rel >= int64(len(chunk)) {
+	if !strings.Contains(lineAt(chunk, rel), `"queue-operation"`) {
 		return ""
 	}
 	// Earlier lines: each ends with the '\n' just before the next one's start.
-	for start := rel; start > 0; {
+	for start, n := rel, 0; start > 0 && n < entrypointReach; n++ {
 		start = int64(strings.LastIndexByte(chunk[:start-1], '\n') + 1)
 		if e := lineEntrypoint(chunk, start); e != "" {
 			return e
 		}
 	}
 	// Later lines.
-	for start := rel; ; {
+	for start, n := rel, 0; n < entrypointReach; n++ {
 		i := strings.IndexByte(chunk[start:], '\n')
 		if i < 0 {
 			return ""
@@ -374,7 +378,13 @@ func turnEntrypoint(chunk string, rel int64) string {
 			return e
 		}
 	}
+	return ""
 }
+
+// entrypointReach bounds turnEntrypoint's scan. Claude Code writes the
+// enqueue, its remove and an attachment line with an entrypoint next to
+// each other; a run of queued task notifications can be longer.
+const entrypointReach = 64
 
 // lineAt is the JSONL line that starts at rel in chunk.
 func lineAt(chunk string, rel int64) string {

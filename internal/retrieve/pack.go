@@ -418,15 +418,13 @@ func evictConstraint(packed, all []scored, limit, ftsN int) []scored {
 		return missing[i].score > missing[j].score
 	})
 	// evictable: not a job-1 failed, not a warning-bearing record — the
-	// rescue must never destroy a warning to deliver context.
+	// rescue must never destroy a warning to deliver context. A decision
+	// or state with shippedOverlap no longer warns, so it can make room.
 	evictable := func(p scored) bool {
 		if p.rec.Type == "failed" && p.failedOverlap == 1 {
 			return false
 		}
-		if p.shippedOverlap == 1 {
-			return false
-		}
-		return true
+		return warnKindOf(p) < 0
 	}
 	for _, m := range missing {
 		if typeCount(packed, "constraint") >= PackTypeCap {
@@ -484,6 +482,28 @@ func evictConstraint(packed, all []scored, limit, ftsN int) []scored {
 	return packed
 }
 
+// warnKindOf is the warning a packed record carries, or -1. Packing asks
+// the same question (evictConstraint must not evict a record that warns),
+// so this is the only place that decides it.
+//
+// A warning has to say more than the pack already does. Every packed
+// decision used to warn "may already cover" (98% of asks on 2026-11-02),
+// so decisions no longer warn. Most turn-extracted faileds are narration,
+// so a failed warns only when it is deliberate memory (remember, import),
+// or it shares a file or this ask's own identifier with the ask, or it
+// matches past the vector gate. A turn constraint always comes from a
+// user turn and keeps its warning.
+func warnKindOf(c scored) int {
+	switch {
+	case c.failedOverlap == 1 && c.rec.Type == "failed" &&
+		(claim.ExplicitMemory(c.rec.Source) || c.path > 0 || c.ownSymbol || c.vector >= VectorGate):
+		return warnFailed
+	case c.shippedOverlap == 1 && c.rec.Type == "constraint":
+		return warnConstraint
+	}
+	return -1
+}
+
 func emit(packed []scored, st *store.Store) ([]Hit, []string, int) {
 	hits := make([]Hit, 0, len(packed))
 	var warnings []string
@@ -495,21 +515,7 @@ func emit(packed []scored, st *store.Store) ([]Hit, []string, int) {
 			_, h.HasExcerpt = st.ExcerptCovering(c.rec.TranscriptRef, created)
 		}
 		hits = append(hits, h)
-		// A warning has to say more than the pack already does. Every
-		// packed decision used to warn "may already cover" (98% of asks
-		// on 2026-11-02), so decisions no longer warn. Most turn-extracted
-		// faileds are narration, so a failed warns only when an agent
-		// recorded it with remember, or it shares a file or an identifier
-		// with the ask, or it matches the ask past the vector gate. A turn constraint always comes from a user turn
-		// and keeps its warning.
-		kind := -1
-		switch {
-		case c.failedOverlap == 1 && c.rec.Type == "failed" &&
-			(c.rec.Source == "remember" || c.path > 0 || c.symbol > 0 || c.vector >= VectorGate):
-			kind = warnFailed
-		case c.shippedOverlap == 1 && c.rec.Type == "constraint":
-			kind = warnConstraint
-		}
+		kind := warnKindOf(c)
 		if kind >= 0 {
 			w := warnKinds[kind].line(c.rec.ID)
 			if !seenWarn[w] {

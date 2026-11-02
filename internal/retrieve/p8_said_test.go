@@ -147,8 +147,8 @@ func TestSaidSkipsTheAskingSessionsFreshTurns(t *testing.T) {
 func TestSaidDoesNotOutrankAWarning(t *testing.T) {
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{
-		ID: "01JDEC", Type: "decision", Source: "remember",
-		Text:      "Chose the fixed-window limiter for login rate limiting.",
+		ID: "01JDEC", Type: "constraint", Source: "remember",
+		Text:      "Always use the fixed-window limiter for login rate limiting.",
 		Paths:     []string{"src/middleware/auth.ts"},
 		CreatedAt: "2026-08-01T09:00:00Z",
 	})
@@ -162,8 +162,8 @@ func TestSaidDoesNotOutrankAWarning(t *testing.T) {
 	if len(out.Context) < 2 || out.Context[0].ID != "01JDEC" {
 		t.Fatalf("the warning-bearing decision must lead: %+v", out.Context)
 	}
-	if len(out.Warnings) != 0 {
-		t.Fatalf("neither a decision nor a said warns: %v", out.Warnings)
+	if !hasWarn(out, "01JDEC") || hasWarn(out, "01JSAID") {
+		t.Fatalf("warnings: %v", out.Warnings)
 	}
 }
 

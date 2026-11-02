@@ -650,3 +650,21 @@ func TestCatchUpReadsAQueuedTurnAsItsSessionsEntrypoint(t *testing.T) {
 		}
 	}
 }
+
+// Only a queued line borrows a neighbour's entrypoint. Another harness's
+// line has none of its own and must not trigger a scan of the chunk.
+func TestTurnEntrypointBorrowsOnlyForQueuedLines(t *testing.T) {
+	cli := `{"type":"user","entrypoint":"cli","message":{"role":"user","content":"hi"}}` + "\n"
+	queued := `{"type":"queue-operation","operation":"enqueue","content":"later"}` + "\n"
+	plain := `{"type":"user","message":{"role":"user","content":"no stamp"}}` + "\n"
+	chunk := cli + queued + plain
+	if got := turnEntrypoint(chunk, int64(len(cli))); got != "cli" {
+		t.Fatalf("queued line: %q, want cli", got)
+	}
+	if got := turnEntrypoint(chunk, int64(len(cli)+len(queued))); got != "" {
+		t.Fatalf("unstamped non-queued line borrowed %q", got)
+	}
+	if got := turnEntrypoint(queued+cli, 0); got != "cli" {
+		t.Fatalf("queued first line: %q, want the later line's cli", got)
+	}
+}

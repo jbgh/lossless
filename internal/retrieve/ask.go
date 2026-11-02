@@ -332,15 +332,20 @@ type scored struct {
 	agree          float64
 	failedOverlap  float64
 	shippedOverlap float64
-	failedWeak     float64
-	shippedWeak    float64
-	served         float64
-	dwell          float64
-	oon            float64
-	stale          float64
-	score          float64
-	ftsRaw         float64
-	isFTS          bool
+	// ownSymbol: the record shares a code identifier (sharedCodeIdent)
+	// with this ask's own symbols, not ones inherited from the action
+	// tape. Record symbols include plain words, so a symbol Jaccard is not
+	// an identifier match.
+	ownSymbol   bool
+	failedWeak  float64
+	shippedWeak float64
+	served      float64
+	dwell       float64
+	oon         float64
+	stale       float64
+	score       float64
+	ftsRaw      float64
+	isFTS       bool
 	// saidFTS: found by SearchSaid. Its bm25 is normalized among said
 	// hits only; the two lexical routes run different queries.
 	saidFTS bool
@@ -666,7 +671,8 @@ func (e Engine) features(rec claim.Record, q query, fts, said, knn map[string]fl
 	// route needs two shared symbols; on a terse record one shared word
 	// alone clears 0.25.
 	ownSym := q.OwnSymbols
-	strong := s.path > 0 || sharedCodeIdent(ownSym, rec.Symbols, q.Targeted) ||
+	s.ownSymbol = sharedCodeIdent(ownSym, rec.Symbols, q.Targeted)
+	strong := s.path > 0 || s.ownSymbol ||
 		(jaccard(ownSym, rSym) >= OverlapSymbolMin && sharedCount(ownSym, rSym) >= 2) ||
 		hits >= overlapNeed(len(ov)) || s.vector >= VectorGate
 	// A said record is a whole turn in the user's own spelling, kept

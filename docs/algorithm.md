@@ -190,7 +190,7 @@ Sort by score, then `created_at`, then id. Then walk. Hard cap 5. At most 2 per 
 
 | Packed hit | Warning |
 |------------|---------|
-| failed + `failed_overlap`, and written with `remember`, or sharing a file or identifier with the ask, or past the vector gate | A prior attempt failed (see id). Do not repeat without new evidence. |
+| failed + `failed_overlap`, and deliberate memory (`remember`, import), or sharing a file or one of the ask's own code identifiers with the ask, or past the vector gate | A prior attempt failed (see id). Do not repeat without new evidence. |
 | constraint + `shipped_overlap` | A standing constraint applies (see id). |
 | recurrence cluster | Recurring failure in this project: `<ident>` appears in N failure/constraint records over the last 60 days. The rule on record (id …, date) reads: "<its sentence>" Confirm this goal will not trip it without an explicit override. A turn-extracted or marked-up rule: … The newest rule is id …. get_record it and confirm … |
 

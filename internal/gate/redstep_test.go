@@ -7,13 +7,10 @@ import "testing"
 func TestRedStepDropsTestFirstReports(t *testing.T) {
 	for _, s := range []string{
 		"Every new test failed first and then passed.",
-		"They failed first on an ImportError for REFUSED_HINT, and all 9 pass now.",
-		"Tests: the fuzzy and leading-digit tests failed on the old code (4 failures).",
 		"**RED:** before the implementation, `node --test tests/js/room-page.test.js` failed 3 tests.",
 		"RED was 12 failed before the code, with 404/405 on the routes.",
 		"I captured RED on the Python tests (14 failed with src stashed).",
 		"JS tests were seen red against the old call.js (7 failed).",
-		"Before the fixes, 3 Python tests and 1 JS test failed.",
 		"For items 1 and 2 the new test failed before the fix (pytest 3 failed, node 2 failed).",
 		"The 4 new Python tests and the 2 new JS tests failed with src stashed (RED) and pass now.",
 		"Tests: tests/test_pipeline_stream.py went from 12 failed (RED) to 13 passed.",
@@ -40,6 +37,24 @@ func TestRedStepKeepsRealFailures(t *testing.T) {
 		// an infra flake on a first run, and old as a plain adjective
 		"The PR's first run failed on an infra timeout (a Go test package timed out at 7 minutes) and passed on a re-run.",
 		"Moving the towels before the window does not fit on the old grids: the heat test needs a warm stretch.",
+		// a weak marker with no new test and no pass after reads the same
+		// as a post-mortem, so it stays
+		"Tests: the fuzzy and leading-digit tests failed on the old code (4 failures).",
+		"Before the fixes, 3 Python tests and 1 JS test failed.",
+		// "failed first on X" reads the same as a post-mortem
+		"They failed first on an ImportError for REFUSED_HINT, and all 9 pass now.",
+		"The checkout test failed first on Safari, then on Chrome, which means the cookie is the problem.",
+		"The canary test failed first in us-east and then everywhere; the cert had expired.",
+		"The flaky test failed first in CI and then passed on rerun.",
+		"Every new test failed first, and the old suite then failed to compile on Go 1.22.",
+		// review probes: post-mortems and CI colors
+		"CI red: npm ci failed with ERESOLVE on react 19.",
+		"Pipeline #2161 red: the arm64 build failed linking libssl.",
+		"I saw red on the arm64 runner: the go test step failed with a segfault.",
+		"The node process failed with ENOMEM before the change to the worker pool.",
+		"The auth test failed before the fix: the token cache ignored the tenant id.",
+		"The e2e suite failed against the previous build with a 502 from nginx.",
+		"The integration test failed before the fix landed, and it took prod down for an hour.",
 	} {
 		if RedStep(s) {
 			t.Errorf("real failure read as a red step: %q", s)

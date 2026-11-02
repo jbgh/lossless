@@ -1,13 +1,15 @@
 package inspect
 
 import (
+	"lossless/internal/claim"
 	"lossless/internal/store"
 	"lossless/internal/write"
 )
 
 // supersedeStatusReports retires the failed records that are really
 // status reports, using the same predicate extract drops them with. It
-// supersedes, never deletes: the row and its text survive.
+// supersedes, never deletes: the row and its text survive. Deliberate
+// memory (remember, import) is left alone.
 //
 // The seen-before lookup counts only records created before this one, so
 // of several reports of the same failure the earliest survives: it is the
@@ -27,13 +29,12 @@ func supersedeStatusReports(st *store.Store, project string, out *PruneResult) e
 			ok, err := st.FailedNameSeen(self.ProjectKey, name, self.ID, self.CreatedAt)
 			return err == nil && ok
 		}
-		reason, drop := write.StatusReportSkip(self.Text, seen)
-		if !drop {
+		// The status shapes are capture-time judgements about narration.
+		// Deliberate memory (remember, import) was written to be kept.
+		if claim.ExplicitMemory(self.Source) {
 			continue
 		}
-		// A red step is a capture-time shape: an agent that wrote the
-		// sentence with remember meant to keep it.
-		if reason == "red-step" && self.Source == "remember" {
+		if _, drop := write.StatusReportSkip(self.Text, seen); !drop {
 			continue
 		}
 		if err := st.Supersede(self.ID); err != nil {
