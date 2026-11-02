@@ -6,5 +6,5 @@
   },
   "must_include_types": ["decision"],
   "must_include_substrings": ["jose"],
-  "must_warn": "implementation"
+  "must_not_warn": true
 }

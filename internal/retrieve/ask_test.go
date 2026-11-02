@@ -455,6 +455,26 @@ func ids(out Response) string {
 	return b.String()
 }
 
+// shippedStrong reports whether ask packs id with a strong shipped
+// overlap: what a decision warning used to show before decisions stopped
+// warning.
+func shippedStrong(t *testing.T, st *store.Store, req Request, id string) bool {
+	t.Helper()
+	e := Engine{Store: st, Now: func() time.Time {
+		return time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
+	}}
+	tr, err := e.Explain(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range tr.Packed {
+		if h.ID == id {
+			return h.Shipped >= 1
+		}
+	}
+	return false
+}
+
 func hasWarn(out Response, needle string) bool {
 	for _, w := range out.Warnings {
 		if strings.Contains(w, needle) {

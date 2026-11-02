@@ -345,6 +345,37 @@ func lineEntrypoint(chunk string, rel int64) string {
 	return top.Entrypoint
 }
 
+// turnEntrypoint is lineEntrypoint for a turn's line, or, when that line
+// has none (a queue-operation enqueue), the nearest earlier line's in the
+// chunk, then the nearest later one: a queued message belongs to the
+// session around it.
+func turnEntrypoint(chunk string, rel int64) string {
+	if e := lineEntrypoint(chunk, rel); e != "" {
+		return e
+	}
+	if rel < 0 || rel >= int64(len(chunk)) {
+		return ""
+	}
+	// Earlier lines: each ends with the '\n' just before the next one's start.
+	for start := rel; start > 0; {
+		start = int64(strings.LastIndexByte(chunk[:start-1], '\n') + 1)
+		if e := lineEntrypoint(chunk, start); e != "" {
+			return e
+		}
+	}
+	// Later lines.
+	for start := rel; ; {
+		i := strings.IndexByte(chunk[start:], '\n')
+		if i < 0 {
+			return ""
+		}
+		start += int64(i) + 1
+		if e := lineEntrypoint(chunk, start); e != "" {
+			return e
+		}
+	}
+}
+
 // lineAt is the JSONL line that starts at rel in chunk.
 func lineAt(chunk string, rel int64) string {
 	if rel < 0 || rel >= int64(len(chunk)) {
@@ -413,10 +444,10 @@ func writeSaid(st *store.Store, msgs []Message, chunk string, base int64, opts E
 		TapeStart: tapeStart,
 		Briefs:    run.briefs,
 		Interactive: func(m Message) bool {
-			return lineEntrypoint(chunk, m.Offset-base) == "cli"
+			return turnEntrypoint(chunk, m.Offset-base) == "cli"
 		},
 		Programmatic: func(m Message) bool {
-			return strings.HasPrefix(lineEntrypoint(chunk, m.Offset-base), "sdk-")
+			return strings.HasPrefix(turnEntrypoint(chunk, m.Offset-base), "sdk-")
 		},
 		At: func(m Message) time.Time {
 			if t := lineTime(chunk, m.Offset-base); !t.IsZero() {

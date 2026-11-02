@@ -162,8 +162,8 @@ func TestSaidDoesNotOutrankAWarning(t *testing.T) {
 	if len(out.Context) < 2 || out.Context[0].ID != "01JDEC" {
 		t.Fatalf("the warning-bearing decision must lead: %+v", out.Context)
 	}
-	if !hasWarn(out, "01JDEC") || hasWarn(out, "01JSAID") {
-		t.Fatalf("warnings: %v", out.Warnings)
+	if len(out.Warnings) != 0 {
+		t.Fatalf("neither a decision nor a said warns: %v", out.Warnings)
 	}
 }
 
@@ -386,8 +386,11 @@ func TestTypedRecordWinsOverItsSaidDuplicate(t *testing.T) {
 	if got := hitTypes(out); got != "decision " {
 		t.Fatalf("want the decision alone, got %q: %+v", got, out.Context)
 	}
-	if !hasWarn(out, "01JDEC") {
-		t.Fatalf("the decision's warning was lost: %v", out.Warnings)
+	if !shippedStrong(t, st, Request{
+		Project: "acme/api", Goal: "move the store from sqlite to postgres",
+		Paths: []string{"internal/store/store.go"},
+	}, "01JDEC") {
+		t.Fatalf("the decision lost its strong overlap: %+v", out.Context)
 	}
 }
 

@@ -121,7 +121,7 @@ There are six kinds of record:
 
 A record is a one-line summary, never the whole story. `get_record` opens the tape excerpt behind any `id`.
 
-Warnings flag four things: an earlier attempt at this goal that failed, shipped work that may already cover the goal, a standing rule the goal touches, and a failure that keeps recurring in the project. A record only comes back if it shares a file, an identifier, or enough of the goal's words with the ask. When nothing applies, the answer is empty.
+Warnings flag three things: an earlier attempt at this goal that failed (one an agent recorded, or one about a file or identifier the ask names), a standing rule the goal touches, and a failure that keeps recurring in the project. A past decision comes back in the context, not as a warning. A record only comes back if it shares a file, an identifier, or enough of the goal's words with the ask. When nothing applies, the answer is empty.
 
 ## Using it yourself
 

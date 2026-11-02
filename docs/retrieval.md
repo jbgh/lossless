@@ -304,13 +304,14 @@ After packing, scan the **packed** hits plus any `failed_overlap=1` candidate th
 
 | Condition | Warning |
 |-----------|---------|
-| Any packed or uncapped-but-overlapping `failed` | `A prior attempt at this goal failed (see {id}). Do not repeat it without new evidence.` |
-| Any packed `decision` with `shipped_overlap=1` | `Existing implementation may already cover part of this goal (see {id}). get_record that id before treating it as done.` |
+| Any packed or uncapped-but-overlapping `failed` that was written with `remember`, shares a file or an identifier with the ask, or passes the vector gate | `A prior attempt at this goal failed (see {id}). Do not repeat it without new evidence.` |
 | Any packed `constraint` with `shipped_overlap=1` | `A standing constraint applies (see {id}). Do not violate it without an explicit override.` |
+
+A packed `decision` does not warn: it fired on 98% of asks (2026-11-02 audit) and only restated the pack. A turn-extracted `failed` with no file, identifier or vector match does not warn either; most are narration. Both still pack and rank as before.
 
 If a `failed_overlap` record did not fit in the 5, **evict the lowest-score non-failed packed hit** and insert it. Job 1 is not allowed to lose to the cap.
 
-Several warnings of one kind merge into one line citing every id: `Prior attempts at this goal failed (see {id}, {id}). Do not repeat them without new evidence.`, `Existing implementation may already cover part of this goal (see {id}, {id}). get_record the one that matches before treating it as done.`, `Standing constraints apply (see {id}, {id}). Do not violate them without an explicit override.` A kind with one id keeps the sentence above ([algorithm.md](algorithm.md) §7b).
+Several warnings of one kind merge into one line citing every id: `Prior attempts at this goal failed (see {id}, {id}). Do not repeat them without new evidence.`, `Standing constraints apply (see {id}, {id}). Do not violate them without an explicit override.` A kind with one id keeps the sentence above ([algorithm.md](algorithm.md) §7b).
 
 Warnings must cite ids that appear in `context`. If you warn, the record is in `context`. One carve-out: the recurrence warning cites the cluster's newest standing rule as `(id {id})`, quoting its sentence when an agent wrote it with `remember` and it has no markup; that record may sit outside `context` (gate-named faileds stay out of packs by design) — it is still get_record-able by id.
 

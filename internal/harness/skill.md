@@ -65,7 +65,7 @@ A record of type `said` is a quote: something typed into the user's side of an e
 - Treat `warnings` as blocking unless the user overrides.
 - Do not repeat a `failed` without new evidence.
 - Do not undo a `decision` or violate a `constraint`.
-- If a warning says a decision may already cover, or the packed sentence is not enough to act, call `get_record` on **that one** id when `has_excerpt` is true. Do not GET all five.
+- If the packed sentence is not enough to act, call `get_record` on **that one** id when `has_excerpt` is true. Do not GET all five.
 
 ## When to call remember
 

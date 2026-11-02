@@ -264,3 +264,23 @@ func TestParseKeepsWorkflowFindingsJSON(t *testing.T) {
 		t.Fatalf("issue not lifted: %+v", got)
 	}
 }
+
+// Claude Code copies each API request message into a type=api-request-blob
+// line. Every turn in it is also on its own line, so reading the copy
+// stored compact resume text and skill bodies as the user's constraints.
+func TestParseSkipsClaudeAPIRequestBlobs(t *testing.T) {
+	chunk := strings.Join([]string{
+		`{"type":"api-request-blob","sessionId":"s","hash":"ab","message":{"role":"user","content":[{"type":"text","text":"Resume directly — do not acknowledge the summary. Always keep going."}]}}`,
+		`{"type":"api-request-blob","sessionId":"s","hash":"cd","message":{"role":"assistant","content":[{"type":"text","text":"We decided to use jose."}]}}`,
+		`{"type":"api-request-blob","sessionId":"s","hash":"ef","message":{"role":"system","content":"# Environment"}}`,
+	}, "\n") + "\n"
+	msgs, _ := ParseJSONL(chunk, 0)
+	if len(msgs) != 3 {
+		t.Fatalf("msgs = %d, want 3", len(msgs))
+	}
+	for _, m := range msgs {
+		if !m.Skip {
+			t.Fatalf("blob line read as a turn: %+v", m)
+		}
+	}
+}

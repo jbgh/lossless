@@ -128,3 +128,31 @@ func mustListActive(t *testing.T, st *store.Store) []claim.Record {
 	}
 	return recs
 }
+
+// A test-first red step is retired however new its test names are, but
+// not when an agent wrote it with remember.
+func TestPruneSupersedesRedStepsButNotRemembered(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn := seed("r1", "Tests: 8 new tests in tests/test_voices.py failed first (AttributeError), then passed.", "failed")
+	kept := seed("r2", "The 3 new tests in tests/test_rooms.py failed before the fix and pass now.", "failed")
+	kept.Source = "remember"
+	for _, r := range []claim.Record{turn, kept} {
+		if _, err := st.WriteClaim(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := Prune(st, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.SupersededStatusReports != 1 {
+		t.Fatalf("superseded %d, want 1: %+v", out.SupersededStatusReports, out)
+	}
+	active := mustListActive(t, st)
+	if len(active) != 1 || active[0].Source != "remember" {
+		t.Fatalf("active = %+v, want only the remembered row", active)
+	}
+}

@@ -625,3 +625,28 @@ func TestLineEntrypointReadsTheTopLevelField(t *testing.T) {
 		t.Fatalf("a nested field was read as the line's entrypoint: %q", got)
 	}
 }
+
+// A queued message (type=queue-operation) carries no entrypoint of its own.
+// It belongs to the session around it, so a program's queued prompt is not
+// read as a person's words.
+func TestCatchUpReadsAQueuedTurnAsItsSessionsEntrypoint(t *testing.T) {
+	words := "use the smaller model for all subagents from now on"
+	for entry, want := range map[string]int{"cli": 1, "sdk-py": 0} {
+		st := tmpStore(t)
+		body := `{"type":"user","entrypoint":"` + entry + `","message":{"role":"user","content":"hello there, starting now"}}` + "\n" +
+			`{"type":"queue-operation","operation":"enqueue","sessionId":"s","content":"` + words + `"}` + "\n"
+		src := writeJSONL(t, t.TempDir(), "chat.jsonl", body)
+		if _, err := CatchUp(st, CatchUpRequest{JSONL: src, Project: "acme/api", Harness: "claude", SessionID: "q-" + entry}); err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for _, s := range saidOf(t, st, "acme/api") {
+			if strings.Contains(s, "smaller model") {
+				n++
+			}
+		}
+		if n != want {
+			t.Fatalf("entrypoint %s: queued turn stored %d times, want %d", entry, n, want)
+		}
+	}
+}

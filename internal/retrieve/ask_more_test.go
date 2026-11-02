@@ -236,9 +236,12 @@ func TestShippedOverlapViaSymbol(t *testing.T) {
 		ID: "SYM", Type: "decision", Text: "Picked the widget factory for Edge.",
 		Symbols: []string{"widgetFactory"}, CreatedAt: "2026-08-01T00:00:00Z",
 	})
-	out := askAt(t, st, Request{Project: "acme/api", Question: "widgetFactory status"})
-	if !hasWarn(out, "already cover") {
-		t.Fatalf("expected shipped warn: %+v", out)
+	req := Request{Project: "acme/api", Question: "widgetFactory status"}
+	if !shippedStrong(t, st, req, "SYM") {
+		t.Fatalf("expected a strong shipped overlap: %+v", askAt(t, st, req))
+	}
+	if out := askAt(t, st, req); len(out.Warnings) != 0 {
+		t.Fatalf("a decision no longer warns: %v", out.Warnings)
 	}
 }
 

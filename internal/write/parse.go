@@ -150,7 +150,12 @@ func normalize(o map[string]any, offset int64, ownIDs map[string]bool) (Message,
 		// written session is a real first line with no message in it.
 		"title", "title_change", "model_usage", "service_tier_change",
 		"reset_boundary", "ttsr_injection", "credential_pin",
-		"session_init", "mode_change":
+		"session_init", "mode_change",
+		// Claude Code (since about 2026-10-14) copies each API request
+		// message into an api-request-blob line. Every turn in it is also
+		// on its own line; reading the copy stores compact resume text and
+		// skill bodies as the user's words, and re-writes each claim.
+		"api-request-blob":
 		return Message{Skip: true, Offset: offset}, true
 	}
 	if typ == "system" || typ == "reasoning" || typ == "backend_tool_call" {

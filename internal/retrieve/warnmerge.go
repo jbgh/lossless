@@ -21,7 +21,6 @@ type warnKind struct {
 // Kinds in warnKinds, by index.
 const (
 	warnFailed = iota
-	warnCover
 	warnConstraint
 )
 
@@ -36,12 +35,6 @@ var warnKinds = []warnKind{
 		tail:   "Do not repeat it without new evidence.",
 		many:   "Prior attempts at this goal failed (see ",
 		manyTl: "Do not repeat them without new evidence.",
-	},
-	{
-		one:    "Existing implementation may already cover part of this goal (see ",
-		tail:   "get_record that id before treating it as done.",
-		many:   "Existing implementation may already cover part of this goal (see ",
-		manyTl: "get_record the one that matches before treating it as done.",
 	},
 	{
 		one:    "A standing constraint applies (see ",

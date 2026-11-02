@@ -19,8 +19,7 @@
         "paths": ["src/db/client.ts"]
       },
       "must_include_substrings": ["postgres"],
-      "must_include_types": ["decision"],
-      "must_warn": "cover"
+      "must_include_types": ["decision"]
     }
   ]
 }

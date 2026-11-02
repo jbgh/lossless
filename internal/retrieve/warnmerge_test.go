@@ -15,7 +15,6 @@ import (
 func TestMergeWarningsOneLinePerKind(t *testing.T) {
 	in := []string{
 		"A prior attempt at this goal failed (see F1). Do not repeat it without new evidence.",
-		"Existing implementation may already cover part of this goal (see D1). get_record that id before treating it as done.",
 		"A prior attempt at this goal failed (see F2). Do not repeat it without new evidence.",
 		"A prior attempt at this goal failed (see F1). Do not repeat it without new evidence.",
 		"A standing constraint applies (see C1). Do not violate it without an explicit override.",
@@ -25,9 +24,8 @@ func TestMergeWarningsOneLinePerKind(t *testing.T) {
 	got := mergeWarnings(in)
 	want := []string{
 		"Prior attempts at this goal failed (see F1, F2). Do not repeat them without new evidence.",
-		"Existing implementation may already cover part of this goal (see D1). get_record that id before treating it as done.",
 		"Standing constraints apply (see C1, C2). Do not violate them without an explicit override.",
-		in[5],
+		in[4],
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("merge:\n got %q\nwant %q", got, want)
@@ -36,7 +34,7 @@ func TestMergeWarningsOneLinePerKind(t *testing.T) {
 	for _, w := range got {
 		ids = append(ids, warnClaimIDs(w)...)
 	}
-	if !slices.Equal(ids, []string{"F1", "F2", "D1", "C1", "C2"}) {
+	if !slices.Equal(ids, []string{"F1", "F2", "C1", "C2"}) {
 		t.Fatalf("every merged id must stay booked, got %v", ids)
 	}
 }

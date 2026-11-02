@@ -59,8 +59,8 @@ func TestTargetedRuleNeedsInterrogative(t *testing.T) {
 	if out := askAt(t, st, Request{Project: "acme/api", Goal: "add tests"}); warnsAbout(out, "F_CI") {
 		t.Fatalf("imperative single-token goal warned: %v", out.Warnings)
 	}
-	if out := askAt(t, st, Request{Project: "acme/api", Question: "why not jose"}); !warnsAbout(out, "D_JOSE") {
-		t.Fatalf("interrogative lookup must still warn: %v", out.Warnings)
+	if req := (Request{Project: "acme/api", Question: "why not jose"}); !shippedStrong(t, st, req, "D_JOSE") {
+		t.Fatalf("interrogative lookup must stay strong: %+v", askAt(t, st, req))
 	}
 }
 

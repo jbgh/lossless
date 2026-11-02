@@ -57,17 +57,11 @@ func TestSharedCodeIdentStillWarns(t *testing.T) {
 // jsonwebtoken") is a lookup of that identifier: still strong, still warns.
 func TestTargetedSingleTokenAskStillWarns(t *testing.T) {
 	st := seed(t)
-	out := askAt(t, st, Request{
+	req := Request{
 		Project:  "acme/api",
 		Question: "why not jsonwebtoken",
-	})
-	found := false
-	for _, w := range out.Warnings {
-		if strings.Contains(w, "01JJOSE") {
-			found = true
-		}
 	}
-	if !found {
-		t.Fatalf("targeted single-token ask must stay strong; warnings: %v", out.Warnings)
+	if !shippedStrong(t, st, req, "01JJOSE") {
+		t.Fatalf("targeted single-token ask must stay strong: %+v", askAt(t, st, req))
 	}
 }

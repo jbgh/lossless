@@ -495,12 +495,18 @@ func emit(packed []scored, st *store.Store) ([]Hit, []string, int) {
 			_, h.HasExcerpt = st.ExcerptCovering(c.rec.TranscriptRef, created)
 		}
 		hits = append(hits, h)
+		// A warning has to say more than the pack already does. Every
+		// packed decision used to warn "may already cover" (98% of asks
+		// on 2026-11-02), so decisions no longer warn. Most turn-extracted
+		// faileds are narration, so a failed warns only when an agent
+		// recorded it with remember, or it shares a file or an identifier
+		// with the ask, or it matches the ask past the vector gate. A turn constraint always comes from a user turn
+		// and keeps its warning.
 		kind := -1
 		switch {
-		case c.failedOverlap == 1 && c.rec.Type == "failed":
+		case c.failedOverlap == 1 && c.rec.Type == "failed" &&
+			(c.rec.Source == "remember" || c.path > 0 || c.symbol > 0 || c.vector >= VectorGate):
 			kind = warnFailed
-		case c.shippedOverlap == 1 && c.rec.Type == "decision":
-			kind = warnCover
 		case c.shippedOverlap == 1 && c.rec.Type == "constraint":
 			kind = warnConstraint
 		}

@@ -19,7 +19,7 @@
       },
       "must_include_substrings": ["error handling"],
       "must_include_types": ["decision"],
-      "must_warn": "cover"
+      "must_not_warn": true
     }
   ]
 }

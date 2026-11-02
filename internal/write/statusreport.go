@@ -99,6 +99,11 @@ func guardNames(names []string) []string {
 // design doc's unconditional-drop wording for non-tally shapes; the
 // integration step updates the design doc.
 func StatusReportSkip(sentence string, seen func(name string) bool) (string, bool) {
+	// A test-first red step drops without the name guard: the tests it
+	// names are new, so they have never failed before.
+	if gate.RedStep(sentence) {
+		return "red-step", true
+	}
 	var reason string
 	switch {
 	case gate.StatusReport(sentence):

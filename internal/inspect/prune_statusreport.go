@@ -27,7 +27,13 @@ func supersedeStatusReports(st *store.Store, project string, out *PruneResult) e
 			ok, err := st.FailedNameSeen(self.ProjectKey, name, self.ID, self.CreatedAt)
 			return err == nil && ok
 		}
-		if _, drop := write.StatusReportSkip(self.Text, seen); !drop {
+		reason, drop := write.StatusReportSkip(self.Text, seen)
+		if !drop {
+			continue
+		}
+		// A red step is a capture-time shape: an agent that wrote the
+		// sentence with remember meant to keep it.
+		if reason == "red-step" && self.Source == "remember" {
 			continue
 		}
 		if err := st.Supersede(self.ID); err != nil {
