@@ -47,6 +47,8 @@ func TestRedStepKeepsRealFailures(t *testing.T) {
 		"The canary test failed first in us-east and then everywhere; the cert had expired.",
 		"The flaky test failed first in CI and then passed on rerun.",
 		"Every new test failed first, and the old suite then failed to compile on Go 1.22.",
+		"The checkout test failed first with a timeout.",
+		"The e2e test was red on CI and green locally.",
 		// review probes: post-mortems and CI colors
 		"CI red: npm ci failed with ERESOLVE on react 19.",
 		"Pipeline #2161 red: the arm64 build failed linking libssl.",

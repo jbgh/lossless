@@ -417,11 +417,16 @@ func evictConstraint(packed, all []scored, limit, ftsN int) []scored {
 	sort.SliceStable(missing, func(i, j int) bool {
 		return missing[i].score > missing[j].score
 	})
-	// evictable: not a job-1 failed, not a warning-bearing record — the
-	// rescue must never destroy a warning to deliver context. A decision
-	// or state with shippedOverlap no longer warns, so it can make room.
+	// evictable: not a job-1 failed, not a warning-bearing record, and
+	// not a decision or state with a strong overlap. Those no longer warn
+	// (warnKindOf), but letting the rescue evict them changed 312 of 858
+	// replayed packs on 2026-11-02, mostly trading a remembered decision
+	// about the exact task for a looser rule.
 	evictable := func(p scored) bool {
 		if p.rec.Type == "failed" && p.failedOverlap == 1 {
+			return false
+		}
+		if p.shippedOverlap == 1 {
 			return false
 		}
 		return warnKindOf(p) < 0
@@ -482,9 +487,9 @@ func evictConstraint(packed, all []scored, limit, ftsN int) []scored {
 	return packed
 }
 
-// warnKindOf is the warning a packed record carries, or -1. Packing asks
-// the same question (evictConstraint must not evict a record that warns),
-// so this is the only place that decides it.
+// warnKindOf is the warning a packed record carries, or -1. evictConstraint
+// asks it too (it must not evict a record that warns), so this is the only
+// place that decides it.
 //
 // A warning has to say more than the pack already does. Every packed
 // decision used to warn "may already cover" (98% of asks on 2026-11-02),

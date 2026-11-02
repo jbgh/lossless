@@ -336,10 +336,15 @@ var lineTimeRE = regexp.MustCompile(`"timestamp"\s*:\s*"([^"]+)"`)
 // It is the line's own top-level field, read as JSON: the same letters
 // inside the message text say nothing.
 func lineEntrypoint(chunk string, rel int64) string {
+	line := lineAt(chunk, rel)
+	// Most lines have no such key anywhere; skip decoding them.
+	if !strings.Contains(line, `"entrypoint"`) {
+		return ""
+	}
 	var top struct {
 		Entrypoint string `json:"entrypoint"`
 	}
-	if err := json.Unmarshal([]byte(lineAt(chunk, rel)), &top); err != nil {
+	if err := json.Unmarshal([]byte(line), &top); err != nil {
 		return ""
 	}
 	return top.Entrypoint

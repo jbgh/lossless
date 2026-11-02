@@ -31,16 +31,19 @@ func RedStep(s string) bool {
 // fixed phrases below, never as a CI color ("CI red:", "saw red").
 var redStrongRE = regexp.MustCompile(
 	`^[\s*#>-]*red(\*\*)?\s*(:|/|was\b|run\b|before\b|first\b|\d)` +
-		`|\bred\s*/\s*green\b|\bred-green\b|\bred\b[^.;]{0,60}\bgreen\b|\(red\)|\(red before\b` +
+		`|\bred\s*/\s*green\b|\bred-green\b|\(red\)|\(red before\b` +
 		`|\b(captured|capture|capturing|recovered)\s+(the\s+)?red\b|\bseen red\b|\bthe red run\b|\bred was\b` +
-		`|\bfail\w*\s+first(\s*([.,;:()]|$)|\s+(and|then|against|before|with)\b)|\bwritten first and failed\b` +
+		`|\bfail\w*\s+first\s*([.,;:()]|$)|\bwritten first and failed\b` +
 		`|\bsrc\s+(stashed|reverted|moved aside)\b|\bwatched it fail\b`)
 
 // redWeakRE is test-first wording that a post-mortem also uses.
 var redWeakRE = regexp.MustCompile(
 	`\b(against|on|with)\s+the\s+(old|original|previous|unfixed|pre-fix|prior)\s+(code|source|sources|src|implementation|markup|pages?|[\w-]+\.(py|js|ts|tsx|jsx|go|swift|kt|rb|rs|java|mjs|html|css))\b` +
 		`|\bbefore\s+(the|any|my)\s+(fix|fixes|change|changes|implementation|code)\b` +
-		`|\bpre-fix\b`)
+		`|\bpre-fix\b` +
+		// these read as a post-mortem too ("failed first with a timeout",
+		// "red on CI and green locally") unless a new test or a pass follows
+		`|\bfail\w*\s+first\s+(and|then|against|before|with)\b|\bred\b[^.;]{0,60}\bgreen\b`)
 
 // redResolvedRE is the other half of a test-first report: the test is
 // new, or it passes after.

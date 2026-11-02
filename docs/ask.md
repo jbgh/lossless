@@ -74,7 +74,7 @@ How records are chosen: [retrieval.md](retrieval.md).
 | `context[].source` | How the claim landed (`turn`, `compact`, `remember`, …). |
 | `context[].has_excerpt` | True when `get_record` can open a covering tape window. |
 | `context[].status` | `active` or `superseded`. `[verify]` is a **prefix on `text`**, not a persisted status. |
-| `warnings` | Anti-regression signals. Treat as blocking unless the user overrides. A shipped decision warning: `get_record` that id before treating it as done. |
+| `warnings` | Anti-regression signals. Treat as blocking unless the user overrides. Three kinds: a prior failed attempt, a standing constraint, a recurring failure. A decision comes back in `context`, not as a warning. |
 | `tokens` | Estimated tokens of `context` + `warnings`. Always `<= limit_tokens`. The one exception: an appended recurrence warning may push a few tokens over the budget walk rather than evicting a packed hit. |
 
 ## Ranking (owned by lossless)

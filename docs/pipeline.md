@@ -166,7 +166,8 @@ No scan of the whole store. No network. Claim vectors are on-box and optional. E
 2. **Agent policy (skill, not memory):**
    - Read `warnings` first.
    - `failed` warning → do not repeat that approach unless the user says to.
-   - `decision` warning → do not silently undo it.
+   - `constraint` warning → do not violate it without an explicit override.
+   - A packed `decision` → do not silently undo it (decisions come back in context, not as warnings).
    - If the packed sentence is not enough to act (recap, slogan, or you would change extract/gate/behavior), and `has_excerpt` is true → `GET /v1/records/:id` on **that one** id. Do not GET all five.
 3. **Do the work.** Edits, tests, the usual harness loop.
 4. **Optional `remember`.** Only when the agent (or user) has a durable sentence the extract heuristics will miss. Example: "We are not using Redis for rate limits, ever." Catch-up will still copy the turn; `remember` is for making that one sentence a first-class claim *now*.

@@ -307,7 +307,7 @@ After packing, scan the **packed** hits plus any `failed_overlap=1` candidate th
 | Any packed or uncapped-but-overlapping `failed` that is deliberate memory (`remember`, import), shares a file or one of the ask's own code identifiers (not one inherited from the action tape) with the ask, or passes the vector gate | `A prior attempt at this goal failed (see {id}). Do not repeat it without new evidence.` |
 | Any packed `constraint` with `shipped_overlap=1` | `A standing constraint applies (see {id}). Do not violate it without an explicit override.` |
 
-A packed `decision` does not warn: it fired on 98% of asks (2026-11-02 audit) and only restated the pack. A turn-extracted `failed` with no file, identifier or vector match does not warn either; most are narration. Both still pack and rank as before, and packing treats them as records that do not warn (the constraint rescue may evict them).
+A packed `decision` does not warn: it fired on 98% of asks (2026-11-02 audit) and only restated the pack. A turn-extracted `failed` with no file, identifier or vector match does not warn either; most are narration. Both still pack and rank as before.
 
 If a `failed_overlap` record did not fit in the 5, **evict the lowest-score non-failed packed hit** and insert it. Job 1 is not allowed to lose to the cap.
 
