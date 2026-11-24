@@ -36,6 +36,7 @@ func TestAuthRateLimitNotBuriedByBillingRateLimit(t *testing.T) {
 }
 
 func TestRetryThenFailAgainDropsDeadDecision(t *testing.T) {
+	v1Ranker(t)
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{
 		ID: "D1", Type: "decision",
@@ -122,6 +123,7 @@ func TestSameFileFailedDoesNotKillOtherDecision(t *testing.T) {
 }
 
 func TestNewerDecisionBeatsOlderConflictOnSamePath(t *testing.T) {
+	v1Ranker(t)
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{
 		ID: "OLDREDIS", Type: "decision",

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **`ask` returns the records that match the goal best.** Records used to be picked by kind: a failure first, then at most two of each kind, then several rescue steps. Now they come back in order of how well their words match the goal, plus a bonus for each file they share with the ask. On 100 real asks whose every returned record was labelled by two blind judges, the answers went from 4.0 to 5.0 (of 10) on one set and from 5.2 to 6.6 on a second set the change had never seen; 64 answers got better and 17 got worse. Records judged not useful fell from about a third to about a fifth. `LOSSLESS_RANKER=v1` in the service's environment brings the old order back for this release.
+- **About a third as many warnings, and they are right more often.** A warning now only ever points at a record in the context. The failed attempts a warning cited were useful for the goal 26% of the time before and 59% now.
+- **The recurring-failure warning is gone.** It was meant to flag a script or check that keeps tripping, whatever the ask was about. In practice it keyed on ordinary hyphenated words, came back on most asks, and the rule it quoted applied to the goal 7% of the time. A standing rule that matches the ask still comes back, and warns, like any other record.
+- **An older decision is no longer hidden when a later failure or a newer decision shares its file.** The records hidden this way were judged useful more often than not. Both now come back, with their dates. Of two records that say nearly the same thing one is kept: the one an agent recorded on purpose, otherwise the newer.
+- **`lossless merge-project`** lists project keys that look like parts of one repository (an old remote name, a folder that later got a remote), and `lossless merge-project FROM INTO` moves one key's records and sessions under another, so one repository's memory is not split. A merge cannot be undone, so each one names its two keys; `--dry-run` shows the counts first. Restart the service afterwards. `lossless backfill` no longer undoes a merge: a session that has moved to another project is filed there. `lossless doctor` says when a repository looks split this way.
+- **Docs** describe how a ranking change is measured before it ships ([docs/eval.md](docs/eval.md)).
+
 ## 0.1.47 — 2026-11-02
 
 - **Remembered decisions keep their place in the context again.** 0.1.46 let the step that makes room for a standing rule push out any record that does not warn, and decisions stopped warning in that release. On a replay of real asks that changed about a third of the answers, usually swapping a decision recorded about the exact task for a looser rule. Decisions are protected again: on the same asks the context now matches 0.1.45 exactly, with the smaller set of warnings from 0.1.46 (about 1.7 per ask instead of 2.75).

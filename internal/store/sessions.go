@@ -76,6 +76,33 @@ func (s *Store) SessionByID(sessionID string) (Session, bool) {
 	return out, true
 }
 
+// SessionInProject is the newest row of a session id whose project key
+// normalizes to project. One id can have rows in several projects.
+func (s *Store) SessionInProject(sessionID, project string) (Session, bool) {
+	project = projectkey.Normalize(project)
+	if sessionID == "" || project == "" {
+		return Session{}, false
+	}
+	rows, err := s.DB.Query(
+		`SELECT jsonl, session_id, harness, COALESCE(workspace, ''), COALESCE(project_key, '') FROM sessions WHERE session_id = ? ORDER BY rowid DESC`,
+		sessionID,
+	)
+	if err != nil {
+		return Session{}, false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var r Session
+		if err := rows.Scan(&r.JSONL, &r.SessionID, &r.Harness, &r.Workspace, &r.Project); err != nil {
+			return Session{}, false
+		}
+		if projectkey.Normalize(r.Project) == project {
+			return r, true
+		}
+	}
+	return Session{}, false
+}
+
 // SessionIdentity is what every row indexed under one session id agrees on:
 // a field is filled only when all rows carry the same value, and nothing
 // is returned when they disagree on the project. One

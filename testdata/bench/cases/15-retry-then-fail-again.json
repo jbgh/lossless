@@ -17,9 +17,8 @@
         "goal": "add rate limiting",
         "paths": ["src/middleware/auth.ts"]
       },
-      "must_include_substrings": ["failed again", "jose"],
+      "must_include_substrings": ["failed again", "Redis token bucket failed"],
       "must_include_types": ["failed"],
-      "must_not_include_substrings": ["bigger pool"],
       "must_warn": "failed"
     }
   ]

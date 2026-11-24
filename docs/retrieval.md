@@ -4,6 +4,8 @@
 
 This is the read-path spec. [ask.md](ask.md) is the I/O contract. This file is how we pick the ≤5 records that go in `context`.
 
+Since 0.1.48 the default score and pack are [ranker v2](#ranker-v2-the-default), near the end of this file. The Jobs, Features, Score, Pack and eviction sections in between describe v1, which `LOSSLESS_RANKER=v1` still selects and which every HEAD ask uses.
+
 No LLM on the retrieve path. No network. Embeddings, when used, are **on-box** and only on **claims**.
 
 ---
@@ -283,7 +285,7 @@ Sort candidates by `score` desc, then `created_at` desc, then `id`.
 - the path hop reached it from a record that is itself above the floor;
 - the agent opened it (`get_record` / `remember`) and this ask continues the same work.
 
-**Said records** (the user's turns, write.md) have a stricter floor: strong overlap only. Their word route compares stems and reads adjacent words joined, because people write "languages" and "back ups" where a goal says "language" and "backup". On topic a said record gets 0.8 of the shipped-overlap weight, so it ranks with typed records and below one that carries a warning; it never warns itself. It is left out when a typed record from the same turn is on topic, and when it comes from the asking session's last 30 minutes (still in the window). At most two pack (the type cap).
+**Said records** (the user's turns, write.md) have a stricter floor: strong overlap only. Their word route compares stems and reads adjacent words joined, because people write "languages" and "back ups" where a goal says "language" and "backup". On topic a said record gets 0.8 of the shipped-overlap weight, so it ranks with typed records and below one that carries a warning; it never warns itself. It is left out when a typed record from the same turn is on topic, and when it comes from the asking session's last 30 minutes (still in the window). Under v1 at most two pack (the type cap); the default ranker has no cap per type, so more can (see below).
 
 An ask with no content words of its own (a bare continue, paths only) and a HEAD ask are not floored. The constraint rescue's bm25 route obeys the floor: bm25 counts function words. `inspect --ask` lists these drops as `off-topic`. An empty pack is a valid answer.
 
@@ -316,6 +318,31 @@ Several warnings of one kind merge into one line citing every id: `Prior attempt
 Warnings must cite ids that appear in `context`. If you warn, the record is in `context`. One carve-out: the recurrence warning cites the cluster's newest standing rule as `(id {id})`, quoting its sentence when an agent wrote it with `remember` and it has no markup; that record may sit outside `context` (gate-named faileds stay out of packs by design) — it is still get_record-able by id.
 
 ---
+
+### Ranker v2 (the default)
+
+`packV2` (`internal/retrieve/rankv2.go`) scores and packs every ask that has a goal, a question or paths. `LOSSLESS_RANKER=v1` (or `Engine.Ranker = "v1"`) brings back the score, pack, eviction and warning steps described above, for one release. The variable is read by the process that answers the ask: for agents that is the background service, so it has to be in the service's environment (the launchd plist or the systemd unit), not in a shell. A HEAD ask (no goal) still uses v1's score and pack, without the recurrence warning. The candidate routes, the relevance floor, the said filters, said twins and warning decay are shared.
+
+- **Score:** the raw BM25 of the ask's own words against the record (said ×0.8), plus 10 for each path key the record shares with the ask. A file's keys are its path and its base name, so a file in a directory named by the same path is worth 20, and one that only shares the file name, or sits in the repository root, 10. Words the session's earlier asks and opened records add to the lookup find candidates but are not scored, unless no record contains any of the ask's own words or it has none (a paths-only ask): then the session's words rank. With an embedder, the cosine times the ask's best BM25 is added. A record with no match of its own, on a file the first hits named, scores a flat 1.
+- **Pack:** in score order, newest first on a tie; near-duplicates are skipped as in v1, except that of two near-identical records of one type one is kept whichever scored higher: the one an agent wrote with `remember` over one picked up from a turn (which may not warn), otherwise the newer. A record with no shared file is left out when it scores under 20% of the best match (measured with the file bonus taken out). There is no reserved failed slot, no cap per type (said records included), no rescue pass, no conflict or invalidation drop, and the recent-failed net is never offered.
+- **Warnings:** the prior-failed and standing-constraint lines, on packed records only. No recurrence warning. `[verify]` is set by statting the packed records' files.
+
+A said record's BM25 comes from its own index, which is smaller than the typed one in a new store. Its scores are then low next to a typed record's, and on-topic said records can fall under the 20% cut until the store has grown.
+
+What is not in the score, because each was measured and did not help: the type of the record, whether an agent wrote it with `remember`, its age, whether its files changed since, a shared code identifier, word stems, and scaling BM25 to the ask's best hit.
+
+Measured on two sets of real asks, every returned record labelled 0–2 by two blind judges ([eval.md](eval.md)). Set A is 60 asks from October 2026 on one copy of the store; set B is 40 asks from November that no earlier tuning had seen, each run on the store as it was at the time of the ask.
+
+| Score per answer (sum of labels, 10 is the most) | v1 | first v2 | plain baseline | v2 as shipped |
+|---|---|---|---|---|
+| Set A | 3.95 | 4.53 | 4.58 | 5.03 |
+| Set B | 5.22 | 6.38 | 6.65 | 6.61 |
+| Records labelled not useful (A / B) | 36% / 23% | 28% / 13% | 28% / 12% | 24% / 11% |
+| Warnings per ask (A / B) | 2.5 / 2.1 | 1.4 / 1.5 | | 0.6 / 0.75 |
+
+The first v2 scaled each lexical route to its best hit and added 1 + 0.5×Jaccard for a shared file, a ×1.35 boost for remembered records, recency and staleness; the plain baseline is raw BM25 plus ten per shared file, top five, outside the pipeline. v2 as shipped is better than v1 on 64 of the 100 asks and worse on 17 (mean difference +1.21, 95% interval +0.91 to +1.51). Against the first v2 it is +0.40 (+0.18 to +0.62), and against the plain baseline +0.26 (+0.06 to +0.47): ahead on set A, level on set B. A file bonus of 0 scored 5.00 / 6.35 and a bonus of 30 scored 4.76 / 6.42. Taking every turn-extracted failed, decision, state and constraint record out of the store changed the score by −0.06 (−0.18 to +0.07): with relevance order they rarely reach the pack, so removing them gains nothing. The best five labelled records per ask would score 7.0 and 7.8.
+
+The warnings were judged the same way. Under v1, 26% of the failed records a warning cited were useful for the goal and 42% were beside the point; under v2 it is 59% and 13%, with the same rule for which packed record warns. The recurrence warning's quoted rule was useful on 7% of its 85 firings and beside the point on 79%.
 
 ## 6. `GET /v1/records/:id`
 

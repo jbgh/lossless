@@ -2,6 +2,8 @@
 
 How retrieve picks five records.
 
+> Since 0.1.48 the default ranker is v2: raw BM25 plus a bonus per shared file, packed in score order, with no recurrence warning ([retrieval.md](retrieval.md#ranker-v2-the-default)). Sections 2 and 6–7 below (three jobs, features and score, pack and eviction, recurrence-keyed warnings) describe v1, kept for one release behind `LOSSLESS_RANKER=v1`; HEAD asks still use its score and pack, without the recurrence warning.
+
 The chat window is lossy. The session tape is not. lossless copies that tape, extracts a small index of durable claims, and on each `ask` checks out at most five of them for *this* goal and these files. No LLM on retrieve. Age never disqualifies a claim. Dense vectors are optional and unused in the live store today.
 
 [Architecture](architecture.md) · [retrieval.md](retrieval.md) · [write.md](write.md)

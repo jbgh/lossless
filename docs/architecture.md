@@ -79,6 +79,8 @@ For You’s contract, not Phoenix: hydrate what this session just did, retrieve 
 | Recent faileds | only if the union is empty |
 | HEAD caps | 12 failed / 10 decision / 8 constraint |
 
+The default ranker replaces steps 8–11's conflict drops, score, pack order and recurrence warning with a plain relevance order: the ask's own words (BM25) plus a bonus per shared file, packed in score order, warnings only on packed records ([retrieval.md](retrieval.md), "Ranker v2"). What follows is the `LOSSLESS_RANKER=v1` pipeline, kept for one release.
+
 8. **Dedup + filters** — newest `claim_hash`. Drop older same-path conflicts (Jaccard ≥ 0.35). Drop a decision if a newer same-path failed shares topic (≥ 0.2). Filters, not scores.
 9. **Features + score** — type, recency (half-life by type; constraint = 1), path/symbol Jaccard, min-max BM25, cosine, agree, graded overlap, dwell, served, OON. Stat mtimes on the current top 30 only. `[verify]` is ephemeral.
 10. **Pack ≤ 5** — best failed-overlap first. Then `score − 0.8 × max_sim`. Type cap 2 if another type is uncovered. Diversity Jaccard 0.8. Evict so a job-1 failed cannot lose to the cap.

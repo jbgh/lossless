@@ -71,6 +71,7 @@ func TestWarnRuleText(t *testing.T) {
 // warned by id only, the builder ran the forbidden job). It still fires on
 // an ask that shares no words with the trap.
 func TestRecurrenceWarningCarriesRule(t *testing.T) {
+	v1Ranker(t)
 	st := tmpStore(t)
 	project := "acme/forge"
 	for i, d := range []int{9, 5, 1} {
@@ -167,6 +168,7 @@ func TestAskMergedWarningsLogEveryID(t *testing.T) {
 // one with markup, is cited by id: the warning fires on every ask and is
 // read as blocking, so it must not carry a sentence nobody chose to record.
 func TestRecurrenceWarningQuotesOnlyRecordedRules(t *testing.T) {
+	v1Ranker(t)
 	for _, tc := range []struct {
 		name, source, text string
 	}{
@@ -244,6 +246,7 @@ func TestWarnClaimIDsIgnoresQuotedRule(t *testing.T) {
 // The quote comes from the newest rule an agent recorded, even when a
 // newer turn-extracted echo of it is the cluster's newest constraint.
 func TestRecurrenceQuoteSurvivesNewerTurnEcho(t *testing.T) {
+	v1Ranker(t)
 	st := tmpStore(t)
 	project := "acme/forge"
 	for i, d := range []int{9, 6, 4} {

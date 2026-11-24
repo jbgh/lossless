@@ -347,6 +347,7 @@ func packsWith(r Response, id string) bool {
 // needs: the recurrence route used to run after decay and cite the same
 // record under its own heading, bringing back the warning decay stopped.
 func TestRecurrenceIgnoresDecayedConstraint(t *testing.T) {
+	v1Ranker(t)
 	now := time.Date(2026, 9, 21, 21, 0, 0, 0, time.UTC)
 	run := func(constraintAt string) Response {
 		st := tmpStore(t)

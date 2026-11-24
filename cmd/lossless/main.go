@@ -17,6 +17,7 @@ import (
 	"lossless/internal/claim"
 	"lossless/internal/env"
 	"lossless/internal/harness"
+	"lossless/internal/inspect"
 	"lossless/internal/mcpserver"
 	"lossless/internal/retrieve"
 	"lossless/internal/serve"
@@ -73,6 +74,8 @@ func main() {
 		os.Exit(runInspect(args))
 	case "supersede":
 		os.Exit(runSupersede(args))
+	case "merge-project":
+		os.Exit(runMergeProject(args))
 	case "version", "-v", "--version":
 		os.Exit(runVersion(args))
 	case "update":
@@ -123,6 +126,7 @@ func usage() {
   lossless doctor             # daemon, hooks, MCP, service
   lossless inspect            # tape vs claims vs last packs; --project KEY; --ask; --jsonl FILE; --prune
   lossless supersede <id> [reason]   # retire a record: status=superseded, row and text kept; reason stored as a linked decision
+  lossless merge-project [FROM INTO] [--dry-run]   # list project keys split from one repo (old remote name, pre-remote path key), or merge one
   lossless update             # replace ~/.local/bin/lossless from GitHub Releases
   lossless version            # printed semver (release channel is GitHub Releases)
   lossless token              # optional: print a random bearer
@@ -580,6 +584,19 @@ func runDoctor(args []string) int {
 	rep := harness.Doctor(os.Getenv("HOME"), *home, exe, *url, env.Token())
 	bok, bdetail := backup.DoctorCheck(*home, time.Now())
 	rep.Checks = append(rep.Checks, harness.Check{Name: "backup", OK: bok, Detail: bdetail})
+	// A renamed remote, or a folder that later got one, files the same
+	// repository under a second key and an ask then sees only part of its
+	// memory. Nothing fails, so say it here.
+	// Only on a store that exists: opening one creates it, and doctor must
+	// not make a missing install look set up.
+	if _, err := os.Stat(filepath.Join(*home, "index", "claims.sqlite")); err == nil && !write.HomeIsRemote() {
+		if st, err := openStore(*home); err == nil {
+			if list, err := inspect.SuggestMerges(st, inspect.DefaultResolve); err == nil {
+				rep.Checks = append(rep.Checks, harness.Check{Name: "projects", OK: true, Detail: splitDetail(list)})
+			}
+			st.Close()
+		}
+	}
 	fmt.Print(rep.Format())
 	if !rep.Ok() {
 		return 1

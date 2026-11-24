@@ -169,6 +169,7 @@ func TestFloorNeedsAVocabulary(t *testing.T) {
 // bm25 counts function words. The constraint rescue reserved a slot for
 // the top lexical match even when every matched word was one of them.
 func TestConstraintRescueStaysAboveTheFloor(t *testing.T) {
+	v1Ranker(t)
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{
 		ID: "01JSHOW", Type: "constraint", Source: "remember",
@@ -225,6 +226,7 @@ func TestFloorCountsStems(t *testing.T) {
 // When nothing in the store matches at all, ask still offers the most
 // recent failures. That net is not a match, and the floor leaves it be.
 func TestRecentFailedNetSurvivesTheFloor(t *testing.T) {
+	v1Ranker(t)
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{
 		ID: "01JWARE", Type: "failed", Source: "remember",

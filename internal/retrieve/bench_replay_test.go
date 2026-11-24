@@ -47,6 +47,7 @@ func benchAt(t *testing.T, st *store.Store, req Request) Response {
 // must reach the pack via evictConstraint. The status-snapshot failed
 // must stay silent.
 func TestBenchAuditBundleRecurrence(t *testing.T) {
+	v1Ranker(t)
 	st := tmpStore(t)
 	project := "acme/forge"
 	faileds := []string{

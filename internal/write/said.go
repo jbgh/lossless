@@ -429,6 +429,9 @@ type saidRun struct {
 	// reading old tapes again must not churn records, nor bring back one
 	// the user retired.
 	skipKnown bool
+	// knownAs is another project key the turn may be stored under: the
+	// key its tape's folder names, when the session has since moved.
+	knownAs string
 	// dry counts what would be added and writes nothing.
 	dry bool
 	// leadSeen replaces the store's template check (one scan per turn)
@@ -488,6 +491,10 @@ func writeSaid(st *store.Store, msgs []Message, chunk string, base int64, opts E
 			run.onSeen(rec)
 		}
 		if run.added[rec.ClaimHash] || (run.skipKnown && st.KnownHash(rec.ClaimHash)) {
+			continue
+		}
+		if run.skipKnown && run.knownAs != "" && run.knownAs != rec.ProjectKey &&
+			st.KnownHash(claim.Hash(run.knownAs, rec.Type, rec.Text)) {
 			continue
 		}
 		if !run.dry {

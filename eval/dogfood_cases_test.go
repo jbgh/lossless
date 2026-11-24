@@ -2128,7 +2128,7 @@ func testNonJSONLine(t *testing.T) {
 	}
 }
 
-func TestDogfoodRetryJoseStillPacks(t *testing.T) {
+func TestDogfoodRetryPacksBothRedisFailures(t *testing.T) {
 	st := dogfoodStore(t)
 	src := testdataWrite(t, t.TempDir(), "grok-redis-retry.jsonl",
 		mustRead(t, filepath.Join("..", "testdata", "bench", "sessions", "grok-redis-retry.jsonl")))
@@ -2148,8 +2148,13 @@ func TestDogfoodRetryJoseStillPacks(t *testing.T) {
 		Paths: []string{"src/middleware/auth.ts"},
 	})
 	t.Logf("context: %+v", out.Context)
-	if !contextHas(out, "jose") {
-		t.Fatalf("jose missing")
+	// The pack is the Redis history on this file, both failures included.
+	// The jose decision is about another topic and has no file: v1 packed
+	// it only because it had dropped the two Redis decisions as dead.
+	for _, want := range []string{"Redis token bucket failed", "failed again"} {
+		if !contextHas(out, want) {
+			t.Fatalf("%q missing", want)
+		}
 	}
 }
 

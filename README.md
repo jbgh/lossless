@@ -42,7 +42,7 @@ flowchart LR
 
 1. **Record.** Hooks copy every session file onto an append-only tape in `~/.lossless/raw`. The tape is kept even if the harness deletes its own copy.
 2. **Index.** lossless reads the tape and writes one-line records: what failed, what was decided, what rules were set, where work stopped. It also keeps everything you typed, word for word. The agent can add records of its own with `remember`. Each record points back to the part of the tape it came from.
-3. **Ask.** Before it changes anything, the agent calls `ask` with its goal and the files it is about to touch. It gets back the records that apply, at most five, plus warnings. Failed work comes first.
+3. **Ask.** Before it changes anything, the agent calls `ask` with its goal and the files it is about to touch. It gets back the records that match best, at most five, plus warnings.
 
 Memory belongs to the repository (`owner/repo`), not to a model or a tool. Start in Claude Code, continue in Codex, and `ask` returns the same history.
 
@@ -121,7 +121,7 @@ There are six kinds of record:
 
 A record is a one-line summary, never the whole story. `get_record` opens the tape excerpt behind any `id`.
 
-Warnings flag three things: an earlier attempt at this goal that failed (one an agent recorded, or one that shares a file or a code identifier with the ask, or a close match by meaning when an embedder is configured), a standing rule the goal touches, and a failure that keeps recurring in the project. A past decision comes back in the context, not as a warning. A record only comes back if it shares a file, an identifier, or enough of the goal's words with the ask. When nothing applies, the answer is empty.
+Records come back in order of how well their words match the goal, with a bonus for each file they share with the ask. The kind of record does not change the order. Warnings flag two things, both about records in the context: an earlier attempt at this goal that failed (one an agent recorded, or one that shares a file or a code identifier with the ask, or a close match by meaning when an embedder is configured), and a standing rule the goal touches. A past decision comes back in the context, not as a warning. A record only comes back if it shares a file, an identifier, or enough of the goal's words with the ask, and one that shares no file is left out when it matches far less well than the best match. When nothing applies, the answer is empty.
 
 ## Using it yourself
 
@@ -132,6 +132,7 @@ lossless ask --project owner/repo --goal "add rate limiting" --path src/middlewa
 lossless remember --type decision --text "Use jose, not jsonwebtoken, on Edge." --project owner/repo
 lossless inspect --project owner/repo --ask    # why each record was returned or dropped
 lossless supersede <id> "no longer true"       # retire a record; nothing is deleted
+lossless merge-project                         # list keys split from one repo (old remote name, pre-remote folder); merge one with FROM INTO, then restart the service
 lossless backfill                              # after an upgrade: read old tapes with the new version
 lossless backup init s3://bucket/prefix        # opt in; then `lossless backup`, and serve repeats it hourly
 lossless restore --list                        # kept generations; `restore` brings the latest back

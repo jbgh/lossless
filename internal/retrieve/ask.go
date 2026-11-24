@@ -30,6 +30,9 @@ type Engine struct {
 	// (docs/algorithm.md §7a). Zero means StaleWindow(): the
 	// LOSSLESS_STALE_WINDOW env, else DefaultStaleWindow.
 	StaleWindow time.Duration
+	// Ranker "v1" ranks with the type-first pack; "" defers to
+	// LOSSLESS_RANKER, and anything else is v2 (rankv2.go).
+	Ranker string
 }
 
 func (e Engine) embedder() embed.Embedder {
@@ -166,6 +169,11 @@ func (e Engine) prepare(req Request) (prep, error) {
 		seenHash[rec.ClaimHash] = len(cand)
 		cand = append(cand, e.features(rec, q, ftsBM25, saidBM25, knn, inferred))
 	}
+	for i := range cand {
+		if v, ok := pl.own[cand[i].rec.ID]; ok && cand[i].rec.Type != "said" {
+			cand[i].ownFTS, cand[i].ownRaw = true, v
+		}
+	}
 	// A said record that is off the goal, or is this session's own fresh
 	// turn, leaves the pool here: nothing later (the hop, a HEAD pack)
 	// may bring it back.
@@ -190,36 +198,55 @@ func (e Engine) prepare(req Request) (prep, error) {
 			cand[i].ungrounded = false
 		}
 	}
-	before := cand
-	cand = dropOlderConflicts(cand)
-	p.drops = append(p.drops, droppedAs(before, cand, "older-conflict")...)
-	before = cand
-	cand = dropInvalidatedByNewerFailed(cand)
-	p.drops = append(p.drops, droppedAs(before, cand, "invalidated")...)
+	// v2 leaves both conflict drops out: the records they removed were
+	// judged useful more often than not (rankv2.go).
+	v2 := e.RankerV2() && !q.Head
+	if !v2 {
+		before := cand
+		cand = dropOlderConflicts(cand)
+		p.drops = append(p.drops, droppedAs(before, cand, "older-conflict")...)
+		before = cand
+		cand = dropInvalidatedByNewerFailed(cand)
+		p.drops = append(p.drops, droppedAs(before, cand, "invalidated")...)
+	}
 	normBM25(cand)
 	for i := range cand {
 		cand[i].score = cand[i].preStale(prof)
 	}
 	sortScored(cand)
-	e.markStale(cand, q.WorkspaceRoot)
-	for i := range cand {
-		cand[i].score = cand[i].preStale(prof) - WStale*cand[i].stale
-	}
-	sortScored(cand)
-	packed := pack(cand, q.LimitTokens, q.Head)
-	preEvict := packed
-	packed = evictFailed(packed, cand, q.LimitTokens)
-	// A single FTS hit normalizes to bm25=1 regardless of match quality,
-	// so the bm25 rescue route needs a second FTS candidate to be
-	// meaningful: rank 1 of 1 is not "top of FTS".
-	ftsN := 0
-	for _, c := range cand {
-		if c.isFTS {
-			ftsN++
+	// v1 stats the files of its top candidates and marks down the stale
+	// ones. v2 does not rank on staleness: it stats what it packed, below,
+	// so the [verify] mark is on the records that ship.
+	if !v2 {
+		e.markStale(cand, q.WorkspaceRoot)
+		for i := range cand {
+			cand[i].score = cand[i].preStale(prof) - WStale*cand[i].stale
 		}
+		sortScored(cand)
 	}
-	preCon := packed
-	packed = evictConstraint(packed, cand, q.LimitTokens, ftsN)
+	var packed, preEvict, preCon []scored
+	v2Floor := 0.0
+	if v2 {
+		packed = packV2(cand, q.LimitTokens, pl.net)
+		v2Floor = cutV2(cand)
+		e.markStale(packed, q.WorkspaceRoot)
+		preEvict, preCon = packed, packed
+	} else {
+		packed = pack(cand, q.LimitTokens, q.Head)
+		preEvict = packed
+		packed = evictFailed(packed, cand, q.LimitTokens)
+		// A single FTS hit normalizes to bm25=1 regardless of match quality,
+		// so the bm25 rescue route needs a second FTS candidate to be
+		// meaningful: rank 1 of 1 is not "top of FTS".
+		ftsN := 0
+		for _, c := range cand {
+			if c.isFTS {
+				ftsN++
+			}
+		}
+		preCon = packed
+		packed = evictConstraint(packed, cand, q.LimitTokens, ftsN)
+	}
 	// Last, on the pack that will ship: the sentence extract typed and the
 	// turn it came from are one memory, and the typed one can warn.
 	packed, twins := dropSaidTwins(packed)
@@ -259,7 +286,13 @@ func (e Engine) prepare(req Request) (prep, error) {
 		if preIn[c.rec.ID] || twin[c.rec.ID] {
 			continue
 		}
-		p.drops = append(p.drops, traceDrop{rec: c.rec, reason: packSkipReason(c, packed, packedText), sc: c, scored: true})
+		reason := ""
+		if v2 {
+			reason = packSkipReasonV2(c, packed, packedText, pl.net, v2Floor)
+		} else {
+			reason = packSkipReason(c, packed, packedText)
+		}
+		p.drops = append(p.drops, traceDrop{rec: c.rec, reason: reason, sc: c, scored: true})
 	}
 	hits, warnings, tokens := emit(packed, e.Store)
 	// An incident-shaped constraint past its window stops warning but keeps
@@ -273,9 +306,17 @@ func (e Engine) prepare(req Request) (prep, error) {
 	// gate-named faileds that the extract-noise gate keeps out of packs,
 	// so they count toward the trigger without entering it. A standing
 	// trap warns on any ask until its constraint lifecycle retires it.
-	for _, w := range recurrenceWarnings(e.Store, q, packed, now, memo) {
-		if !slices.Contains(warnings, w) {
-			warnings = append(warnings, w)
+	//
+	// v1 only. Judged against the goals of 100 real asks, the rule this
+	// warning quoted was useful for 7% of its 85 firings and beside the
+	// point for 79%: the identifiers it clusters on were mostly ordinary
+	// hyphenated words ("wall-clock", "stand-in"). A standing rule that
+	// matches the ask packs, and warns, like any other record.
+	if !e.RankerV2() {
+		for _, w := range recurrenceWarnings(e.Store, q, packed, now, memo) {
+			if !slices.Contains(warnings, w) {
+				warnings = append(warnings, w)
+			}
 		}
 	}
 	// One line per warning kind, citing every id (§7b). Last, so decay and
@@ -326,6 +367,9 @@ type scored struct {
 	typeRank       float64
 	recency        float64
 	path           float64
+	npath          int     // how many of the ask's path keys (path, base name) the record shares
+	ownFTS         bool    // found by the ask's own words (pool.own)
+	ownRaw         float64 // ... with this raw bm25 (negative, like ftsRaw)
 	symbol         float64
 	bm25           float64
 	vector         float64
@@ -397,10 +441,18 @@ func (s scored) preStale(p Profile) float64 {
 type pool struct {
 	ids  []string
 	fts  map[string]float64 // typed records, raw bm25
+	own  map[string]float64 // typed records, raw bm25 of the ask's own words (v2's score)
 	said map[string]float64 // said records, raw bm25 of their own query
 	knn  map[string]float64
 	hop  []string        // paths inferred from the first hits
 	net  map[string]bool // no typed record matched: the recent-failed net
+}
+
+// ownLookup is the lookup words the ask itself brought: its question and
+// goal (the compiled ones for an ask the session tail filled in), without
+// what the action tape added.
+func ownLookup(q query) []string {
+	return claim.Uniq(append(append([]string{}, q.QuestionTokens...), q.GoalTokens...))
 }
 
 func (e Engine) candidates(q query) (pool, error) {
@@ -440,7 +492,28 @@ func (e Engine) candidates(q query) (pool, error) {
 		return pool{ids: ids, fts: fts, said: said, knn: knn, hop: hop}, nil
 	}
 
-	if match := ftsMatch(q.LookupTokens); match != "" {
+	// The action tape and the compiled tail add words to LookupTokens: the
+	// last asks' tokens, the text of records this session opened or wrote.
+	// They widen recall. They must not be what v2 ranks on: raw BM25 over
+	// those words scores a record for matching the session, not this ask
+	// (a record the session just remembered matches its own text better
+	// than anything matches the goal). So the ask's own words get their
+	// own query, and its BM25 is v2's score. An ask with no words of its
+	// own that match anything ("continue") is ranked on the tape's.
+	match := ftsMatch(q.LookupTokens)
+	own := fts
+	if ownMatch := ftsMatch(ownLookup(q)); e.RankerV2() && ownMatch != "" && ownMatch != match {
+		if hits, err := e.Store.SearchFTS(q.ProjectKey, ownMatch, FTSCap); err == nil && len(hits) > 0 {
+			own = map[string]float64{}
+			var ownIDs []string
+			for _, h := range hits {
+				own[h.ID] = h.BM25
+				ownIDs = append(ownIDs, h.ID)
+			}
+			add(ownIDs)
+		}
+	}
+	if match != "" {
 		hits, err := e.Store.SearchFTS(q.ProjectKey, match, FTSCap)
 		if err != nil {
 			// malformed MATCH is degraded mode, not a hard failure
@@ -551,7 +624,7 @@ func (e Engine) candidates(q query) (pool, error) {
 		}
 		add(failedRecent)
 	}
-	return pool{ids: ids, fts: fts, said: said, knn: knn, hop: hop, net: net}, nil
+	return pool{ids: ids, fts: fts, own: own, said: said, knn: knn, hop: hop, net: net}, nil
 }
 
 func (e Engine) vectorHits(q query, knn map[string]float64) []string {
@@ -626,7 +699,9 @@ func (e Engine) features(rec claim.Record, q query, fts, said, knn map[string]fl
 		ageDays = 0
 	}
 	s.recency = typeRecency(rec.Type, ageDays)
-	s.path = jaccard(q.PathKeys, claim.PathKeys(rec.Paths))
+	recPaths := claim.PathKeys(rec.Paths)
+	s.path = jaccard(q.PathKeys, recPaths)
+	s.npath = sharedCount(q.PathKeys, recPaths)
 	if s.path == 0 && len(hop) > 0 {
 		s.hop = jaccard(hop, claim.PathKeys(rec.Paths))
 	}

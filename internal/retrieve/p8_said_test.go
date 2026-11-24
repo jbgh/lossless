@@ -349,6 +349,7 @@ func TestSaidEchoWithoutASessionID(t *testing.T) {
 
 // When only said records are on the goal, two pack, not five.
 func TestSaidCapIsHard(t *testing.T) {
+	v1Ranker(t)
 	st := tmpStore(t)
 	for i, text := range []string{
 		"the subagents should all run the smaller model for builds",
@@ -440,6 +441,7 @@ func TestSaidFileMatchIsTheSameFile(t *testing.T) {
 // Nothing typed matches: the recent-failed net still fires when a user
 // turn shares a word with the ask, and that turn is not packed.
 func TestRecentFailedNetIgnoresSaidCandidates(t *testing.T) {
+	v1Ranker(t)
 	st := tmpStore(t)
 	writeRec(t, st, claim.Record{
 		ID: "01JWARE", Type: "failed", Source: "remember",

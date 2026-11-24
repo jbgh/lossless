@@ -74,8 +74,8 @@ How records are chosen: [retrieval.md](retrieval.md).
 | `context[].source` | How the claim landed (`turn`, `compact`, `remember`, …). |
 | `context[].has_excerpt` | True when `get_record` can open a covering tape window. |
 | `context[].status` | `active` or `superseded`. `[verify]` is a **prefix on `text`**, not a persisted status. |
-| `warnings` | Anti-regression signals. Treat as blocking unless the user overrides. Three kinds: a prior failed attempt, a standing constraint, a recurring failure. A decision comes back in `context`, not as a warning. |
-| `tokens` | Estimated tokens of `context` + `warnings`. Always `<= limit_tokens`. The one exception: an appended recurrence warning may push a few tokens over the budget walk rather than evicting a packed hit. |
+| `warnings` | Anti-regression signals. Treat as blocking unless the user overrides. Two kinds, both citing records in `context`: a prior failed attempt and a standing constraint. A decision comes back in `context`, not as a warning. (`LOSSLESS_RANKER=v1` adds the old recurring-failure warning.) |
+| `tokens` | Estimated tokens of `context` + `warnings`. Always `<= limit_tokens`. Under `LOSSLESS_RANKER=v1` an appended recurrence warning may push a few tokens over. |
 
 ## Ranking (owned by lossless)
 
@@ -96,7 +96,7 @@ Stale files: ephemeral `[verify]` prefix. Do not persist stale.
 | `400` | Missing `project` and `workspace_root`, or invalid JSON |
 | `200` | Always for a valid ask, including empty `context` |
 
-Empty context is not an error. It means the store has nothing relevant. Fewer than five records means the same thing for the missing slots: a record that shares no file, no identifier, and too few words with the ask is left out rather than used as filler.
+Empty context is not an error. It means the store has nothing relevant. Fewer than five records means the same thing for the missing slots: a record that shares no file, no identifier, and too few words with the ask is left out rather than used as filler, and so is one that shares no file and matches the goal's words less than a fifth as well as the best match.
 
 ## Skill rule (every harness)
 

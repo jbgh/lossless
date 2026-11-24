@@ -580,7 +580,9 @@ func TestAskDropsLiveRecapKeepsRedis(t *testing.T) {
 		containsID(out, "RECAP2256") {
 		t.Fatalf("live recap packed: %+v", out.Context)
 	}
-	if !containsID(out, "REDIS") {
+	// THEYREDIS restates REDIS two hours later; v2 keeps the newer of two
+	// near-identical records, v1 the higher-scored one.
+	if !containsID(out, "REDIS") && !containsID(out, "THEYREDIS") {
 		t.Fatalf("Redis failed missed: %+v", out.Context)
 	}
 	for _, w := range out.Warnings {

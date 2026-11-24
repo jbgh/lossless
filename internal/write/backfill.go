@@ -33,6 +33,11 @@ var tapePartRE = regexp.MustCompile(`\.part\d+$`)
 // keep is not lost for the sessions before it. It is safe to run twice
 // and beside the daemon: a turn the store already holds is left alone.
 // project limits the pass to one owner/repo; dry counts without writing.
+//
+// A tape's records go under the key its folder names while the session
+// still has a row there, and under the session's project once it has
+// none: merge-project moves records and sessions and leaves the tapes
+// where they were written.
 func Backfill(st *store.Store, project string, dry bool) (BackfillResult, error) {
 	var res BackfillResult
 	want := ""
@@ -49,8 +54,13 @@ func Backfill(st *store.Store, project string, dry bool) (BackfillResult, error)
 	}
 	type tape struct {
 		path, project, session, month string
-		mod                           int64
-		part                          bool // a later part of a sealed session
+		// folder is the key the tape's folder names. It differs from
+		// project after merge-project, or when the session changed project.
+		folder   string
+		sess     store.Session
+		onRecord bool
+		mod      int64
+		part     bool // a later part of a sealed session
 	}
 	var tapes []tape
 	listed := map[string]bool{}
@@ -59,10 +69,7 @@ func Backfill(st *store.Store, project string, dry bool) (BackfillResult, error)
 		if !p.IsDir() || p.Name() == "manual" {
 			continue
 		}
-		key := projectkey.Decode(p.Name())
-		if want != "" && key != want {
-			continue
-		}
+		folder := projectkey.Decode(p.Name())
 		months, _ := os.ReadDir(filepath.Join(root, p.Name()))
 		for _, m := range months {
 			if !m.IsDir() {
@@ -84,7 +91,26 @@ func Backfill(st *store.Store, project string, dry bool) (BackfillResult, error)
 				listed[path] = true
 				stem := strings.TrimSuffix(name, ".jsonl")
 				session := tapePartRE.ReplaceAllString(stem, "")
-				tapes = append(tapes, tape{path, key, session, m.Name(), fi.ModTime().UnixNano(), session != stem})
+				// The folder says where the tape was first written, and
+				// its key stands while the session still has a row under
+				// it (one session id can have tapes in two projects).
+				// When no row carries it any more the session has moved:
+				// merge-project moves records and sessions and leaves
+				// tapes in place, so the newest row names the project.
+				sess, ok := st.SessionByID(session)
+				project := folder
+				if own, has := st.SessionInProject(session, folder); has {
+					sess = own
+				} else if k := projectkey.Normalize(sess.Project); ok && k != "" {
+					project = k
+				}
+				if want != "" && project != want {
+					continue
+				}
+				tapes = append(tapes, tape{
+					path: path, project: project, folder: folder, session: session, month: m.Name(),
+					sess: sess, onRecord: ok, mod: fi.ModTime().UnixNano(), part: session != stem,
+				})
 			}
 		}
 	}
@@ -118,18 +144,18 @@ func Backfill(st *store.Store, project string, dry bool) (BackfillResult, error)
 		// Bench and eval tapes imported into a live project stay raw, and
 		// so does the tape of a session prune removed: only a session
 		// still on record is read again.
-		sess, ok := st.SessionByID(t.session)
-		if !ok || claim.FixtureSession(t.session) {
+		if !t.onRecord || claim.FixtureSession(t.session) {
 			res.Skipped++
 			continue
 		}
-		opts := ExtractOpts{ProjectKey: t.project, SessionID: t.session, Harness: sess.Harness, Source: "turn"}
+		opts := ExtractOpts{ProjectKey: t.project, SessionID: t.session, Harness: t.sess.Harness, Source: "turn"}
 		if briefs[t.session] == nil {
 			briefs[t.session] = map[string]bool{}
 		}
 		byLead := leadsOf(t.project)
 		run := &saidRun{
 			skipKnown: true,
+			knownAs:   t.folder,
 			dry:       dry,
 			added:     added,
 			briefs:    briefs[t.session],

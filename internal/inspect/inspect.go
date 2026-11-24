@@ -75,7 +75,11 @@ type HitView struct {
 }
 
 type AskView struct {
-	Project  string    `json:"project"`
+	Project string `json:"project"`
+	// Ranker is the ranker this process explained with ("v2" or "v1").
+	// The service reads LOSSLESS_RANKER from its own environment, so its
+	// answer can differ when the two are set differently.
+	Ranker   string    `json:"ranker"`
 	Warnings []string  `json:"warnings"`
 	Hits     []HitView `json:"hits"`
 	Dropped  []HitView `json:"dropped,omitempty"`
@@ -180,7 +184,10 @@ func Ask(st *store.Store, req retrieve.Request, now time.Time) (*AskView, error)
 	if err != nil {
 		return nil, err
 	}
-	view := &AskView{Project: tr.Project, Warnings: tr.Warnings}
+	view := &AskView{Project: tr.Project, Ranker: "v2", Warnings: tr.Warnings}
+	if !eng.RankerV2() {
+		view.Ranker = "v1"
+	}
 	for _, h := range tr.Packed {
 		view.Hits = append(view.Hits, fromTrace(h))
 	}
@@ -467,7 +474,7 @@ func Format(w io.Writer, r Report) {
 		}
 	}
 	if r.Ask != nil {
-		fmt.Fprintln(w, "\nlive ask")
+		fmt.Fprintf(w, "\nlive ask (ranker %s, as this command reads LOSSLESS_RANKER; the service reads its own environment)\n", r.Ask.Ranker)
 		if len(r.Ask.Warnings) > 0 {
 			for _, wmsg := range r.Ask.Warnings {
 				fmt.Fprintf(w, "  warn  %s\n", wmsg)
