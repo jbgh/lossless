@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.48 — 2026-11-24
 
 - **`ask` returns the records that match the goal best.** Records used to be picked by kind: a failure first, then at most two of each kind, then several rescue steps. Now they come back in order of how well their words match the goal, plus a bonus for each file they share with the ask. On 100 real asks whose every returned record was labelled by two blind judges, the answers went from 4.0 to 5.0 (of 10) on one set and from 5.2 to 6.6 on a second set the change had never seen; 64 answers got better and 17 got worse. Records judged not useful fell from about a third to about a fifth. `LOSSLESS_RANKER=v1` in the service's environment brings the old order back for this release.
 - **About a third as many warnings, and they are right more often.** A warning now only ever points at a record in the context. The failed attempts a warning cited were useful for the goal 26% of the time before and 59% now.
